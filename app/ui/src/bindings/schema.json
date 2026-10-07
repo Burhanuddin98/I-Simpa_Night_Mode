@@ -1456,6 +1456,61 @@
         },
         {
           "additionalProperties": false,
+          "description": "Moves the listed faces into the existing surface `group` (C1, \"Move selection to\ngroup\"). Each face takes that group's material, and its overrides under every variant:\njoining a group is choosing its material. No surface receiver or zone gains or loses a\nface: a scene receiver or surfaces fitting zone must hold the target group exactly when\nit holds each listed face's former group (`split`).\n\nRefused too: an empty face list, a face index out of range or listed twice (`faces`), and\nan unknown group. Faces already in the group are allowed and stay. The former groups\nstay, even if emptied. The inverse is the old mesh ([`Op::SetGeometry`]).",
+          "properties": {
+            "faces": {
+              "items": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "group": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "op": {
+              "const": "move_faces",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "group",
+            "faces"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Merges the surface groups `from` into `into` (C1): every face of each goes to `into`,\nwhich keeps its own name and material, and each of `from` is removed, with its variant\noverrides. A scene receiver or surfaces fitting zone must hold all of `into` and `from`\nor none of them (`split`); one that holds all keeps only `into`.\n\nRefused: an empty `from`, a group listed twice or `into` listed in `from` (`groups`), an\nunknown group. The inverse is a [`Op::Batch`] that re-inserts each\ngroup at its index and restores the mesh, the overrides, receivers and zones.",
+          "properties": {
+            "from": {
+              "items": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "into": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "op": {
+              "const": "merge_surface_groups",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "into",
+            "from"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
           "properties": {
             "group": {
               "format": "uuid",

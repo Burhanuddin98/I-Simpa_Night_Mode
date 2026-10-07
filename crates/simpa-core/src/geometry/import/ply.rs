@@ -349,6 +349,7 @@ pub(super) fn read(bytes: &[u8], options: &ImportOptions) -> Result<ImportedMode
         polygons,
         groups,
         notes,
+        ungrouped: layer_prop.is_none(),
     }
     .finish(MeshFormat::Ply, options, source_faces)
 }

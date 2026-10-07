@@ -609,6 +609,12 @@ pub fn import_lines(
             report.empty_groups.join(", ")
         )));
     }
+    if report.ungrouped {
+        out.push(info(format!(
+            "Import: the file declares no groups, so all {} are one surface group named after              the file. Double-click a wall in the 3D view, right-click it, New group from selection",
+            plural(report.triangles, "face", "faces")
+        )));
+    }
     out.extend(report.notes.iter().map(|n| info(format!("Import: {n}"))));
     out
 }

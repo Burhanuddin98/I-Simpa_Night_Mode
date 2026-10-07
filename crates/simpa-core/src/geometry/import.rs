@@ -65,7 +65,7 @@ pub mod zip;
 
 pub use appconst::{
     REFERENCE_MATERIALS, REFERENCE_SPECTRA, ReferenceMaterial, ReferenceSpectrum,
-    reference_material,
+    reference_material, reference_spectrum,
 };
 pub use proj::{
     ProjImport, ProjReport, UPSTREAM_DEFAULT_NAME, UpstreamId, UpstreamKind, import_proj,
@@ -392,6 +392,10 @@ pub struct ImportReport {
     pub unused_vertices: usize,
     /// Groups the file declares that hold no face, dropped.
     pub empty_groups: Vec<String>,
+    /// The file declares no groups at all (an OBJ with no `g`, `o` or `usemtl`, a PLY without
+    /// `layer_id`, a binary STL, an ASCII STL of one unnamed `solid`): every face is in the one
+    /// group the reader names, and [`ImportedModel::to_project`] names it after the file.
+    pub ungrouped: bool,
     /// Anything else worth knowing, one sentence each.
     pub notes: Vec<String>,
 }
@@ -454,6 +458,11 @@ impl ImportedModel {
     /// values (reference material 0: absorption 0, scattering 0, specular, double-sided, no
     /// transmission), for the user to replace. Ids are derived from the model, so the same model
     /// always gives the same project.
+    ///
+    /// A file that declares no groups ([`ImportReport::ungrouped`]) gives one group named `name`
+    /// (the file's stem, as the app passes it), or `Surfaces` when `name` is blank: never the
+    /// reader's placeholder (`default`, `model`), which reads like a material. The model's
+    /// digest, and so every id, is the reader's, unchanged.
     pub fn to_project(&self, name: &str) -> Project {
         let ids = IdSource::from_parts(&[b"mesh import", &self.digest_bytes()]);
         let mut project = Project::new(name);
@@ -469,9 +478,17 @@ impl ImportedModel {
             .group_names
             .iter()
             .enumerate()
-            .map(|(i, name)| SurfaceGroup {
+            .map(|(i, group)| SurfaceGroup {
                 id: GroupId(ids.uuid("surface group", i)),
-                name: name.clone(),
+                name: if self.report.ungrouped && self.group_names.len() == 1 {
+                    if name.trim().is_empty() {
+                        "Surfaces".to_string()
+                    } else {
+                        name.to_string()
+                    }
+                } else {
+                    group.clone()
+                },
                 material: material.id,
             })
             .collect();
@@ -551,6 +568,8 @@ pub(crate) struct RawMesh {
     pub polygons: Vec<(Vec<u32>, u32)>,
     pub groups: Vec<String>,
     pub notes: Vec<String>,
+    /// See [`ImportReport::ungrouped`].
+    pub ungrouped: bool,
 }
 
 impl RawMesh {
@@ -656,6 +675,7 @@ impl RawMesh {
             welded_vertices: welded,
             unused_vertices: unused,
             empty_groups,
+            ungrouped: self.ungrouped,
             notes: self.notes,
         };
         Ok(ImportedModel {

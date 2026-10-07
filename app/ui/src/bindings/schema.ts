@@ -49,6 +49,16 @@ export type Op =
       op: 'regroup_faces';
     }
   | {
+      faces: number[];
+      group: string;
+      op: 'move_faces';
+    }
+  | {
+      from: string[];
+      into: string;
+      op: 'merge_surface_groups';
+    }
+  | {
       group: string;
       material: string;
       op: 'set_group_material';

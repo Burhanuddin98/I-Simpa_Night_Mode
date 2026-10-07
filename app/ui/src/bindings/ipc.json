@@ -2015,6 +2015,29 @@
       ],
       "type": "object"
     },
+    "LibrarySpectrum": {
+      "description": "One of upstream's reference spectra (`appspectrums`) as a source's shape on the open project's\nbands (C1): what the source editor's spectrum list sets. The values come from the core\n(`ReferenceSpectrum::shape_on`), never retyped in the UI.",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "reference_id": {
+          "description": "Upstream's `idspectre`.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "shape": {
+          "$ref": "#/$defs/SpectrumShape"
+        }
+      },
+      "required": [
+        "reference_id",
+        "name",
+        "shape"
+      ],
+      "type": "object"
+    },
     "LineClass": {
       "description": "The Console's classes (docs/design/README.md: FAIL, INFO and OK; WARN for the amber lines).",
       "enum": [
@@ -3764,6 +3787,10 @@
         "id": {
           "type": "string"
         },
+        "imported_ungrouped": {
+          "description": "Imported in this session from a mesh file that declares no groups (C1): every face is in\none surface group named after the file, for the user to carve.",
+          "type": "boolean"
+        },
         "materials": {
           "format": "uint",
           "minimum": 0,
@@ -3839,7 +3866,8 @@
         "redo_depth",
         "dirty",
         "geometry_rev",
-        "groups_assigned"
+        "groups_assigned",
+        "imported_ungrouped"
       ],
       "type": "object"
     },
@@ -7290,6 +7318,9 @@
     "library_material": {
       "$ref": "#/$defs/LibraryMaterial"
     },
+    "library_spectrum": {
+      "$ref": "#/$defs/LibrarySpectrum"
+    },
     "prepared": {
       "$ref": "#/$defs/Prepared"
     },
@@ -7336,6 +7367,7 @@
     "float_probe",
     "gpu_status",
     "library_material",
+    "library_spectrum",
     "prepared",
     "project_info",
     "report_view",

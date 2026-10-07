@@ -273,6 +273,7 @@ fn run(args: GuiArgs) -> ExitCode {
             commands::run_echogram,
             commands::proj_import,
             commands::material_library,
+            commands::spectrum_library,
             commands::solvers_status,
             commands::spps_gpu_status,
             commands::app_events,

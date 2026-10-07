@@ -34,6 +34,10 @@ pub(super) fn read(bytes: &[u8], options: &ImportOptions) -> Result<ImportedMode
     let mut group_index: HashMap<String, u32> = HashMap::new();
     let mut current_group = String::from("default");
     let mut current_material = String::from("default");
+    // Whether a statement of the grouping kind in use ever named a group (C1: a file with none
+    // is reported `ungrouped`).
+    let mut named_group = false;
+    let mut named_material = false;
     let mut ignored_lines = 0usize;
     let mut ignored_points = 0usize;
 
@@ -107,6 +111,7 @@ pub(super) fn read(bytes: &[u8], options: &ImportOptions) -> Result<ImportedMode
                 raw_polygons.push((idx, g, line_no));
             }
             "g" | "o" => {
+                named_group = true;
                 let name: Vec<&str> = tok.collect();
                 current_group = if name.is_empty() {
                     "default".to_string()
@@ -115,6 +120,7 @@ pub(super) fn read(bytes: &[u8], options: &ImportOptions) -> Result<ImportedMode
                 };
             }
             "usemtl" => {
+                named_material = true;
                 let name: Vec<&str> = tok.collect();
                 current_material = if name.is_empty() {
                     "default".to_string()
@@ -161,11 +167,13 @@ pub(super) fn read(bytes: &[u8], options: &ImportOptions) -> Result<ImportedMode
         notes.push(format!("{ignored_points} point elements (`p`) ignored"));
     }
     let source_faces = polygons.len();
+    let ungrouped = !(if by_material { named_material } else { named_group });
     RawMesh {
         vertices,
         polygons,
         groups,
         notes,
+        ungrouped,
     }
     .finish(MeshFormat::Obj, options, source_faces)
 }

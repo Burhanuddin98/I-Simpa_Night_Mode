@@ -155,6 +155,31 @@ pub enum Op {
         group: SurfaceGroup,
         faces: Vec<u32>,
     },
+    /// Moves the listed faces into the existing surface `group` (C1, "Move selection to
+    /// group"). Each face takes that group's material, and its overrides under every variant:
+    /// joining a group is choosing its material. No surface receiver or zone gains or loses a
+    /// face: a scene receiver or surfaces fitting zone must hold the target group exactly when
+    /// it holds each listed face's former group (`split`).
+    ///
+    /// Refused too: an empty face list, a face index out of range or listed twice (`faces`), and
+    /// an unknown group. Faces already in the group are allowed and stay. The former groups
+    /// stay, even if emptied. The inverse is the old mesh ([`Op::SetGeometry`]).
+    MoveFaces {
+        group: GroupId,
+        faces: Vec<u32>,
+    },
+    /// Merges the surface groups `from` into `into` (C1): every face of each goes to `into`,
+    /// which keeps its own name and material, and each of `from` is removed, with its variant
+    /// overrides. A scene receiver or surfaces fitting zone must hold all of `into` and `from`
+    /// or none of them (`split`); one that holds all keeps only `into`.
+    ///
+    /// Refused: an empty `from`, a group listed twice or `into` listed in `from` (`groups`), an
+    /// unknown group. The inverse is a [`Op::Batch`] that re-inserts each
+    /// group at its index and restores the mesh, the overrides, receivers and zones.
+    MergeSurfaceGroups {
+        into: GroupId,
+        from: Vec<GroupId>,
+    },
     SetGroupMaterial {
         group: GroupId,
         material: MaterialId,
@@ -332,6 +357,9 @@ pub enum OpError {
     Split(String),
     /// A regroup that would give a face a material it did not have.
     MaterialChange(String),
+    /// A group list that is empty, names a group twice, or names the merge target among the
+    /// groups merged into it.
+    Groups(String),
 }
 
 impl OpError {
@@ -351,6 +379,7 @@ impl OpError {
             OpError::NameTaken { .. } => "name_taken",
             OpError::Split(_) => "split",
             OpError::MaterialChange(_) => "material_change",
+            OpError::Groups(_) => "groups",
         }
     }
 }
@@ -388,6 +417,7 @@ impl fmt::Display for OpError {
             }
             OpError::Split(msg) => write!(f, "{msg}"),
             OpError::MaterialChange(msg) => write!(f, "{msg}"),
+            OpError::Groups(msg) => write!(f, "group list: {msg}"),
         }
     }
 }
@@ -812,19 +842,14 @@ fn holds(groups: &[GroupId], from: &[GroupId]) -> Option<bool> {
     }
 }
 
-/// [`Op::RegroupFaces`]: everything is checked before anything changes.
-fn regroup_faces(
-    p: &mut Project,
-    index: usize,
-    group: SurfaceGroup,
-    faces: Vec<u32>,
-) -> Result<Op> {
+/// A face list an op may take: not empty, every face in the mesh, none twice.
+fn check_face_list(p: &Project, faces: &[u32]) -> Result<()> {
     let n = p.geometry.faces.len();
     if faces.is_empty() {
         return Err(OpError::Faces("no face is listed".into()));
     }
     let mut seen = std::collections::HashSet::with_capacity(faces.len());
-    for &f in &faces {
+    for &f in faces {
         if f as usize >= n {
             return Err(OpError::Faces(format!(
                 "face {f} does not exist: the mesh has {n} faces"
@@ -834,6 +859,165 @@ fn regroup_faces(
             return Err(OpError::Faces(format!("face {f} is listed twice")));
         }
     }
+    Ok(())
+}
+
+/// The groups of a scene receiver or a surfaces fitting zone, with what it is called, for the
+/// `split` checks of [`Op::MoveFaces`] and [`Op::MergeSurfaceGroups`].
+fn group_holders(p: &Project) -> Vec<(String, &[GroupId])> {
+    let mut out: Vec<(String, &[GroupId])> = Vec::new();
+    for r in &p.surface_receivers {
+        if let SurfaceReceiverShape::Scene { groups } = &r.shape {
+            out.push((format!("surface receiver '{}'", r.name), groups));
+        }
+    }
+    for z in &p.fitting_zones {
+        if let FittingShape::Surfaces { groups, .. } = &z.shape {
+            out.push((format!("fitting zone '{}'", z.name), groups));
+        }
+    }
+    out
+}
+
+/// [`Op::MoveFaces`]: everything is checked before anything changes.
+fn move_faces(p: &mut Project, group: GroupId, faces: Vec<u32>) -> Result<Op> {
+    check_face_list(p, &faces)?;
+    let target = position(&p.surface_groups, "surface group", group, |g| g.id)?;
+    let from: Vec<GroupId> = former_groups(p, &faces)
+        .into_iter()
+        .filter(|&g| g != group)
+        .collect();
+    for (what, groups) in group_holders(p) {
+        let holds_target = groups.contains(&group);
+        if let Some(&g) = from.iter().find(|g| groups.contains(g) != holds_target) {
+            let from_name = p.group(g).map_or_else(String::new, |x| x.name.clone());
+            return Err(OpError::Split(format!(
+                "{what} holds {} but not {}: moving the faces would {} it",
+                if holds_target { format!("surface group '{}'", p.surface_groups[target].name) } else { format!("surface group '{from_name}'") },
+                if holds_target { format!("surface group '{from_name}'") } else { format!("surface group '{}'", p.surface_groups[target].name) },
+                if holds_target { "add faces to" } else { "take faces out of" },
+            )));
+        }
+    }
+    let old = p.geometry.clone();
+    for &f in &faces {
+        p.geometry.faces[f as usize].group = group;
+    }
+    Ok(Op::SetGeometry { geometry: old })
+}
+
+/// [`Op::MergeSurfaceGroups`]: everything is checked before anything changes.
+fn merge_groups(p: &mut Project, into: GroupId, from: Vec<GroupId>) -> Result<Op> {
+    if from.is_empty() {
+        return Err(OpError::Groups("no group is listed to merge".into()));
+    }
+    position(&p.surface_groups, "surface group", into, |g| g.id)?;
+    let mut seen = std::collections::HashSet::with_capacity(from.len());
+    for &g in &from {
+        position(&p.surface_groups, "surface group", g, |x| x.id)?;
+        if g == into {
+            return Err(OpError::Groups(
+                "the group merged into is also listed among the groups merged into it".into(),
+            ));
+        }
+        if !seen.insert(g) {
+            return Err(OpError::Groups(format!("group {} is listed twice", g.0)));
+        }
+    }
+    let all: Vec<GroupId> = std::iter::once(into).chain(from.iter().copied()).collect();
+    let mut receivers = Vec::new();
+    let mut zones = Vec::new();
+    for (i, r) in p.surface_receivers.iter().enumerate() {
+        if let SurfaceReceiverShape::Scene { groups } = &r.shape {
+            match holds(groups, &all) {
+                Some(true) => receivers.push(i),
+                Some(false) => {}
+                None => {
+                    return Err(OpError::Split(format!(
+                        "surface receiver '{}' holds some of the merged groups but not all: one \
+                         group would add faces to it",
+                        r.name
+                    )));
+                }
+            }
+        }
+    }
+    for (i, z) in p.fitting_zones.iter().enumerate() {
+        if let FittingShape::Surfaces { groups, .. } = &z.shape {
+            match holds(groups, &all) {
+                Some(true) => zones.push(i),
+                Some(false) => {}
+                None => {
+                    return Err(OpError::Split(format!(
+                        "fitting zone '{}' holds some of the merged groups but not all: one group \
+                         would add faces to it",
+                        z.name
+                    )));
+                }
+            }
+        }
+    }
+
+    // Checked: now apply. The inverse re-adds the groups first (ascending index, which
+    // restores the order), then the mesh, overrides, receivers and zones that refer to them.
+    let mut adds = Vec::new();
+    let mut rest = Vec::new();
+    let old = p.geometry.clone();
+    for f in &mut p.geometry.faces {
+        if from.contains(&f.group) {
+            f.group = into;
+        }
+    }
+    rest.push(Op::SetGeometry { geometry: old });
+    for v in &mut p.variants {
+        for &g in &from {
+            if let Some(m) = v.set_override(g, None) {
+                rest.push(Op::SetVariantOverride {
+                    variant: v.id,
+                    group: g,
+                    material: Some(m),
+                });
+            }
+        }
+    }
+    for &i in &receivers {
+        let old = p.surface_receivers[i].clone();
+        if let SurfaceReceiverShape::Scene { groups } = &mut p.surface_receivers[i].shape {
+            groups.retain(|g| !from.contains(g));
+        }
+        rest.push(Op::ReplaceSurfaceReceiver { receiver: old });
+    }
+    for &i in &zones {
+        let old = p.fitting_zones[i].clone();
+        if let FittingShape::Surfaces { groups, .. } = &mut p.fitting_zones[i].shape {
+            groups.retain(|g| !from.contains(g));
+        }
+        rest.push(Op::ReplaceFittingZone { zone: old });
+    }
+    let mut index = 0;
+    p.surface_groups.retain(|g| {
+        let gone = from.contains(&g.id);
+        if gone {
+            adds.push(Op::AddSurfaceGroup {
+                index,
+                group: g.clone(),
+            });
+        }
+        index += 1;
+        !gone
+    });
+    adds.extend(rest);
+    Ok(Op::Batch { ops: adds })
+}
+
+/// [`Op::RegroupFaces`]: everything is checked before anything changes.
+fn regroup_faces(
+    p: &mut Project,
+    index: usize,
+    group: SurfaceGroup,
+    faces: Vec<u32>,
+) -> Result<Op> {
+    check_face_list(p, &faces)?;
     insertable(&p.surface_groups, "surface group", index, group.id, |g| {
         g.id
     })?;
@@ -1080,6 +1264,8 @@ impl Op {
                 group,
                 faces,
             } => regroup_faces(p, index, group, faces),
+            Op::MoveFaces { group, faces } => move_faces(p, group, faces),
+            Op::MergeSurfaceGroups { into, from } => merge_groups(p, into, from),
             Op::SetGroupMaterial { group, material } => {
                 let i = position(&p.surface_groups, "surface group", group, |g| g.id)?;
                 position(&p.materials, "material", material, |m| m.id)?;

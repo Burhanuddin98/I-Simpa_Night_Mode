@@ -559,7 +559,7 @@ fn random_op(rng: &mut Rng, p: &Project, depth: usize) -> Op {
     let n = p.bands.len();
     let group_id = |rng: &mut Rng| some_id(rng, &p.surface_groups, |g| g.id, GroupId);
     let material_id = |rng: &mut Rng| some_id(rng, &p.materials, |m| m.id, MaterialId);
-    match rng.below(if depth > 0 { 37 } else { 38 }) {
+    match rng.below(if depth > 0 { 39 } else { 40 }) {
         0 => Op::SetProjectName { name: rng.string() },
         1 => Op::SetDescription {
             description: rng.string(),
@@ -833,6 +833,24 @@ fn random_op(rng: &mut Rng, p: &Project, depth: usize) -> Op {
                 }
             }
         }
+        37 => {
+            // C1: faces moved into an existing group; now and then a face out of range or
+            // listed twice, or an unknown group.
+            let n_faces = p.geometry.faces.len();
+            Op::MoveFaces {
+                group: group_id(rng),
+                faces: (0..rng.below(4))
+                    .map(|_| {
+                        let past = usize::from(rng.chance(20));
+                        rng.below(n_faces + past) as u32
+                    })
+                    .collect(),
+            }
+        }
+        38 => Op::MergeSurfaceGroups {
+            into: group_id(rng),
+            from: (0..rng.below(3)).map(|_| group_id(rng)).collect(),
+        },
         _ => Op::Batch {
             ops: (0..rng.below(5))
                 .map(|_| random_op(rng, p, depth + 1))
@@ -1500,8 +1518,8 @@ fn an_unknown_key_is_refused_in_every_object_of_an_op() {
             checked += 1;
         }
     }
-    // All 38 ops, and every EntityRef kind (the adjacently tagged `target` of a rename).
-    assert_eq!(tags.len(), 38, "{tags:?}");
+    // All 40 ops, and every EntityRef kind (the adjacently tagged `target` of a rename).
+    assert_eq!(tags.len(), 40, "{tags:?}");
     for kind in [
         "surface_group",
         "material",
