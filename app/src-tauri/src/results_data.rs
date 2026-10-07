@@ -229,8 +229,11 @@ struct Loaded {
 static CACHE: LazyLock<Mutex<HashMap<PathBuf, Arc<Mutex<Option<Loaded>>>>>> =
     LazyLock::new(Mutex::default);
 
-/// Runs kept at once. One is viewed at a time; a few more cover switching back and forth.
-const CACHE_RUNS: usize = 4;
+/// Runs kept at once. One is viewed at a time; a few more cover switching back and forth. The
+/// unit tests share this process-wide cache across every test running in parallel, so there the
+/// bound is wider: at 4, other tests' loads evicted the run that
+/// `a_run_is_loaded_once_and_again_when_its_manifest_changes` opens twice in a row.
+const CACHE_RUNS: usize = if cfg!(test) { 64 } else { 4 };
 
 /// Locks, trusting a lock poisoned by a panic elsewhere: the cache holds only immutable `Arc`s,
 /// so a half-finished write cannot be seen.
