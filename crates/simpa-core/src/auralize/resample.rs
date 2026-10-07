@@ -1,4 +1,4 @@
-//! Sample-rate conversion of an anechoic recording to the synthesis rate: band-limited
+//! Sample-rate conversion of a dry recording to the synthesis rate: band-limited
 //! interpolation with a Kaiser-windowed sinc (Smith's method), low-passed at 45 % of the lower of
 //! the two rates, 48 zero crossings a side, β = 9 (about 90 dB of stopband). For a rational ratio
 //! `L/M` with `L` at most [`MAX_PHASES`] the kernel is tabulated once per phase; otherwise it is

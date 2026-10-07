@@ -1,5 +1,5 @@
 // The listening window's model (C5, decision 75; docs/investigations/2026-10-07-auralization/):
-// the words it shows, the shipped anechoic clips, and the WAV the core returns read back into
+// the words it shows, the shipped clips (dry, not anechoic), and the WAV the core returns read back into
 // samples for Web Audio. A pure module, tested by aural.test.ts under `node --test`.
 //
 // What is heard, honestly: the impulse response is synthesised from the SPPS energy echogram
@@ -12,7 +12,7 @@ export const AURAL_TITLE = 'Listen: impulse response (synthesised)';
 export const AURAL_NOTE =
   'Synthesised from the SPPS energy echogram: the room’s decay and spectrum per band, with a random fine structure. Not a measured or wave-based impulse response.';
 
-/** A shipped anechoic recording: `id` as `src-tauri/src/aural.rs` names it (aural.test.ts holds the
+/** A shipped recording, dry and close-miked (not anechoic): `id` as `src-tauri/src/aural.rs` names it (aural.test.ts holds the
  * two lists to each other and to the files and their provenance). */
 export interface Clip {
   id: string;
@@ -20,6 +20,9 @@ export interface Clip {
   /** Its licence, in a few words (the provenance file beside it quotes the licence page). */
   licence: string;
 }
+
+/** What the bundled clips are, said where they are offered. */
+export const CLIPS_NOTE = 'The bundled clips are dry recordings, close-miked: not anechoic, so the room they were recorded in adds a little. Your own file is best dry or anechoic.';
 
 export const CLIPS: readonly Clip[] = [
   { id: 'speech-lv-hislastbow', title: 'Speech (English, male reader)', licence: 'public domain, LibriVox' },

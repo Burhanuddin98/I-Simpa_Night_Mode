@@ -665,7 +665,7 @@ pub async fn run_echogram(
 }
 
 /// C5: a receiver's impulse response synthesised from the run's SPPS energy echogram, or an
-/// anechoic recording convolved with it (`clip`, a shipped one by id, or `path`, a WAV the open
+/// recording convolved with it (`clip`, a bundled dry one by id, or `path`, a dry or anechoic WAV the open
 /// dialog returned), as WAV bytes (`aural::auralize_bytes`): an ArrayBuffer in JS. The sources
 /// summed unless `source` names one.
 #[tauri::command(rename_all = "snake_case")]

@@ -1,11 +1,11 @@
 //! C5: the Results step's listening (decision 75; `docs/investigations/2026-10-07-auralization/`).
 //! [`auralize_bytes`] answers `run_auralize`: a receiver's impulse response synthesised from the
-//! run's SPPS energy echogram (`simpa_core::auralize`), or an anechoic recording convolved with it,
+//! run's SPPS energy echogram (`simpa_core::auralize`), or a dry recording convolved with it,
 //! as a WAV the UI plays and saves: mono, 48 kHz, 32-bit float, peak −1 dBFS, with the seed and the
 //! gain to the run's scale in its comment.
 //!
-//! The anechoic recordings offered are [`CLIPS`], embedded with `include_bytes!` as the examples
-//! are (`examples.rs`); each has a provenance file beside it in `examples/anechoic/` (source,
+//! The recordings offered are [`CLIPS`]: dry recordings, close-miked: not anechoic, so the room they were recorded in adds a little. They are embedded with `include_bytes!`
+//! as the examples are (`examples.rs`); each has a provenance file beside it in `examples/clips/` (source,
 //! author, licence quoted, sha256), and `examples/ATTRIBUTION.md` lists them. The UI's list
 //! (`ui/src/features/acoustics/aural.ts`) is held to this one by its test. "Open your own WAV…"
 //! passes a path instead.
@@ -20,7 +20,7 @@ use simpa_core::auralize::{self, AuralError, Pick, SAMPLE_RATE, SEED, wav};
 
 use crate::guard::{CmdError, CmdResult};
 
-/// One shipped anechoic recording.
+/// One shipped recording: dry and close-miked, not anechoic.
 pub struct Clip {
     /// The id the UI asks for.
     pub id: &'static str,
@@ -32,15 +32,15 @@ pub struct Clip {
 pub const CLIPS: &[Clip] = &[
     Clip {
         id: "speech-lv-hislastbow",
-        bytes: include_bytes!("../examples/anechoic/speech-lv-hislastbow.wav"),
+        bytes: include_bytes!("../examples/clips/speech-lv-hislastbow.wav"),
     },
     Clip {
         id: "tenorsax-vcsl-c3",
-        bytes: include_bytes!("../examples/anechoic/tenorsax-vcsl-c3.wav"),
+        bytes: include_bytes!("../examples/clips/tenorsax-vcsl-c3.wav"),
     },
     Clip {
         id: "harp-vcsl-c5",
-        bytes: include_bytes!("../examples/anechoic/harp-vcsl-c5.wav"),
+        bytes: include_bytes!("../examples/clips/harp-vcsl-c5.wav"),
     },
 ];
 
@@ -95,8 +95,8 @@ pub fn auralize_bytes(
             let clip = CLIPS
                 .iter()
                 .find(|c| c.id == id)
-                .ok_or_else(|| CmdError::new("CLIP_UNKNOWN", format!("no anechoic clip '{id}'")))?;
-            let (_, x) = auralize::anechoic(clip.bytes).map_err(refused)?;
+                .ok_or_else(|| CmdError::new("CLIP_UNKNOWN", format!("no bundled clip '{id}'")))?;
+            let (_, x) = auralize::dry_recording(clip.bytes).map_err(refused)?;
             (
                 auralize::auralize(&resp.synthesis.samples, &x),
                 "auralization",
@@ -106,7 +106,7 @@ pub fn auralize_bytes(
         Dry::File(path) => {
             let bytes = std::fs::read(path)
                 .map_err(|e| CmdError::new("WAV_READ", format!("could not read '{path}': {e}")))?;
-            let (w, x) = auralize::anechoic(&bytes).map_err(refused)?;
+            let (w, x) = auralize::dry_recording(&bytes).map_err(refused)?;
             let name = Path::new(path)
                 .file_name()
                 .map_or_else(|| path.to_string(), |n| n.to_string_lossy().into_owned());
@@ -144,7 +144,7 @@ mod tests {
             total += c.bytes.len();
             let prov = std::fs::read_to_string(
                 Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .join("examples/anechoic")
+                    .join("examples/clips")
                     .join(format!("{}.provenance.md", c.id)),
             )
             .unwrap();

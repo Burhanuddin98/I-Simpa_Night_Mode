@@ -1,5 +1,5 @@
 //! Auralization: a pressure impulse response synthesised from an SPPS energy echogram, and its
-//! convolution with an anechoic recording (C5, `docs/investigations/2026-10-07-auralization/`;
+//! convolution with a dry (ideally anechoic) recording (C5, `docs/investigations/2026-10-07-auralization/`;
 //! decisions 67 and 75).
 //!
 //! **What it is.** SPPS counts energy: a point receiver's `.recp` holds Pa² per time step in each
@@ -39,7 +39,7 @@
 //!    summed are about its energy in Pa²); [`normalise`] scales it for playback and the gain is
 //!    recorded.
 //!
-//! Convolution with an anechoic recording ([`auralize`]) is a linear FFT convolution after the
+//! Convolution with a dry or anechoic recording ([`auralize`]) is a linear FFT convolution after the
 //! recording is read ([`wav::read`]) and resampled to [`SAMPLE_RATE`] ([`resample`]).
 
 use std::fmt;
@@ -62,9 +62,9 @@ pub const SEED: u64 = 0x4E4D_4155_5241_4C31;
 /// The peak level a response or an auralization is normalised to, dBFS.
 pub const PEAK_DBFS: f64 = -1.0;
 
-/// The longest anechoic recording taken, s: its convolution with a 10 s response fits an FFT of
+/// The longest dry recording taken, s: its convolution with a 10 s response fits an FFT of
 /// 2²³ points.
-pub const MAX_ANECHOIC_S: f64 = 120.0;
+pub const MAX_DRY_S: f64 = 120.0;
 
 /// Why an auralization was refused: a stable code and what was found.
 #[derive(Clone, Debug, PartialEq)]
@@ -866,16 +866,16 @@ pub fn normalise(x: &mut [f64]) -> f64 {
     g
 }
 
-/// The anechoic recording `bytes` (a WAV), mixed to mono and resampled to [`SAMPLE_RATE`]
+/// A dry or anechoic recording `bytes` (a WAV), mixed to mono and resampled to [`SAMPLE_RATE`]
 /// ([`resample`]); refused when it is not a WAV this reads or is longer than
-/// [`MAX_ANECHOIC_S`].
-pub fn anechoic(bytes: &[u8]) -> Result<(wav::Wav, Vec<f64>), AuralError> {
+/// [`MAX_DRY_S`].
+pub fn dry_recording(bytes: &[u8]) -> Result<(wav::Wav, Vec<f64>), AuralError> {
     let w = wav::read(bytes)?;
     let secs = w.samples.len() as f64 / f64::from(w.rate);
-    if secs > MAX_ANECHOIC_S {
+    if secs > MAX_DRY_S {
         return Err(AuralError::new(
             "aural_wav_too_long",
-            format!("{secs:.1} s, the longest taken is {MAX_ANECHOIC_S} s: trim it first"),
+            format!("{secs:.1} s, the longest taken is {MAX_DRY_S} s: trim it first"),
         ));
     }
     if w.samples.is_empty() {

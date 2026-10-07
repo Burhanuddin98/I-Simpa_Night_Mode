@@ -65,10 +65,10 @@ const USAGE: &str = "usage:
       report.json, summary.json and decays/ under <root>/<UTC stamp>/. Exit 0 only when
       report.pass is true; 8 not passed; 5 a run was not OK; 2 usage or an invalid bed file.
   simpa bed --schema | --canonical                            report.json's schema; M8a's bed file
-  simpa auralize <run-folder> --receiver <name> [--source <name> | --summed] [--anechoic <wav>]
+  simpa auralize <run-folder> --receiver <name> [--source <name> | --summed] [--source-audio <wav>]
             --out <wav> [--pcm24] [--seed <n>]
       a receiver's impulse response synthesised from the SPPS energy echogram (not a measured or
-      wave-based one), or with --anechoic that recording convolved with it (resampled to 48 kHz
+      wave-based one), or with --source-audio a dry or anechoic recording convolved with it (resampled to 48 kHz
       first); mono, 48 kHz, peak -1 dBFS, 32-bit float or 24-bit PCM; the seed and the gain to the
       run's scale in the WAV's comment. The sources summed unless --source names one. Exit 0; 2
       usage or refused; 5, 6 as results

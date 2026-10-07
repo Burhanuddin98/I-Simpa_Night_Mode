@@ -93,7 +93,7 @@ fn the_impulse_response_is_48_khz_the_runs_length_normalised_and_the_same_each_t
 }
 
 #[test]
-fn an_anechoic_recording_at_44_1_khz_is_resampled_and_convolved() {
+fn a_dry_recording_at_44_1_khz_is_resampled_and_convolved() {
     let dir = scratch("aural-conv");
     let run = fixture("sources2_spps");
     let dry: Vec<f64> = (0..22_050)
@@ -111,7 +111,7 @@ fn an_anechoic_recording_at_44_1_khz_is_resampled_and_convolved() {
         &[
             "--receiver",
             "Seat2",
-            "--anechoic",
+            "--source-audio",
             dry_path.to_str().unwrap(),
             "--out",
             out.to_str().unwrap(),
@@ -132,6 +132,21 @@ fn an_anechoic_recording_at_44_1_khz_is_resampled_and_convolved() {
     let peak = w.samples.iter().fold(0.0f64, |m, v| m.max(v.abs()));
     assert_eq!(peak, f64::from(10f64.powf(-1.0 / 20.0) as f32));
     assert!(w.comment.unwrap().contains("at 44100 Hz"));
+    // `--anechoic`, the flag's first name, is still taken and gives the same file.
+    let alias = dir.join("wet-alias.wav");
+    let o = auralize(
+        &run,
+        &[
+            "--receiver",
+            "Seat2",
+            "--anechoic",
+            dry_path.to_str().unwrap(),
+            "--out",
+            alias.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(o.code, 0, "{o:#?}");
+    assert_eq!(std::fs::read(&alias).unwrap(), std::fs::read(&out).unwrap());
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

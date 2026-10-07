@@ -81,15 +81,15 @@ the room. Both files pass `simpa validate` with no issue.
 only under CC BY-SA 4.0, with this attribution. The share-alike term covers these data files. It
 does not cover the app's code, which is GPL-3.0.
 
-## Anechoic clips (C5, decision 75)
+## Dry clips (C5, decision 75)
 
-Three short recordings ship in `anechoic/` (`src/aural.rs`, `include_bytes!`) for the Results step's Listen
+Three short recordings ship in `clips/` (`src/aural.rs`, `include_bytes!`) for the Results step's Listen
 window. Each has a provenance file beside it: the source page, the file fetched, the author, the licence
 quoted from its page, the date fetched, both sha256s and the processing (trim, mono, 48 kHz, fades, peak
 -1 dBFS, 16-bit). None is a measured anechoic recording; each is close-miked and dry, and its file says so.
 
 | file | what | author | licence |
 |---|---|---|---|
-| `anechoic/speech-lv-hislastbow.wav` | Speech, 7.95 s, from LibriVox's "His Last Bow" | Zachary Brewster-Geisz (reader), Arthur Conan Doyle (text) | Public domain (LibriVox: "all our recordings are public domain") |
-| `anechoic/tenorsax-vcsl-c3.wav` | Tenor saxophone, one note, 7.37 s | Versilian Studios / Sam Gossner, VCSL | CC0 1.0 |
-| `anechoic/harp-vcsl-c5.wav` | Concert harp, one note, 7.01 s | Versilian Studios / Sam Gossner, VCSL | CC0 1.0 |
+| `clips/speech-lv-hislastbow.wav` | Speech, 7.95 s, from LibriVox's "His Last Bow" | Zachary Brewster-Geisz (reader), Arthur Conan Doyle (text) | Public domain (LibriVox: "all our recordings are public domain") |
+| `clips/tenorsax-vcsl-c3.wav` | Tenor saxophone, one note, 7.37 s | Versilian Studios / Sam Gossner, VCSL | CC0 1.0 |
+| `clips/harp-vcsl-c5.wav` | Concert harp, one note, 7.01 s | Versilian Studios / Sam Gossner, VCSL | CC0 1.0 |

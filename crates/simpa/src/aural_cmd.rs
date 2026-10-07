@@ -1,8 +1,8 @@
 //! `simpa auralize <run-folder> --receiver <name> [--source <name> | --summed]
-//! [--anechoic <wav>] --out <wav> [--pcm24] [--seed <n>]` (C5, `simpa_core::auralize`).
+//! [--source-audio <wav>] --out <wav> [--pcm24] [--seed <n>]` (C5, `simpa_core::auralize`).
 //!
-//! Without `--anechoic` it writes the receiver's impulse response, synthesised from the SPPS
-//! energy echogram; with it, the anechoic recording convolved with that response (resampled to
+//! Without `--source-audio` (`--anechoic` is kept as an alias) it writes the receiver's impulse response, synthesised from the SPPS
+//! energy echogram; with it, that recording (best dry or anechoic) convolved with that response (resampled to
 //! 48 kHz first when it is at another rate). Either is mono, 48 kHz, peak-normalised to −1 dBFS,
 //! 32-bit float (or 24-bit PCM with `--pcm24`), and carries in its `INFO/ICMT` comment what it is,
 //! the noise seed and the gain back to the run's absolute scale. The sources summed unless
@@ -24,7 +24,7 @@ pub fn auralize_cmd(args: &[&str]) -> ExitCode {
     let mut receiver = None;
     let mut source = None;
     let mut summed = false;
-    let mut anechoic = None;
+    let mut dry_audio = None;
     let mut out = None;
     let mut pcm24 = false;
     let mut seed = SEED;
@@ -38,7 +38,7 @@ pub fn auralize_cmd(args: &[&str]) -> ExitCode {
                 summed = true;
                 Ok(())
             }
-            "--anechoic" => value(a).map(|v| anechoic = Some(v)),
+            "--source-audio" | "--anechoic" => value(a).map(|v| dry_audio = Some(v)),
             "--out" => value(a).map(|v| out = Some(v)),
             "--pcm24" => {
                 pcm24 = true;
@@ -67,7 +67,7 @@ pub fn auralize_cmd(args: &[&str]) -> ExitCode {
         }
     }
     let usage = "auralize needs: simpa auralize <run-folder> --receiver <name> [--source <name> | \
-                 --summed] [--anechoic <wav>] --out <wav> [--pcm24] [--seed <n>]";
+                 --summed] [--source-audio <wav>] --out <wav> [--pcm24] [--seed <n>]";
     let (Some(folder), Some(receiver), Some(out)) = (folder, receiver, out) else {
         return fail(usage);
     };
@@ -94,14 +94,14 @@ pub fn auralize_cmd(args: &[&str]) -> ExitCode {
         Ok(r) => r,
         Err(e) => return refused(e),
     };
-    let (mut samples, what, dry) = match anechoic {
+    let (mut samples, what, dry) = match dry_audio {
         None => (resp.synthesis.samples.clone(), "impulse response", None),
         Some(path) => {
             let bytes = match std::fs::read(path) {
                 Ok(b) => b,
                 Err(e) => return fail(&format!("{path}: {e}")),
             };
-            let (w, x) = match auralize::anechoic(&bytes) {
+            let (w, x) = match auralize::dry_recording(&bytes) {
                 Ok(v) => v,
                 Err(e) => return refused(e),
             };

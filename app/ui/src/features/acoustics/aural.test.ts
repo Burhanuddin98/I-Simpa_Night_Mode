@@ -8,16 +8,16 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { AURAL_NOTE, CLIPS, dbText, meter, peakDbfs, readWav, wavName } from './aural.ts';
+import { AURAL_NOTE, CLIPS, CLIPS_NOTE, dbText, meter, peakDbfs, readWav, wavName } from './aural.ts';
 
 const TAURI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', 'src-tauri');
-const SHIPPED = path.join(TAURI, 'examples', 'anechoic');
+const SHIPPED = path.join(TAURI, 'examples', 'clips');
 
 const ab = (b: Buffer): ArrayBuffer => b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
 
 test('aural: the clips offered are aural.rs\'s, in its order, each shipped with its provenance', () => {
   const rs = readFileSync(path.join(TAURI, 'src', 'aural.rs'), 'utf8');
-  const rows = [...rs.matchAll(/id: "([^"]+)",\s*bytes: include_bytes!\("\.\.\/examples\/anechoic\/([^"]+)"\)/g)].map((m) => [m[1], m[2]]);
+  const rows = [...rs.matchAll(/id: "([^"]+)",\s*bytes: include_bytes!\("\.\.\/examples\/clips\/([^"]+)"\)/g)].map((m) => [m[1], m[2]]);
   assert.deepEqual(
     rows,
     CLIPS.map((c) => [c.id, `${c.id}.wav`]),
@@ -108,6 +108,8 @@ test('aural: the meter shows a clip and silence, and the words say what this is'
   assert.equal(dbText(-Infinity), 'silent');
   assert.match(AURAL_NOTE, /synthesised from the SPPS energy echogram/i);
   assert.match(AURAL_NOTE, /not a measured or wave-based impulse response/i);
+  assert.match(CLIPS_NOTE, /not anechoic/);
+  for (const c of CLIPS) assert.doesNotMatch(`${c.title} ${c.licence}`, /anechoic/i, 'a bundled clip called anechoic');
   assert.equal(wavName('CR4', 2, 'MP1', null, 'ir', null), 'CR4 - run 2 - MP1 - sources summed - impulse response.wav');
   assert.equal(wavName(null, null, 'a/b', 'LS1', 'aural', 'harp'), 'Untitled - a_b - LS1 - auralization harp.wav');
 });

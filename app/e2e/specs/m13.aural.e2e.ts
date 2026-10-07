@@ -109,7 +109,7 @@ async function waitView(pred: (v: AuralView) => boolean, what: string, timeout =
   return last as unknown as AuralView;
 }
 
-describe('C5: listening to CR4: the synthesised impulse response and an anechoic clip through it', () => {
+describe('C5: listening to CR4: the synthesised impulse response and a dry clip through it', () => {
   let project = '';
   let duration = 0;
   let run: Row | undefined;
@@ -160,6 +160,7 @@ describe('C5: listening to CR4: the synthesised impulse response and an anechoic
     assert.match(w.note, /not a measured or wave-based impulse response/i);
     assert.match(w.text, /Auralize/);
     assert.match(w.text, /Open your own WAV/);
+    assert.match(w.text, /dry recordings, close-miked: not anechoic/, 'the bundled clips said to be what they are');
     await clickSelector(`${WIN} [data-action="close-aural"]`);
     await browser.waitUntil(async () => !(await $(WIN).isExisting()), { timeout: 10_000 });
     await clickSelector(`${PANEL} [data-action="open-aural"]`);

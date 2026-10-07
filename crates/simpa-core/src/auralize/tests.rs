@@ -414,12 +414,12 @@ fn normalising_and_convolving() {
 }
 
 #[test]
-fn an_anechoic_file_at_44_1_khz_is_read_and_resampled() {
+fn a_dry_file_at_44_1_khz_is_read_and_resampled() {
     let x: Vec<f64> = (0..44_100)
         .map(|n| 0.5 * (2.0 * std::f64::consts::PI * 440.0 * n as f64 / 44_100.0).sin())
         .collect();
     let bytes = wav::write(&x, 44_100, wav::SampleFormat::Pcm24, "").unwrap();
-    let (w, y) = anechoic(&bytes).unwrap();
+    let (w, y) = dry_recording(&bytes).unwrap();
     assert_eq!(w.rate, 44_100);
     assert_eq!(y.len(), 48_000);
     let err = (2000..46_000)
@@ -427,8 +427,13 @@ fn an_anechoic_file_at_44_1_khz_is_read_and_resampled() {
             (y[n] - 0.5 * (2.0 * std::f64::consts::PI * 440.0 * n as f64 / 48_000.0).sin()).abs()
         })
         .fold(0.0, f64::max);
-    println!("anechoic 44.1 kHz 440 Hz tone at 48 kHz: largest error {err:.2e} of a 0.5 peak");
+    println!(
+        "dry recording, 44.1 kHz 440 Hz tone at 48 kHz: largest error {err:.2e} of a 0.5 peak"
+    );
     assert!(err < 1e-4, "{err}");
     let long = wav::write(&vec![0.0; 121 * 8000], 8000, wav::SampleFormat::F32, "").unwrap();
-    assert_eq!(anechoic(&long).unwrap_err().code(), "aural_wav_too_long");
+    assert_eq!(
+        dry_recording(&long).unwrap_err().code(),
+        "aural_wav_too_long"
+    );
 }

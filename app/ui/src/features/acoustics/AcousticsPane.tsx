@@ -630,7 +630,7 @@ export function AcousticsPane() {
               </button>
             ) : null}
             {report.solver !== 'tcr' ? (
-              <button type="button" className="small-button ac-listen" data-action="open-aural" aria-pressed={auralOpen} title="Hear the receiver's impulse response, synthesised from the echogram, and an anechoic recording through it" onClick={() => setAuralOpen((o) => !o)}>
+              <button type="button" className="small-button ac-listen" data-action="open-aural" aria-pressed={auralOpen} title="Hear the receiver's impulse response, synthesised from the echogram, and a dry recording through it" onClick={() => setAuralOpen((o) => !o)}>
                 Listen
               </button>
             ) : null}

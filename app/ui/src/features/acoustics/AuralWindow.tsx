@@ -4,14 +4,14 @@
 //
 // "Impulse response (synthesised)": the chosen receiver's response, per source or the sources
 // summed, synthesised by the core from the SPPS energy echogram (`run_auralize`), played through
-// Web Audio and saved as a WAV. "Auralize": a shipped anechoic clip (aural.ts `CLIPS`) or the
-// user's own WAV convolved with it. Every buffer comes peak-normalised to −1 dBFS by the core; the
+// Web Audio and saved as a WAV. "Auralize": a bundled clip (aural.ts `CLIPS`: dry, close-miked,
+// not anechoic, which the window says) or the user's own WAV convolved with it. Every buffer comes peak-normalised to −1 dBFS by the core; the
 // meter reads the output as it plays and shows a clip if one ever reaches full scale, never hides
 // it. The words say what this is (`AURAL_NOTE`), as the response window's do for its map.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import * as actions from '../../actions';
-import { AURAL_NOTE, AURAL_TITLE, CLIPS, dbText, meter, readWav, type WavData, wavName } from './aural';
+import { AURAL_NOTE, AURAL_TITLE, CLIPS, CLIPS_NOTE, dbText, meter, readWav, type WavData, wavName } from './aural';
 import type { SourceSel } from './model';
 
 type What = 'ir' | 'aural';
@@ -281,7 +281,7 @@ export function AuralWindow({
       <section className="aw-sec" data-part="aural-conv">
         <div className="aw-sec-title">Auralize</div>
         <div className="aw-row">
-          <select data-part="aural-dry" value={dry.startsWith('clip:') ? dry : 'file'} onChange={(e) => e.target.value !== 'file' && setDry(e.target.value)} title="An anechoic recording to hear through the room">
+          <select data-part="aural-dry" value={dry.startsWith('clip:') ? dry : 'file'} onChange={(e) => e.target.value !== 'file' && setDry(e.target.value)} title="A dry recording to hear through the room (the bundled clips are close-miked, not anechoic)">
             {CLIPS.map((c) => (
               <option key={c.id} value={`clip:${c.id}`}>
                 {`${c.title} (${c.licence})`}
@@ -289,9 +289,12 @@ export function AuralWindow({
             ))}
             {ownName ? <option value="file">{ownName}</option> : null}
           </select>
-          <button type="button" className="small-button" data-action="aural-open-wav" onClick={() => void openOwn()}>
+          <button type="button" className="small-button" data-action="aural-open-wav" title="A dry or anechoic recording of your own (WAV)" onClick={() => void openOwn()}>
             Open your own WAV…
           </button>
+        </div>
+        <div className="aw-clips-note" data-part="aural-clips-note">
+          {CLIPS_NOTE}
         </div>
         <div className="aw-row">
           <button type="button" className="small-button" data-action="aural-play-conv" disabled={busy !== null} onClick={() => void (playing === 'aural' ? stop() : play('aural'))}>

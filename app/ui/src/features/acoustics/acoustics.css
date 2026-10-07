@@ -668,3 +668,6 @@
   color: #ff5a5a;
   font-weight: 600;
 }
+.aw-clips-note {
+  color: var(--text-3);
+}
