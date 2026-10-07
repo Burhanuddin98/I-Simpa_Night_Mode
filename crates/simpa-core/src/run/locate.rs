@@ -370,6 +370,84 @@ pub fn check(doc: &Document, mesh: &mbin::Mesh, mbin_name: &str) -> Vec<Reason> 
     out
 }
 
+/// How close to an edge or a node of the tetrahedral mesh a source sits "on" it (C1 audit): 1 mm.
+pub const ON_EDGE_M: f64 = 1e-3;
+
+/// The distance from `p` to the segment `a`-`b`, in `f64`.
+fn segment_distance(p: [f64; 3], a: [f64; 3], b: [f64; 3]) -> f64 {
+    let ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    let ap = [p[0] - a[0], p[1] - a[1], p[2] - a[2]];
+    let len2 = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2];
+    let t = if len2 > 0.0 {
+        ((ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / len2).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let d = [ap[0] - t * ab[0], ap[1] - t * ab[1], ap[2] - t * ab[2]];
+    (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt()
+}
+
+/// The sources of `doc` within [`ON_EDGE_M`] of an edge (or so of a node) of `mesh`'s
+/// tetrahedra, in order (C1 audit). SPPS loses particles to loops from such a source: a source at
+/// a 6 x 10 x 3 m box's centroid, on the diagonal every tetrahedron of its mesh shares, lost 3.1 to
+/// 3.2 % in every band (`docs/investigations/2026-10-07-blank-geometry/BED.md`). A source whose
+/// position is not emulated, or a node index out of range, is left out.
+pub fn sources_on_edges(doc: &Document, mesh: &mbin::Mesh) -> Vec<Point> {
+    let mut edges = std::collections::BTreeSet::new();
+    for t in &mesh.tetrahedra {
+        let v = t.vertices;
+        for (i, j) in [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)] {
+            let (a, b) = (v[i].min(v[j]), v[i].max(v[j]));
+            edges.insert((a, b));
+        }
+    }
+    let node = |k: i32| -> Option<[f64; 3]> {
+        let n = mesh.nodes.get(usize::try_from(k).ok()?)?;
+        Some(n.map(f64::from))
+    };
+    points(doc)
+        .into_iter()
+        .filter(|p| p.kind == Kind::Source)
+        .filter(|p| {
+            let Some(x) = p.position else { return false };
+            let x = x.map(f64::from);
+            edges.iter().any(|&(a, b)| match (node(a), node(b)) {
+                (Some(a), Some(b)) => segment_distance(x, a, b) <= ON_EDGE_M,
+                _ => false,
+            })
+        })
+        .collect()
+}
+
+/// The plain line the `particle_loss_excess` reason ends with when a source sits on an edge of
+/// the run's tetrahedral mesh (C1 audit): "Source S1 sits on an edge of the room mesh; move it a
+/// few centimetres." `None` when none does, or the folder cannot be read. A hint in a failure, not
+/// a refusal: nothing is refused before the run for it.
+pub fn edge_hint_folder(solve: &Path) -> Option<String> {
+    let bytes = std::fs::read(solve.join(names::CONFIG)).ok()?;
+    let text = String::from_utf8_lossy(bytes.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&bytes));
+    let doc = Document::parse(&text).ok()?;
+    let mbin_name = expect::child(doc.root_element(), "simulation")?.attribute("tetrameshFileName")?;
+    let mesh = mbin::read_file(&solve.join(mbin_name)).ok()?;
+    let names: Vec<String> = sources_on_edges(&doc, &mesh).iter().map(|p| p.label.clone()).collect();
+    edge_hint(&names)
+}
+
+/// The hint line for the sources named `names` (see [`edge_hint_folder`]); `None` for none.
+pub fn edge_hint(names: &[String]) -> Option<String> {
+    if names.is_empty() {
+        return None;
+    }
+    Some(if names.len() == 1 {
+        format!("Source {} sits on an edge of the room mesh; move it a few centimetres.", names[0])
+    } else {
+        format!(
+            "Sources {} sit on edges of the room mesh; move them a few centimetres.",
+            names.join(", ")
+        )
+    })
+}
+
 /// [`check`] on the working folder `solve`: its `config.xml` and the `.mbin` its
 /// `tetrameshFileName` names. Nothing when either cannot be read: `pre_launch` (for `run_folder`)
 /// and the export checks (for `run_project`) refuse those.
@@ -436,6 +514,49 @@ mod tests {
             to_float("0.1").unwrap().to_bits(),
             (0.1f64 as f32).to_bits()
         );
+    }
+
+    /// C1 audit: a source within 1 mm of an edge of the tetrahedral mesh is named, one off it is
+    /// not; the hint names it in plain words.
+    #[test]
+    fn a_source_on_a_mesh_edge_is_named() {
+        let face = mbin::TetraFace {
+            vertices: [0, 0, 0],
+            marker: -1,
+            neighbor: -2,
+        };
+        let mesh = mbin::Mesh {
+            tetrahedra: vec![mbin::Tetrahedron {
+                vertices: [0, 1, 2, 3],
+                id_volume: 0,
+                faces: [face; 4],
+            }],
+            nodes: vec![[0.0, 0.0, 0.0], [6.0, 0.0, 0.0], [0.0, 10.0, 0.0], [6.0, 10.0, 3.0]],
+        };
+        let config = |x: &str, y: &str, z: &str| {
+            format!(
+                "<configuration><simulation tetrameshFileName=\"t.mbin\"/><sources>\
+                 <source name=\"S1\" x=\"{x}\" y=\"{y}\" z=\"{z}\"/>\
+                 <source name=\"S2\" x=\"1\" y=\"1\" z=\"0.2\"/></sources></configuration>"
+            )
+        };
+        // On the edge from node 0 to node 3, the long diagonal (its midpoint), and 0.5 mm off it.
+        for (x, y, z, on) in [
+            ("3", "5", "1.5", true),
+            ("3", "5", "1.5005", true),
+            ("3", "5", "1.6", false),
+            ("6", "0", "0", true),
+        ] {
+            let text = config(x, y, z);
+            let doc = Document::parse(&text).unwrap();
+            let named: Vec<String> = sources_on_edges(&doc, &mesh).into_iter().map(|p| p.label).collect();
+            assert_eq!(named == ["S1"], on, "({x}, {y}, {z}): {named:?}");
+        }
+        assert_eq!(
+            edge_hint(&["S1".to_string()]).as_deref(),
+            Some("Source S1 sits on an edge of the room mesh; move it a few centimetres.")
+        );
+        assert_eq!(edge_hint(&[]), None);
     }
 
     #[test]

@@ -59,6 +59,9 @@ pub struct ProjectInfo {
     /// Surface groups whose effective material is not the import placeholder
     /// (`scene::is_placeholder`).
     pub groups_assigned: usize,
+    /// Imported in this session from a mesh file that declares no groups (C1): every face is in
+    /// one surface group named after the file, for the user to carve.
+    pub imported_ungrouped: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, JsonSchema)]
@@ -98,6 +101,9 @@ pub struct Session {
     geometry_rev: u64,
     /// What the check's Console lines call the model: the imported file or the project file.
     model_name: String,
+    /// The open project was imported, just now, from a mesh file that declares no groups
+    /// (`ImportReport::ungrouped`, C1): the Geometry step says so. Cleared by any other load.
+    imported_ungrouped: bool,
     check: Option<CheckCache>,
     /// The validator's issues on the current state, with their UI codes.
     issues: Vec<UiIssue>,
@@ -147,11 +153,15 @@ fn no_project() -> CmdError {
     CmdError::new("NO_PROJECT", "no project is open")
 }
 
-/// Whether an op changes the mesh buffer (`scene::mesh_bytes`): a `set_geometry`, or a
-/// `regroup_faces` (each face's group index), directly or inside a batch.
+/// Whether an op changes the mesh buffer (`scene::mesh_bytes`): a `set_geometry`, or an op that
+/// moves faces between groups (each face's group index): `regroup_faces`, `move_faces`,
+/// `merge_surface_groups`; directly or inside a batch.
 fn touches_geometry(op: &Op) -> bool {
     match op {
-        Op::SetGeometry { .. } | Op::RegroupFaces { .. } => true,
+        Op::SetGeometry { .. }
+        | Op::RegroupFaces { .. }
+        | Op::MoveFaces { .. }
+        | Op::MergeSurfaceGroups { .. } => true,
         Op::Batch { ops } => ops.iter().any(touches_geometry),
         _ => false,
     }
@@ -251,6 +261,7 @@ impl Session {
         self.saved_serial = self.base_serial;
         self.geometry_rev += 1;
         self.model_name = model_name;
+        self.imported_ungrouped = false;
         self.check = None;
         self.refresh();
         self.info().expect("a project was just set")
@@ -305,6 +316,7 @@ impl Session {
             dirty: self.path.is_none() || self.top_serial() != self.saved_serial,
             geometry_rev: self.geometry_rev,
             groups_assigned: scene::groups_assigned(p),
+            imported_ungrouped: self.imported_ungrouped,
         })
     }
 
@@ -487,6 +499,7 @@ impl Session {
         let file = file_name(path);
         let report = scene::import_lines(&file, unit, up, &model.report, model.group_names.len());
         self.replace(model.to_project(&stem), None, file);
+        self.imported_ungrouped = model.report.ungrouped;
         self.lines.extend(report);
         self.state()
     }
@@ -700,7 +713,13 @@ impl Session {
         let project = self.project.as_ref().ok_or_else(no_project)?;
         let name = (1u32..)
             .map(|n| format!("Group {n}"))
-            .find(|n| !project.surface_groups.iter().any(|g| &g.name == n))
+            .find(|n| {
+                let key = validate::group_name_key(n);
+                !project
+                    .surface_groups
+                    .iter()
+                    .any(|g| validate::group_name_key(&g.name) == key)
+            })
             .expect("some n is free");
         let op = project.regrouped(faces, GroupId::random(), &name, MaterialId::random());
         if let Err(mut e) = op.clone().apply(&mut project.clone()) {

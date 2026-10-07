@@ -19,7 +19,7 @@ use crate::events::{AppEvent, RunEventBatch};
 use crate::guard::CmdError;
 use crate::results_data::{EchogramView, ReportView, RunDataIndex};
 use crate::runs::{
-    GpuStatus, LibraryMaterial, ResultsState, RunStarted, RunStreamBatch, RunsView, SolversStatus,
+    GpuStatus, LibraryMaterial, LibrarySpectrum, ResultsState, RunStarted, RunStreamBatch, RunsView, SolversStatus,
 };
 use crate::scene::{EditOutcome, SceneState};
 
@@ -106,6 +106,11 @@ fn dumps() -> Vec<Dump> {
                     "library_material",
                     "LibraryMaterial",
                     schema_for!(LibraryMaterial).to_value(),
+                ),
+                (
+                    "library_spectrum",
+                    "LibrarySpectrum",
+                    schema_for!(LibrarySpectrum).to_value(),
                 ),
                 (
                     "solvers_status",
@@ -303,6 +308,7 @@ mod tests {
             "RunsView",
             "ResultsState",
             "LibraryMaterial",
+            "LibrarySpectrum",
             "SolversStatus",
             "SolverCheck",
             "AppEvent",

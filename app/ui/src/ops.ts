@@ -72,6 +72,8 @@ export const moveSource = (id: string, position: Vec3): Op => ({ op: 'move_sourc
 export const addReceiver = (index: number, receiver: PointReceiver): Op => ({ op: 'add_point_receiver', index, receiver });
 export const addSource = (index: number, source: Source): Op => ({ op: 'add_source', index, source });
 export const removeReceiver = (id: string): Op => ({ op: 'remove_point_receiver', id });
+/** A source replaced whole, by its id (C1: its power, spectrum or directivity): one undo step. */
+export const replaceSource = (source: Source): Op => ({ op: 'replace_source', source });
 export const removeSource = (id: string): Op => ({ op: 'remove_source', id });
 
 export const setMaterialBand = (material: string, quantity: MaterialQuantity, band: number, value: F64): Op => ({
@@ -98,6 +100,14 @@ export function assignMaterial(group: string, material: string, activeVariant: s
 export const addVariant = (index: number, variant: Variant): Op => ({ op: 'add_variant', index, variant });
 export const setActiveVariant = (variant: string | null): Op => ({ op: 'set_active_variant', variant });
 export const removeVariant = (id: string): Op => ({ op: 'remove_variant', id });
+
+/** C1: the listed faces into the existing surface group `group` ("Move selection to group"): they
+ * take its material. A move that would add faces to a surface receiver or zone, or take some out,
+ * is refused by the core (`split`). */
+export const moveFaces = (group: string, faces: readonly number[]): Op => ({ op: 'move_faces', group, faces: [...faces] });
+
+/** C1: the groups `from` merged into `into`, which keeps its name and material; one undo step. */
+export const mergeGroups = (into: string, from: readonly string[]): Op => ({ op: 'merge_surface_groups', into, from: [...from] });
 
 /** Several ops as one edit and one undo step, applied all or nothing. */
 export const batch = (ops: Op[]): Op => ({ op: 'batch', ops });

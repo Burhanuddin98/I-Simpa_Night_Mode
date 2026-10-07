@@ -50,6 +50,7 @@
     "allow-run-echogram",
     "allow-proj-import",
     "allow-material-library",
+    "allow-spectrum-library",
     "allow-solvers-status",
     "allow-spps-gpu-status",
     "allow-app-events",

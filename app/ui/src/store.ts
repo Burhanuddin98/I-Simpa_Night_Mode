@@ -5,6 +5,7 @@ import { useSyncExternalStore } from 'react';
 import type {
   GpuStatus,
   LibraryMaterial,
+  LibrarySpectrum,
   LineClass,
   ReportView,
   ResultsState,
@@ -80,6 +81,9 @@ export type Selection =
   /** A viewport pick or flood-fill: face indices, and the names of their groups. */
   | { kind: 'faces'; faces: number[]; groups: string[] }
   | { kind: 'group'; id: string }
+  /** Several surface groups, Ctrl+clicked in the scene list (C1: what Merge acts on), in the
+   * order picked: the first is the one the others merge into. */
+  | { kind: 'groups'; ids: string[] }
   | { kind: 'material'; id: string }
   | { kind: 'source'; id: string }
   | { kind: 'receiver'; id: string };
@@ -177,6 +181,11 @@ export type PromptChoice = 'save' | 'discard' | 'cancel';
 export const promptStore = new Store<{ name: string; resolve: (choice: PromptChoice) => void } | null>(null);
 /** Upstream's reference materials, from the core (`material_library`), at boot. */
 export const libraryStore = new Store<LibraryMaterial[]>([]);
+/** C1: upstream's reference spectra on the open project's bands (`spectrum_library`), for the
+ * bands they were read for (`frequencies_hz` joined); refetched when the bands change. */
+export const spectrumLibraryStore = new Store<{ bands: string; list: LibrarySpectrum[] }>({ bands: '', list: [] });
+/** C1: the surface group whose name the scene list is editing (F2), or null. */
+export const groupRenameStore = new Store<string | null>(null);
 
 function clock(): string {
   return new Date().toLocaleTimeString('en-GB', { hour12: false });

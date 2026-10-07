@@ -140,7 +140,7 @@ function GroupSection() {
             );
           })}
         </div>
-        <div className="mat-row" title="Transmission is read-only in this version">
+        <div className="mat-row" title="Edited per band in the library's Transmission tab">
           <span>Transmission</span>
           <span className="mono">{checkedMaterial ? transmissionText(checkedMaterial) : 'mixed'}</span>
         </div>

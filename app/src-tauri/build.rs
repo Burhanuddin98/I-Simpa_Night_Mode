@@ -45,6 +45,7 @@ fn main() {
         "run_echogram",
         "proj_import",
         "material_library",
+        "spectrum_library",
         "solvers_status",
         "spps_gpu_status",
         "app_events",

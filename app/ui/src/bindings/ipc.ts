@@ -2724,6 +2724,7 @@ export interface IpcBindings {
   float_probe: FloatProbe;
   gpu_status: GpuStatus;
   library_material: LibraryMaterial;
+  library_spectrum: LibrarySpectrum;
   prepared: Prepared;
   project_info: ProjectInfo;
   report_view: ReportView;
@@ -3097,6 +3098,11 @@ export interface ProjectInfo {
    */
   groups_assigned: number;
   id: string;
+  /**
+   * Imported in this session from a mesh file that declares no groups (C1): every face is in
+   * one surface group named after the file, for the user to carve.
+   */
+  imported_ungrouped: boolean;
   materials: number;
   name: string;
   path?: string | null;
@@ -3489,6 +3495,22 @@ export interface LibraryMaterial {
    * Upstream's `idmateriau`.
    */
   reference_id: number;
+}
+/**
+ * One of upstream's reference spectra (`appspectrums`) as a source's shape on the open project's
+ * bands (C1): what the source editor's spectrum list sets. The values come from the core
+ * (`ReferenceSpectrum::shape_on`), never retyped in the UI.
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "LibrarySpectrum".
+ */
+export interface LibrarySpectrum {
+  name: string;
+  /**
+   * Upstream's `idspectre`.
+   */
+  reference_id: number;
+  shape: SpectrumShape;
 }
 /**
  * A prepared buffer: take it with `token`; `checksum` is [`checksum`] of its bytes.

@@ -22,7 +22,7 @@ use schemars::JsonSchema;
 use serde::Serialize;
 use simpa_core::bed::SOLVER_MANIFEST;
 use simpa_core::bed::pe::{ManifestSource, SolverCheck, SolverManifest, check_solvers};
-use simpa_core::geometry::import::{REFERENCE_MATERIALS, library_material};
+use simpa_core::geometry::import::{REFERENCE_MATERIALS, REFERENCE_SPECTRA, library_material};
 use simpa_core::mesh;
 use simpa_core::process::{self, CancelToken};
 use simpa_core::run::gpu::{self, SPPS_GPU_EXE_NAME, SppsDevice};
@@ -31,7 +31,7 @@ use simpa_core::run::{
     DEFAULT_LOSS_LIMIT, ExeSearch, LineClass as CoreClass, MeshChoice, RunError, RunEvent,
     RunManifest, RunOptions, RunReport, RunSource, Stage, Status, run_project,
 };
-use simpa_core::schema::{F64, MaterialId, Rgb, SolverKind};
+use simpa_core::schema::{BandSet, F64, MaterialId, Rgb, SolverKind, SpectrumShape};
 use simpa_core::{results, validate};
 use tauri::ipc::Channel;
 
@@ -307,6 +307,17 @@ pub struct LibraryMaterial {
     /// The `f32`-widened absorption, the same in every band, as a `.proj` import makes it.
     pub absorption: F64,
     pub color: Rgb,
+}
+
+/// One of upstream's reference spectra (`appspectrums`) as a source's shape on the open project's
+/// bands (C1): what the source editor's spectrum list sets. The values come from the core
+/// (`ReferenceSpectrum::shape_on`), never retyped in the UI.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct LibrarySpectrum {
+    /// Upstream's `idspectre`.
+    pub reference_id: u32,
+    pub name: String,
+    pub shape: SpectrumShape,
 }
 
 /// The four executables a run needs, each checked against the verified build.
@@ -726,6 +737,21 @@ pub fn material_library() -> Vec<LibraryMaterial> {
                 absorption: m.absorption[0],
                 color: m.color,
             }
+        })
+        .collect()
+}
+
+/// Upstream's reference spectra on `bands`, in upstream's order; one a band set cannot take (a
+/// non-nominal frequency, which the schema refuses) is left out.
+pub fn spectrum_library(bands: &BandSet) -> Vec<LibrarySpectrum> {
+    REFERENCE_SPECTRA
+        .iter()
+        .filter_map(|r| {
+            Some(LibrarySpectrum {
+                reference_id: r.id,
+                name: r.name.to_string(),
+                shape: r.shape_on(bands)?,
+            })
         })
         .collect()
 }

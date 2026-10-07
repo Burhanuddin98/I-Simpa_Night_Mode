@@ -4,8 +4,62 @@
 import type { Material, SurfaceGroup, Variant } from '../../bindings/schema.ts';
 import { compareF64, naturalCompare, type F64 } from './bands.ts';
 
-/** The per-band quantities the grid edits. Transmission is shown read-only. */
-export type Quantity = 'absorption' | 'scattering';
+/** The per-band quantities the grid edits. `transmission` is the transmission loss in dB, per
+ * band, empty where the material does not transmit (C1). */
+export type Quantity = 'absorption' | 'scattering' | 'transmission';
+
+/** A material's value of `quantity` in band `band`: '' where it has none (a band that does not
+ * transmit, or past the array). */
+export function bandValue(m: Material, quantity: Quantity, band: number): F64 {
+  if (quantity === 'transmission') return m.transmission_loss_db?.[band] ?? '';
+  return m[quantity][band] ?? '';
+}
+
+/**
+ * What config.xml gives the solver for a typed transmission loss (C1 audit), as the core's writer
+ * decides it (`config_xml::write::transmission_loss_written`, upstream's GUI rule,
+ * `e_data_row_materiau.h:98-145`): `off` when the band's absorption is 0 as an `f32` (the band
+ * then does not transmit at all); the loss `-10 log10(alpha)` when tau = 10^(-R/10) exceeds alpha
+ * (no more is transmitted than absorbed); else the loss as typed (`same`).
+ */
+export type TransmissionWritten = { kind: 'same' } | { kind: 'off' } | { kind: 'clamped'; db: number; tau: number; alpha: number };
+
+export function transmissionWritten(lossDb: F64, absorption: F64): TransmissionWritten {
+  const r = Number(lossDb);
+  const a = Number(absorption);
+  if (!(Math.fround(a) > 0)) return { kind: 'off' };
+  const tau = 10 ** (-r / 10);
+  return tau > a ? { kind: 'clamped', db: -10 * Math.log10(a), tau, alpha: a } : { kind: 'same' };
+}
+
+/** The cell's words for a typed loss the solver will not get as typed, or null. */
+export function transmissionNote(lossDb: F64, absorption: F64): { short: string; title: string } | null {
+  const w = transmissionWritten(lossDb, absorption);
+  if (w.kind === 'same') return null;
+  if (w.kind === 'off') {
+    return {
+      short: 'off',
+      title: `Not written: the absorption here is 0, so this band does not transmit (upstream's rule: transmission needs alpha > 0).`,
+    };
+  }
+  const db = Math.round(w.db * 100) / 100;
+  return {
+    short: `${db}`,
+    title: `Written as ${db} dB: tau = 10^(-R/10) = ${w.tau.toPrecision(3)} exceeds alpha = ${w.alpha}, so the solver gets tau = alpha (no more is transmitted than absorbed, as upstream's GUI does).`,
+  };
+}
+
+/**
+ * `m` with its transmission loss in `band` set to `value` dB, or switched off there with `null`
+ * (C1). A material whose every band is off has no transmission at all (`null`), as a new
+ * material has; one switched on in a band starts with every other band off.
+ */
+export function withTransmission(m: Material, band: number, value: F64 | null): Material {
+  const n = m.absorption.length;
+  const losses: (F64 | null)[] = m.transmission_loss_db ? m.transmission_loss_db.slice() : Array.from({ length: n }, () => null);
+  losses[band] = value;
+  return { ...m, transmission_loss_db: losses.every((v) => v === null) ? null : losses };
+}
 
 export interface ViewLike {
   surface_groups: readonly SurfaceGroup[];
@@ -41,11 +95,17 @@ export interface SelectionLike {
   id?: string;
   /** Group names, for a face selection. */
   groups?: readonly string[];
+  /** Group ids, for several groups picked in the scene list (C1). */
+  ids?: readonly string[];
 }
 
 /** The surface groups a selection names, in project order: a group, or the groups of faces. */
 export function selectedGroupIds(sel: SelectionLike, groups: readonly SurfaceGroup[]): string[] {
   if (sel.kind === 'group' && sel.id) return groups.some((g) => g.id === sel.id) ? [sel.id] : [];
+  if (sel.kind === 'groups' && sel.ids) {
+    const ids = new Set(sel.ids);
+    return groups.filter((g) => ids.has(g.id)).map((g) => g.id);
+  }
   if (sel.kind === 'faces' && sel.groups) {
     const names = new Set(sel.groups);
     return groups.filter((g) => names.has(g.name)).map((g) => g.id);
@@ -75,7 +135,7 @@ export function nextSort(current: SortState, clicked: 'name' | number): SortStat
 export function sortRows(materials: readonly Material[], sort: SortState, quantity: Quantity): Material[] {
   const indexed = materials.map((m, i) => ({ m, i }));
   if (sort.kind === 'project') return materials.slice();
-  const key = (m: Material): F64 => (sort.kind === 'band' ? (m[quantity][sort.band] ?? '') : '');
+  const key = (m: Material): F64 => (sort.kind === 'band' ? bandValue(m, quantity, sort.band) : '');
   indexed.sort((a, b) => {
     const c = sort.kind === 'name' ? naturalCompare(a.m.name, b.m.name) : compareF64(key(a.m), key(b.m));
     return c * sort.dir || a.i - b.i;

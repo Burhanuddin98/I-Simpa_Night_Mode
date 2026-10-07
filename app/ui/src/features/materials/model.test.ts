@@ -3,6 +3,10 @@ import { test } from 'node:test';
 import type { Material, SurfaceGroup, Variant } from '../../bindings/schema.ts';
 import {
   alphaBars,
+  bandValue,
+  transmissionNote,
+  transmissionWritten,
+  withTransmission,
   effectiveMaterial,
   formatArea,
   newMaterial,
@@ -93,4 +97,29 @@ test('display helpers: the design mini-bars, areas as geometry facts, new rows',
   assert.equal(m.scattering.length, 6);
   assert.equal(m.transmission_loss_db, null);
   assert.match(m.color, /^#[0-9a-f]{6}$/);
+});
+
+test('C1: transmission per band: a band switched on alone, others off; all off is no transmission', () => {
+  const m = newMaterial('m', 'Panel', 3, 0);
+  assert.equal(bandValue(m, 'transmission', 1), '', 'a new material does not transmit');
+  const on = withTransmission(m, 1, 20);
+  assert.deepEqual(on.transmission_loss_db, [null, 20, null]);
+  assert.equal(bandValue(on, 'transmission', 1), 20);
+  assert.equal(bandValue(on, 'absorption', 1), 0.1);
+  const two = withTransmission(on, 2, 15);
+  assert.deepEqual(two.transmission_loss_db, [null, 20, 15]);
+  assert.equal(withTransmission(withTransmission(two, 1, null), 2, null).transmission_loss_db, null);
+  assert.deepEqual(m.transmission_loss_db, null, 'the input is not changed');
+});
+
+test('C1 audit: the transmission the solver gets: as typed, clamped to tau = alpha, or off at alpha 0', () => {
+  assert.deepEqual(transmissionWritten(20, 0.05), { kind: 'same' }, 'tau 0.01 under alpha 0.05');
+  const c = transmissionWritten(5, 0.05);
+  assert.equal(c.kind, 'clamped');
+  if (c.kind === 'clamped') assert.ok(Math.abs(c.db - 13.0103) < 1e-4, String(c.db));
+  assert.deepEqual(transmissionWritten(20, 0), { kind: 'off' });
+  assert.equal(transmissionNote(5, 0.05)?.short, '13.01');
+  assert.match(transmissionNote(5, 0.05)!.title, /Written as 13.01 dB/);
+  assert.equal(transmissionNote(20, 0)?.short, 'off');
+  assert.equal(transmissionNote(20, 0.05), null);
 });

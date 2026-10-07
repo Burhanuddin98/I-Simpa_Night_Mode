@@ -25,7 +25,7 @@ use crate::examples;
 use crate::guard::{self, CmdError, CmdResult, lock};
 use crate::results_data::{self, EchogramView, ReportView, RunDataIndex};
 use crate::runs::{
-    self, GpuCache, GpuStatus, LibraryMaterial, ResultsState, RunSlot, RunStarted, RunStreamBatch,
+    self, GpuCache, GpuStatus, LibraryMaterial, LibrarySpectrum, ResultsState, RunSlot, RunStarted, RunStreamBatch,
     RunsView, SolversCache, SolversStatus,
 };
 use crate::scene::{EditOutcome, SceneState};
@@ -678,6 +678,20 @@ pub async fn proj_import(state: State<'_, AppState>, path: String) -> CmdResult<
 #[tauri::command(rename_all = "snake_case")]
 pub async fn material_library() -> CmdResult<Vec<LibraryMaterial>> {
     guard::blocking("material_library", || Ok(runs::material_library())).await
+}
+
+/// Upstream's reference spectra as source shapes on the open project's bands (C1).
+#[tauri::command(rename_all = "snake_case")]
+pub async fn spectrum_library(state: State<'_, AppState>) -> CmdResult<Vec<LibrarySpectrum>> {
+    let session = state.session.clone();
+    guard::blocking("spectrum_library", move || {
+        let s = lock(&session, "project")?;
+        let p = s
+            .project()
+            .ok_or_else(|| CmdError::new("NO_PROJECT", "no project is open"))?;
+        Ok(runs::spectrum_library(&p.bands))
+    })
+    .await
 }
 
 /// The four executables a run needs, found and checked against the verified build.

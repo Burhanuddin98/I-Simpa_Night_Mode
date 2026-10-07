@@ -70,3 +70,45 @@ pub fn reference_material(id: u32) -> Option<&'static ReferenceMaterial> {
 pub fn reference_spectrum(id: u32) -> Option<&'static ReferenceSpectrum> {
     REFERENCE_SPECTRA.iter().find(|s| s.id == id)
 }
+
+impl ReferenceSpectrum {
+    /// This spectrum as a source's shape on `bands` (C1, the source editor's spectrum list):
+    /// upstream's two noises as the shapes they are, `Pink` (id 1, the same level in every
+    /// band) and `White` (id 0, +1 dB per third-octave band); any other as `Custom` relative
+    /// levels: a third-octave band takes the reference's `f32`-widened level, an octave band
+    /// the energy sum of the three third-octave bands it spans. Every band a `BandSet` allows has
+    /// its levels here: the lowest octave (63 Hz) spans 50, 63 and 80 Hz and the highest (16 kHz)
+    /// 12.5, 16 and 20 kHz, all inside upstream's 27 bands, so no spectrum is ever left out
+    /// (`tests/group_ops.rs` checks every spectrum on the widest band sets). `None` only when
+    /// `bands` holds a frequency that is not a nominal one, which the schema refuses.
+    pub fn shape_on(&self, bands: &crate::schema::BandSet) -> Option<crate::schema::SpectrumShape> {
+        use crate::schema::{BandKind, F64, SpectrumShape};
+        match self.id {
+            1 => return Some(SpectrumShape::Pink),
+            0 => return Some(SpectrumShape::White),
+            _ => {}
+        }
+        let level = |k: i32| -> Option<f64> {
+            let i = usize::try_from(k + 13).ok()?;
+            self.band_db
+                .get(i)
+                .map(|&v| crate::config_xml::widen_f32(v))
+        };
+        let mut out = Vec::with_capacity(bands.len());
+        for &f in &bands.frequencies_hz {
+            let k = bands.kind.band_number(f)?;
+            let v = match bands.kind {
+                BandKind::ThirdOctave => level(k)?,
+                BandKind::Octave => {
+                    let sum: f64 = [k - 1, k, k + 1]
+                        .into_iter()
+                        .map(|j| level(j).map(|l| 10f64.powf(l / 10.0)))
+                        .sum::<Option<f64>>()?;
+                    10.0 * sum.log10()
+                }
+            };
+            out.push(F64::new(v));
+        }
+        Some(SpectrumShape::Custom { relative_db: out })
+    }
+}

@@ -79,6 +79,7 @@ fn binary(bytes: &[u8], options: &ImportOptions) -> Result<ImportedModel> {
         polygons,
         groups: vec!["model".to_string()],
         notes: vec!["binary STL".to_string()],
+        ungrouped: true,
     }
     .finish(MeshFormat::Stl, options, n)
 }
@@ -94,6 +95,7 @@ fn ascii(bytes: &[u8], options: &ImportOptions) -> Result<ImportedModel> {
     let mut vertices: Vec<[f64; 3]> = Vec::new();
     let mut polygons = Vec::new();
     let mut groups: Vec<String> = Vec::new();
+    let mut unnamed_solids = 0usize;
     let expect = |got: Option<(usize, &str)>, what: &str| -> Result<(usize, String)> {
         match got {
             Some((n, l)) if l.split_ascii_whitespace().next() == what.split(' ').next() => {
@@ -121,6 +123,7 @@ fn ascii(bytes: &[u8], options: &ImportOptions) -> Result<ImportedModel> {
         let (_, solid) = expect(Some((n, line)), "solid")?;
         let name = solid["solid".len()..].trim();
         let g = groups.len() as u32;
+        unnamed_solids += usize::from(name.is_empty());
         groups.push(if name.is_empty() {
             format!("solid {}", groups.len() + 1)
         } else {
@@ -161,11 +164,13 @@ fn ascii(bytes: &[u8], options: &ImportOptions) -> Result<ImportedModel> {
         }
     }
     let source_faces = polygons.len();
+    let ungrouped = groups.len() == 1 && unnamed_solids == 1;
     RawMesh {
         vertices,
         polygons,
         groups,
         notes: vec!["ASCII STL".to_string()],
+        ungrouped,
     }
     .finish(MeshFormat::Stl, options, source_faces)
 }

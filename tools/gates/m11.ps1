@@ -122,11 +122,15 @@ $specIds = [ordered]@{
     'm12.mapwindow' = @('mw-default', 'mw-off', 'mw-probe', 'mw-cumulative', 'mw-diff')
     # Backlog 80, the run-quality advisor (M12b, decision 57): run on this harness by m12.ps1.
     'b80.advisor' = @('b80-pre', 'b80-h', 'b80-after', 'b80-undo')
+    # C1 (docs/investigations/2026-10-07-blank-geometry/SPEC.md): a raw blank box to results, run
+    # on this harness on its own (-Only e2e -Spec m13.blank); its GPU run needs spps-gpu.exe in
+    # -SolversDir (the verified five, as C:\tmp\nm-solvers-gpu holds them).
+    'm13.blank' = @('c1-import', 'c1-carve', 'c1-rename', 'c1-materials', 'c1-source', 'c1-receivers', 'c1-run-cpu', 'c1-run-gpu', 'c1-grouped')
     # Not a gate spec: the app tour of BRAS CR4, recorded as a video (specs/tour.e2e.ts), no
     # id. Its progress.log goes to -ScreensDir, its project copy and runs beside it; no pictures.
     tour     = @()
 }
-$allSpecs = @($specIds.Keys | Where-Object { $_ -ne 'screens' -and $_ -ne 'tour' -and $_ -notlike 'm12.*' -and $_ -notlike 'b80.*' })
+$allSpecs = @($specIds.Keys | Where-Object { $_ -ne 'screens' -and $_ -ne 'tour' -and $_ -notlike 'm12.*' -and $_ -notlike 'b80.*' -and $_ -notlike 'm13.*' })
 foreach ($s in $Spec) { if (-not $specIds.Contains($s)) { throw "unknown -Spec '$s': one of $(@($specIds.Keys) -join ', ')" } }
 $fullRun = $Only -eq 'all' -and -not $SkipCore -and -not $SkipPrior -and (@($allSpecs | Where-Object { $Spec -notcontains $_ }).Count -eq 0)
 
@@ -506,7 +510,10 @@ Check "harness: the private solver copy, each executable the verified build by c
     New-Item -ItemType Directory -Force $privateSolvers | Out-Null
     $manifest = Get-Content (Join-Path $repo 'solvers\manifest.json') -Raw | ConvertFrom-Json
     $ok = $true
-    foreach ($name in 'spps.exe', 'classicalTheory.exe', 'tetgen.exe', 'preprocess.exe') {
+    # spps-gpu.exe (decision 70) only when -SolversDir has it: m13.blank's GPU run needs it.
+    $names = @('spps.exe', 'classicalTheory.exe', 'tetgen.exe', 'preprocess.exe')
+    if (Test-Path (Join-Path $SolversDir 'spps-gpu.exe')) { $names += 'spps-gpu.exe' }
+    foreach ($name in $names) {
         $src = Join-Path $SolversDir $name
         if (-not (Test-Path $src)) { Note "MISSING $src"; $ok = $false; continue }
         $dst = Join-Path $privateSolvers $name

@@ -12,11 +12,19 @@
 //
 // Scope row 15 (1), M37: a point receiver an imported `.proj` put in a receiver group shows the
 // group's path, read-only (`[data-receiver-group]`), and the filter finds it by it.
-import { useState } from 'react';
+//
+// C1 (docs/investigations/2026-10-07-blank-geometry/SPEC.md): each surface row shows its face
+// count (`[data-group-faces]`); F2 on a selected group (or a double-click on its row) edits its
+// name in the row (`[data-part="group-name-input"]`, Enter commits, Esc cancels); Ctrl+click picks
+// several groups, and the bar under the Surfaces head merges them into the first picked
+// (`[data-action="merge-groups"]`). Each is one checked edit and one undo step; a refusal is shown
+// under the surfaces.
+import { useEffect, useRef, useState } from 'react';
 import * as actions from '../actions';
 import type { Source, UiIssue } from '../bindings/ipc';
 import { issuesByEntity, projectIssues } from '../issues';
-import { refusalStore, sceneStore, selectionStore, useStore } from '../store';
+import { groupRenameStore, refusalStore, sceneStore, selectionStore, useStore } from '../store';
+import { groupPicked, mergePlan, renameProblem, toggleGroup } from './groupsModel';
 import { FoldButton, useFold } from './fold';
 import { Search, Trash2 } from './icons';
 import { coord, displayName, effectiveMaterial, matchesFilter, receiverFolder, sentence, uniqueIssues, worstSeverity } from './sceneModel';
@@ -125,6 +133,50 @@ function RemoveButton({ kind, id, name }: { kind: 'source' | 'receiver'; id: str
   );
 }
 
+/** C1: a group's name, edited in its row (F2). Enter or blur commits, Esc cancels. */
+function GroupNameInput({ id, name, onProblem }: { id: string; name: string; onProblem: (p: { code: string; message: string } | null) => void }) {
+  const ref = useRef<HTMLInputElement>(null);
+  const done = useRef(false);
+  const [text, setText] = useState(name);
+  useEffect(() => {
+    ref.current?.focus();
+    ref.current?.select();
+  }, []);
+  const finish = (commit: boolean) => {
+    if (done.current) return;
+    done.current = true;
+    groupRenameStore.set(null);
+    if (!commit || text === name) return;
+    const groups = sceneStore.get()?.view.surface_groups ?? [];
+    const problem = renameProblem(text, id, groups);
+    onProblem(problem);
+    if (problem) return;
+    actions.renameGroup(id, text.trim()).catch((e: unknown) => onProblem(actions.asCmdError(e)));
+  };
+  return (
+    <input
+      ref={ref}
+      className="group-name-input"
+      data-part="group-name-input"
+      aria-label={`Rename ${name}`}
+      value={text}
+      spellCheck={false}
+      onChange={(e) => setText(e.target.value)}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          finish(true);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          finish(false);
+        }
+      }}
+      onBlur={() => finish(true)}
+    />
+  );
+}
+
 function Head({ title, shown, total }: { title: string; shown: number; total: number }) {
   return (
     <div className="scene-head label">
@@ -139,10 +191,11 @@ export function ScenePanel() {
   const selection = useStore(selectionStore);
   const refusals = useStore(refusalStore);
   const [query, setQuery] = useState('');
+  const renaming = useStore(groupRenameStore);
+  const [groupProblem, setGroupProblem] = useState<{ code: string; message: string } | null>(null);
   const view = scene?.view ?? null;
   const byEntity = issuesByEntity(scene?.issues ?? []);
   const issuesOf = (kind: string, id: string) => byEntity.get(`${kind}:${id}`) ?? [];
-  const pickedGroup = selection.kind === 'group' ? selection.id : null;
   const pickedGroupNames = new Set(selection.kind === 'faces' ? selection.groups : []);
 
   const stats = new Map((scene?.groups ?? []).map((s) => [s.id, s]));
@@ -154,6 +207,11 @@ export function ScenePanel() {
   const receivers = (view?.point_receivers ?? []).filter((r) => matchesFilter(query, r.name, receiverFolder(r)));
   const grids = (view?.surface_receivers ?? []).filter((r) => matchesFilter(query, r.name));
   const general = projectIssues(scene?.issues ?? []);
+  const merge = view ? mergePlan(selection, view.surface_groups) : null;
+  // The latest group edit's refusals (rename, merge, move), from the checked apply.
+  const groupRefusals = uniqueIssues(
+    ...[...refusals].filter(([k]) => k.startsWith('surface_group:') && /:(name|merge|faces)$/.test(k)).map(([, v]) => v),
+  );
   const folded = useFold('scene');
 
   return (
@@ -178,38 +236,97 @@ export function ScenePanel() {
         ) : (
           <>
             <Head title="Surfaces" shown={shownSurfaces.length} total={surfaces.length} />
+            {merge && (
+              <div className="group-merge" data-part="group-merge">
+                <span className="grow">{merge.from.length + 1} groups picked</span>
+                <button
+                  className="small-button"
+                  data-action="merge-groups"
+                  title={`Merge ${merge.from.map((g) => g.name).join(', ')} into ${merge.into.name}, which keeps its name and material (one undo step)`}
+                  onClick={() => {
+                    setGroupProblem(null);
+                    actions.mergeSelectedGroups().catch((e: unknown) => setGroupProblem(actions.asCmdError(e)));
+                  }}
+                >
+                  Merge into {displayName(merge.into.name)}
+                </button>
+              </div>
+            )}
             {shownSurfaces.map(({ g, m, assigned }) => {
-              const on = pickedGroup === g.id || pickedGroupNames.has(g.name);
+              const on = groupPicked(selection, g.id) || pickedGroupNames.has(g.name);
+              const faces = stats.get(g.id)?.faces ?? 0;
+              if (renaming === g.id) {
+                return (
+                  <div key={g.id} className="scene-row static editing" data-entity={`surface_group:${g.id}`} aria-pressed={on}>
+                    <span className={`swatch${assigned ? '' : ' unassigned'}`} style={assigned && m ? { background: m.color } : undefined} />
+                    <GroupNameInput id={g.id} name={g.name} onProblem={setGroupProblem} />
+                  </div>
+                );
+              }
               return (
                 <button
                   key={g.id}
-                  className="scene-row"
+                  className="scene-row group-row"
                   data-entity={`surface_group:${g.id}`}
                   aria-pressed={on}
-                  onClick={() => selectGroup(g.id)}
+                  title="Click to set its material; Ctrl+click to pick several, to merge them; F2 to rename"
+                  onClick={(e) => {
+                    setGroupProblem(null);
+                    if (e.ctrlKey || e.metaKey) selectionStore.set(toggleGroup(selectionStore.get(), g.id) as typeof selection);
+                    else selectGroup(g.id);
+                  }}
+                  onDoubleClick={() => {
+                    selectGroup(g.id);
+                    groupRenameStore.set(g.id);
+                  }}
                 >
                   <span
                     className={`swatch${assigned ? '' : ' unassigned'}`}
                     style={assigned && m ? { background: m.color } : undefined}
                   />
-                  <span className="row-name" title={g.name}>
-                    {displayName(g.name)}
+                  {/* C1 audit: the name has the row's whole width (renaming is the feature); the face
+                      count and the material go on a second line, and shorten first. */}
+                  <span className="row-main">
+                    <span className="row-name" title={g.name}>
+                      {displayName(g.name)}
+                    </span>
+                    <span className="row-sub">
+                      <span className="row-count mono" data-group-faces={faces} title={`${faces} ${faces === 1 ? 'face' : 'faces'}`}>
+                        {faces} {faces === 1 ? 'face' : 'faces'}
+                      </span>
+                      {/* The material, unless it only repeats the surface's own name (BRAS names both alike). */}
+                      {!(assigned && m && displayName(m.name) === displayName(g.name)) && (
+                        <span
+                          className="row-detail"
+                          data-input
+                          title={assigned ? m?.name : `${m?.name ?? 'No material'}: the import placeholder, not assigned yet`}
+                        >
+                          {assigned ? (m ? displayName(m.name) : '—') : 'unassigned'}
+                        </span>
+                      )}
+                    </span>
                   </span>
                   <IssueTag issues={issuesOf('surface_group', g.id)} />
-                  {/* The material, unless it only repeats the surface's own name (BRAS names both alike). */}
-                  {!(assigned && m && displayName(m.name) === displayName(g.name)) && (
-                    <span
-                      className="row-detail"
-                      data-input
-                      title={assigned ? m?.name : `${m?.name ?? 'No material'}: the import placeholder, not assigned yet`}
-                    >
-                      {assigned ? (m ? displayName(m.name) : '—') : 'unassigned'}
-                    </span>
-                  )}
                 </button>
               );
             })}
             {!surfaces.length && <div className="scene-empty empty">No surfaces</div>}
+            {(groupProblem || groupRefusals.length > 0) && (
+              <div className="issues toggle-issues" data-part="group-issues">
+                {groupProblem && (
+                  <div className="issue" data-issue-code={groupProblem.code} role="alert">
+                    <span className="code">FAIL {groupProblem.code}</span>
+                    <span className="msg">{groupProblem.message} The project is unchanged.</span>
+                  </div>
+                )}
+                {groupRefusals.map((i) => (
+                  <div key={`${i.code}|${i.path}`} className="issue" data-issue-code={i.code} role="alert">
+                    <span className="code">FAIL {i.code}</span>
+                    <span className="msg">{sentence(i.message)} Refused; the project is unchanged.</span>
+                  </div>
+                ))}
+              </div>
+            )}
 
             <Head title="Sources" shown={sources.length} total={view.sources.length} />
             {sources.map((s) => (

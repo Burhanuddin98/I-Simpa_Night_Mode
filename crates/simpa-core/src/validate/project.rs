@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use super::codes::*;
 use super::directivity::{self, Balloon};
 use super::geometry::{self, PointLocation, cross, norm};
-use super::names::{collision_key, filename_problem};
+use super::names::{collision_key, filename_problem, group_name_key};
 use super::{
     Context, Issue, MAX_NAME_BYTES, MAX_TIME_STEPS, SOURCE_CLEARANCE_M, issue, mesh_input_hash,
 };
@@ -30,6 +30,7 @@ pub(super) fn check(p: &Project, ctx: &Context, out: &mut Vec<Issue>) {
     spps_settings(p, out);
     environment(p, out);
     names(p, out);
+    group_names(p, out);
     surface_receivers(p, out);
     fittings(p, out);
     mesh(p, ctx, out);
@@ -882,6 +883,28 @@ fn names(p: &Project, out: &mut Vec<Issue>) {
             ));
         } else {
             first.insert(key, &s.name);
+        }
+    }
+}
+
+/// Surface-group names are unique, compared trimmed and without case (C1 audit). No solver reads
+/// them, so a collision is a warning: the app picks, moves and lists faces by the group's name.
+fn group_names(p: &Project, out: &mut Vec<Issue>) {
+    let mut first: HashMap<String, &str> = HashMap::new();
+    for (i, g) in p.surface_groups.iter().enumerate() {
+        let key = group_name_key(&g.name);
+        if let Some(earlier) = first.get(&key) {
+            out.push(issue(
+                GROUP_NAME_DUPLICATE,
+                format!("/surface_groups/{i}/name"),
+                format!(
+                    "the surface group name '{}' is the same as '{earlier}' (compared trimmed and \
+                     without case): faces picked by name could land in either; rename one",
+                    g.name
+                ),
+            ));
+        } else {
+            first.insert(key, &g.name);
         }
     }
 }

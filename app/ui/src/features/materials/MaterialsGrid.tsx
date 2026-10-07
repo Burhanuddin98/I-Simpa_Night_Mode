@@ -11,6 +11,13 @@
 //   one undo step), and "+ From library" beside + Material (M1, LibraryMenu). The Law column is
 //   outside the cell cursor: the arrows, Tab, Ctrl+A, copy and paste still cover the bands only.
 //
+// C1 (docs/investigations/2026-10-07-blank-geometry/SPEC.md): a third tab, Transmission, edits
+// the transmission loss in dB per band. An empty cell is a band that does not transmit: typing a
+// number there switches the band on, clearing a cell (Backspace, then Enter) switches it off. Each
+// material's change is one `replace_material` (the core's `set_material_band` edits only a band
+// that transmits already); a band whose loss lets more through than the material absorbs is
+// warned about under the grid, as the config.xml writer clamps it.
+//
 // It writes only through `actions.apply` with `ops`, and `actions.setLaw` and
 // `actions.addFromLibrary`, which do the same.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
@@ -19,7 +26,7 @@ import { displayName } from '../../chrome/sceneModel';
 import type { Material, Op } from '../../bindings/schema';
 import { fieldKey } from '../../issues';
 import { NOT_A_NUMBER, parseStrictDecimal } from '../../numbers';
-import { addMaterial, batch, nextName, removeMaterial, rename, setMaterialBand } from '../../ops';
+import { addMaterial, batch, nextName, removeMaterial, rename, replaceMaterial, setMaterialBand } from '../../ops';
 import { refusalStore, sceneStore, Store, useStore } from '../../store';
 import { registerHook } from '../../testhooks';
 import { bandColumns, type BandColumn, type F64 } from './bands';
@@ -27,7 +34,7 @@ import { boundsOf, clampCell, inRect, planFill, rectOf, type Cell } from './fill
 import { dismiss, errorOf, IssueLines, lineOf, visibleRefusals, type Line } from './inline';
 import { changesLaw, LAWS, lawOf, lawState, lawTitle, lawValue, PER_BAND, SEMI_DIFFUSE_NOTE, usesLaw } from './law';
 import { LibraryMenu } from './LibraryMenu';
-import { newMaterial, nextSort, sortRows, transmissionText, usage, type Quantity, type SortState } from './model';
+import { bandValue, newMaterial, nextSort, sortRows, transmissionNote, transmissionText, usage, withTransmission, type Quantity, type SortState } from './model';
 import { planPaste } from './paste';
 import { displayValue, formatExact, ROUNDED_MARK, toTsv } from './tsv';
 
@@ -60,13 +67,26 @@ interface LocalIssue {
 }
 const localStore = new Store<{ load: string; issues: LocalIssue[] }>({ load: '', issues: [] });
 
-const cellKey = (id: string, q: Quantity, band: number) => `${id}/${q}/${band}`;
+/** A cell, keyed as an issue on its field is: `transmission` is the schema's `transmission_loss_db`. */
+const cellKey = (id: string, q: Quantity, band: number) => `${id}/${q === 'transmission' ? 'transmission_loss_db' : q}/${band}`;
 /** A material's law cell, keyed as an issue on the material's `reflection_law` field is. */
 const lawKey = (id: string) => `${id}/reflection_law`;
 /** A control of its own inside the grid (the Law select): the grid's keys and clipboard leave it alone. */
 const ownControl = (el: EventTarget | Element | null) =>
   el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement;
-const QUANTITIES: readonly Quantity[] = ['absorption', 'scattering'];
+const QUANTITIES: readonly Quantity[] = ['absorption', 'scattering', 'transmission'];
+const QUANTITY_LABEL: Record<Quantity, string> = { absorption: 'Absorption', scattering: 'Scattering', transmission: 'Transmission' };
+
+/** The ops for band edits of quantity `q`: one `set_material_band` per cell for absorption and
+ * scattering; for transmission one `replace_material` per material, `null` switching a band off. */
+function bandOps(q: Quantity, edits: readonly { m: Material; band: number; value: F64 | null }[]): Op[] {
+  if (q !== 'transmission') {
+    return edits.filter((e) => e.value !== null).map((e) => setMaterialBand(e.m.id, q, e.band, e.value as F64));
+  }
+  const byMaterial = new Map<string, Material>();
+  for (const e of edits) byMaterial.set(e.m.id, withTransmission(byMaterial.get(e.m.id) ?? e.m, e.band, e.value));
+  return [...byMaterial.values()].map((m) => replaceMaterial(m));
+}
 const ARROWS: Record<string, [number, number]> = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
 const EMPTY: readonly Material[] = [];
 
@@ -116,7 +136,7 @@ export function MaterialsGrid() {
   const valueAt = (row: number, col: number): F64 => {
     const m = rows[row];
     const c = columns[col];
-    return m && c ? (m[q][c.index] ?? '') : '';
+    return m && c ? bandValue(m, q, c.index) : '';
   };
 
   useEffect(() => {
@@ -184,6 +204,12 @@ export function MaterialsGrid() {
     const c = columns[col];
     if (!m || !c) return;
     const cell = cellKey(m.id, q, c.index);
+    // Transmission: an empty cell is a band that does not transmit.
+    if (q === 'transmission' && text.trim() === '') {
+      if (bandValue(m, q, c.index) === '') return;
+      run(bandOps(q, [{ m, band: c.index, value: null }])[0], fieldKey('material', m.id, `transmission_loss_db/${c.index}`), [cell]);
+      return;
+    }
     const parsed = parseStrictDecimal(text);
     if (!parsed.ok) {
       setLocal([
@@ -195,8 +221,9 @@ export function MaterialsGrid() {
       ]);
       return;
     }
-    if (Object.is(m[q][c.index], parsed.value)) return;
-    run(setMaterialBand(m.id, q, c.index, parsed.value), fieldKey('material', m.id, `${q}/${c.index}`), [cell]);
+    if (Object.is(bandValue(m, q, c.index), parsed.value)) return;
+    const key = q === 'transmission' ? `transmission_loss_db/${c.index}` : `${q}/${c.index}`;
+    run(bandOps(q, [{ m, band: c.index, value: parsed.value }])[0], fieldKey('material', m.id, key), [cell]);
   };
 
   const commitName = (row: number, text: string) => {
@@ -220,16 +247,16 @@ export function MaterialsGrid() {
     if (b) setUi({ cursor: { row: b.r0, col: b.c0 }, extent: { row: b.r1, col: b.c1 } });
     // Nothing changes: no op, so no empty undo step.
     if (plan.cells.length === 0) return;
-    const ops = plan.cells.map((c) => setMaterialBand(rows[c.row].id, q, columns[c.col].index, c.value));
+    const ops = bandOps(q, plan.cells.map((c) => ({ m: rows[c.row], band: columns[c.col].index, value: c.value })));
     run(batch(ops), VALUES_KEY, []);
   };
 
   const fill = () => {
     attempt();
-    const values = rows.map((m) => columns.map((c) => m[q][c.index] ?? ''));
+    const values = rows.map((m) => columns.map((c) => bandValue(m, q, c.index)));
     const cells = planFill(values, rect);
     if (cells.length === 0) return;
-    run(batch(cells.map((c) => setMaterialBand(rows[c.row].id, q, columns[c.col].index, c.value))), VALUES_KEY, []);
+    run(batch(bandOps(q, cells.map((c) => ({ m: rows[c.row], band: columns[c.col].index, value: c.value })))), VALUES_KEY, []);
   };
 
   const addRow = () => {
@@ -434,7 +461,7 @@ export function MaterialsGrid() {
       quantity: q,
       sort: ui.sort,
       columns: columns.map((c) => ({ hz: c.hz, label: c.label, index: c.index })),
-      rows: rows.map((m) => ({ id: m.id, name: m.name, values: columns.map((c) => formatExact(m[q][c.index] ?? '')) })),
+      rows: rows.map((m) => ({ id: m.id, name: m.name, values: columns.map((c) => formatExact(bandValue(m, q, c.index))) })),
       cursor: cur,
       extent: ext,
     }),
@@ -504,7 +531,7 @@ export function MaterialsGrid() {
 
   if (!view) return null;
   const focused = rows[cur.row];
-  const anyRounded = rows.some((m) => columns.some((c) => displayValue(m[q][c.index] ?? '').rounded));
+  const anyRounded = rows.some((m) => columns.some((c) => displayValue(bandValue(m, q, c.index)).rounded));
   /** Toolbar buttons keep the grid's focus, unless an edit is open: then the click's blur
    * commits it first. */
   const keepFocus = (e: MouseEvent<HTMLButtonElement>) => {
@@ -542,7 +569,7 @@ export function MaterialsGrid() {
               data-quantity-tab={k}
               onClick={() => setUi({ quantity: k })}
             >
-              {k === 'absorption' ? 'Absorption' : 'Scattering'}
+              {QUANTITY_LABEL[k]}
             </button>
           ))}
         </div>
@@ -618,8 +645,10 @@ export function MaterialsGrid() {
                       )}
                     </th>
                     {columns.map((c, col) => {
-                      const v = m[q][c.index] ?? '';
+                      const v = bandValue(m, q, c.index);
                       const shown = displayValue(v);
+                      // C1 audit: a loss the solver will not get as typed says so on the cell.
+                      const written = q === 'transmission' && v !== '' ? transmissionNote(v, m.absorption[c.index] ?? 0) : null;
                       const issue = bad.get(cellKey(m.id, q, c.index));
                       const isEditing = editing && editing.row === row && editing.col === col;
                       const cls = [
@@ -628,6 +657,7 @@ export function MaterialsGrid() {
                         cur.row === row && cur.col === col ? 'cur' : '',
                         issue ? 'bad' : '',
                         shown.rounded ? 'rounded' : '',
+                        written ? 'clamped' : '',
                       ]
                         .filter(Boolean)
                         .join(' ');
@@ -638,9 +668,21 @@ export function MaterialsGrid() {
                           data-grid-cell={`${row}:${col}`}
                           aria-selected={inRect(rect, row, col)}
                           data-cell-issue={issue}
-                          title={`${m.name} · ${c.label}: ${formatExact(v)}${issue ? ` · FAIL ${issue}` : ''}`}
+                          title={`${m.name} · ${c.label}: ${formatExact(v)}${issue ? ` · FAIL ${issue}` : ''}${written ? ` · ${written.title}` : ''}`}
+                          data-transmission-written={written?.short}
                         >
-                          {isEditing && editing ? renderEditor(editing) : shown.text}
+                          {isEditing && editing ? (
+                            renderEditor(editing)
+                          ) : written ? (
+                            <>
+                              {shown.text}
+                              <span className="mg-written" aria-label={written.title}>
+                                {' '}→ {written.short}
+                              </span>
+                            </>
+                          ) : (
+                            shown.text
+                          )}
                         </td>
                       );
                     })}
@@ -692,8 +734,14 @@ export function MaterialsGrid() {
         </div>
       )}
       <IssueLines lines={lines} part="grid-issues" />
+      {q === 'transmission' && (
+        <div className="mg-note" data-part="transmission-note">
+          Transmission loss in dB. An empty band does not transmit: type a loss there to switch it on, clear it to switch it off. A
+          loss that would let through more than the band absorbs shows what the solver gets instead (→).
+        </div>
+      )}
       {focused && (
-        <div className="mat-row" title="Transmission is read-only in this version">
+        <div className="mat-row" title="Edited in the Transmission tab">
           <span>
             Transmission{' '}
             <span className="mg-of" data-input="" title={focused.name}>

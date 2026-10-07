@@ -34,7 +34,10 @@ import {
   addReceiver,
   addSource,
   addSurfaceReceiver,
+  mergeGroups,
+  moveFaces,
   newCuttingPlane,
+  rename,
   libraryMaterial,
   newReceiver,
   newSource,
@@ -49,6 +52,7 @@ import {
   type ConsoleLine,
   importRequestStore,
   libraryStore,
+  spectrumLibraryStore,
   log,
   logAll,
   meshStore,
@@ -317,6 +321,56 @@ export async function regroupSelection(): Promise<EditOutcome | null> {
     }
     return outcome;
   });
+}
+
+/**
+ * C1, "Move selection to group": the faces picked in the 3D view into the existing surface group
+ * `group`, where they take its material. One checked edit, one undo step; the group is then
+ * selected. A move the core refuses (one that would add faces to a surface receiver or zone, or
+ * take some out) is a FAIL line, and the project is unchanged. `null` when no faces are picked.
+ */
+export async function moveSelectionToGroup(group: string): Promise<EditOutcome | null> {
+  const faces = regroupFaces(selectionStore.get());
+  if (!faces) return null;
+  const name = sceneStore.get()?.view.surface_groups.find((g) => g.id === group)?.name ?? group;
+  const outcome = await apply(moveFaces(group, faces), `surface_group:${group}:faces`);
+  if (outcome.applied) {
+    selectionStore.set({ kind: 'group', id: group });
+    log('OK', `Moved ${faces.length} ${faces.length === 1 ? 'face' : 'faces'} to ${name}`);
+  }
+  return outcome;
+}
+
+/**
+ * C1, Merge groups: the groups picked in the scene list (Ctrl+click) folded into the first
+ * picked, which keeps its name and material. One checked edit, one undo step; the merged group
+ * is then selected. `null` when fewer than two groups are picked.
+ */
+export async function mergeSelectedGroups(): Promise<EditOutcome | null> {
+  const sel = selectionStore.get();
+  if (sel.kind !== 'groups' || sel.ids.length < 2) return null;
+  const [into, ...from] = sel.ids;
+  const view = sceneStore.get()?.view;
+  const names = sel.ids.map((id) => view?.surface_groups.find((g) => g.id === id)?.name ?? id);
+  const outcome = await apply(mergeGroups(into, from), `surface_group:${into}:merge`);
+  if (outcome.applied) {
+    selectionStore.set({ kind: 'group', id: into });
+    log('OK', `Merged ${names.slice(1).join(', ')} into ${names[0]}`);
+  }
+  return outcome;
+}
+
+/** C1: renames a surface group (F2 in the scene list), one checked edit and one undo step. */
+export async function renameGroup(id: string, name: string): Promise<EditOutcome> {
+  return apply(rename('surface_group', id, name), `surface_group:${id}:name`);
+}
+
+/** C1: upstream's reference spectra on the open project's bands, fetched once per band set. */
+export async function loadSpectrumLibrary(): Promise<void> {
+  const bands = sceneStore.get()?.view.bands.frequencies_hz.join(',') ?? '';
+  if (!bands || spectrumLibraryStore.get().bands === bands) return;
+  const list = await run('Reading the spectrum library', () => backend.spectrumLibrary());
+  spectrumLibraryStore.set({ bands, list });
 }
 
 /** Undoes one edit. Nothing to undo, or no project, is not an error. */

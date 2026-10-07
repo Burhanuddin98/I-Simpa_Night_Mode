@@ -1154,3 +1154,112 @@
   margin-top: 14px;
   color: var(--fail-text);
 }
+
+/* C1: a surface group's face count, its name edited in place (F2), and the merge bar. */
+.row-count {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.scene-row[aria-pressed='true'] .row-count {
+  color: rgba(255, 255, 255, 0.75);
+}
+.scene-row.editing {
+  background: var(--raised-2);
+}
+.group-name-input {
+  flex-grow: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--red);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+.group-merge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 6px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.group-merge .grow {
+  flex-grow: 1;
+}
+
+/* C1: a source's emission, edited (EmissionEditor.tsx). */
+.emission {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.emission .field-row .label {
+  width: 78px;
+}
+.emission .field-row select,
+.emission .field-row .axis-field {
+  flex-grow: 1;
+  min-width: 0;
+}
+.emission select {
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--edge);
+  border-radius: 5px;
+  background: var(--raised);
+  color: var(--text);
+  font: inherit;
+}
+.band-levels {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(62px, 1fr));
+  gap: 6px;
+}
+.band-level {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.band-level input {
+  width: 100%;
+  min-width: 0;
+  height: 24px;
+  padding: 0 4px;
+  font-size: 12px;
+  box-sizing: border-box;
+}
+
+/* C1 audit: a surface row on two lines, the name on the first with the row's whole width, the face
+   count and material under it (they shorten first). */
+.scene-row.group-row {
+  height: auto;
+  min-height: 40px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+.row-main {
+  flex-grow: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.row-sub {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.row-sub .row-detail {
+  max-width: none;
+  font-size: 11px;
+}
+.scene-row[aria-pressed='true'] .row-sub {
+  color: rgba(255, 255, 255, 0.75);
+}
