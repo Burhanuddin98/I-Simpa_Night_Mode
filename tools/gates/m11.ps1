@@ -126,6 +126,9 @@ $specIds = [ordered]@{
     # on this harness on its own (-Only e2e -Spec m13.blank); its GPU run needs spps-gpu.exe in
     # -SolversDir (the verified five, as C:\tmp\nm-solvers-gpu holds them).
     'm13.blank' = @('c1-import', 'c1-carve', 'c1-rename', 'c1-materials', 'c1-source', 'c1-receivers', 'c1-run-cpu', 'c1-run-gpu', 'c1-grouped')
+    # C5 (docs/investigations/2026-10-07-auralization/SPEC.md): listening to CR4's results, run on
+    # this harness on its own (-Only e2e -Spec m13.aural); its GPU run needs spps-gpu.exe in -SolversDir.
+    'm13.aural' = @('c5-words', 'c5-ir', 'c5-play', 'c5-save', 'c5-aural')
     # Not a gate spec: the app tour of BRAS CR4, recorded as a video (specs/tour.e2e.ts), no
     # id. Its progress.log goes to -ScreensDir, its project copy and runs beside it; no pictures.
     tour     = @()
