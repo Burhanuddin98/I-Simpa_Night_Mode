@@ -4,6 +4,7 @@
 //! failure to a warning. See `docs/rebuild-plan.md`.
 
 pub mod advise;
+pub mod auralize;
 pub mod bed;
 pub mod config_xml;
 pub mod faults;
