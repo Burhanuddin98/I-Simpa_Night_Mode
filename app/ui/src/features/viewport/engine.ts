@@ -592,6 +592,13 @@ class ViewportEngine {
 
   /** The Results step's surface map and particles (M12 P3). */
   readonly results = new ResultsLayer();
+  /**
+   * B3 (decision 71): the running GPU solve's saved particles as they arrive (liveView.ts), drawn
+   * in the looks the Results step draws them in, on the Simulate step only while a run is live. Its
+   * own layer, so the Results step's particles are never touched by a run.
+   */
+  readonly live = new ResultsLayer();
+  private liveOn = false;
 
   constructor() {
     this.persp.up.set(0, 0, 1);
@@ -659,7 +666,7 @@ class ViewportEngine {
     clearQuad.frustumCulled = false;
     this.insetClear.add(clearQuad);
     this.fxDepth = new Mesh(emptyGeometry(), new MeshBasicNodeMaterial({ side: BackSide, colorWrite: false, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }));
-    this.fxScene.add(this.fxDepth, this.results.gpu.group);
+    this.fxScene.add(this.fxDepth, this.results.gpu.group, this.live.gpu.group);
     this.ground.visible = false;
     // Drawn over everything, like a drawing's dimension lines, so a wall never hides one.
     this.dimLines = new LineSegments(emptyGeometry(), inSrgb(new LineBasicNodeMaterial({ color: LINE, transparent: true, opacity: 0.85, depthTest: false, depthWrite: false })));
@@ -702,8 +709,10 @@ class ViewportEngine {
       this.ground,
       this.dimLines,
       this.results.group,
+      this.live.group,
     );
     this.results.setShown(stepStore.get() === 'results');
+    this.showLayers();
     this.defaultCamera();
   }
 
@@ -735,6 +744,7 @@ class ViewportEngine {
       toolStore.subscribe(() => this.applyTool()),
       stepStore.subscribe(() => {
         this.results.setShown(stepStore.get() === 'results');
+        this.showLayers();
         if (stepStore.get() !== 'results') mapPointerStore.set(null);
         this.updatePlanes();
         this.updateGlow();
@@ -907,6 +917,7 @@ class ViewportEngine {
     };
     this.renderer = renderer;
     this.results.setRenderer(renderer);
+    this.live.setRenderer(renderer);
     log('INFO', `3D view: ${webgpu ? 'WebGPU' : 'WebGL2 (no WebGPU in this WebView)'}, three r${REVISION}`);
     this.frame();
     this.invalidate();
@@ -962,9 +973,12 @@ class ViewportEngine {
       // The ground only from above, in the perspective view; never in plan, where it would be a second grid.
       this.ground.visible = main === this.persp && !!this.bounds && viewStyle.get().ground && this.persp.position.z > this.groundZ;
       this.updateDims(main === this.persp);
-      const fx = stepStore.get() === 'results' && this.results.gpu.active();
-      this.easeDim(fx);
-      if (fx) this.results.computeFrame();
+      const resultsFx = stepStore.get() === 'results' && this.results.gpu.active();
+      const liveFx = this.liveShown() && this.live.gpu.active();
+      const fx = resultsFx || liveFx;
+      this.easeDim(fx, liveFx);
+      if (resultsFx) this.results.computeFrame();
+      if (liveFx) this.live.computeFrame();
       r.render(this.scene, main);
       if (fx) {
         this.fxParticles(r, main);
@@ -984,12 +998,12 @@ class ViewportEngine {
     if (vp.live !== live || vp.drawnRev !== drawnRev) viewportStore.set({ live, drawnRev });
   }
 
-  /** The room dimmed while the light plays (or is held for a still), eased over about a third of a second. */
-  private easeDim(fx: boolean): void {
+  /** The room dimmed while the light plays (or is held for a still, or the live solve plays), eased over about a third of a second. */
+  private easeDim(fx: boolean, live = false): void {
     const now = performance.now();
     const dt = this.dimAt ? Math.min(100, now - this.dimAt) : 16;
     this.dimAt = now;
-    const target = fx && (animatorStore.get().playing || this.dimHold) ? 1 : 0;
+    const target = fx && (animatorStore.get().playing || this.dimHold || live) ? 1 : 0;
     const u = this.shared.nmDim;
     const cur = u.value as number;
     const next = stillMotion() ? target : cur + (target - cur) * Math.min(1, dt / 120);
@@ -1014,6 +1028,44 @@ class ViewportEngine {
     }
     this.faces.visible = !on;
     this.fxDepth.visible = !on;
+  }
+
+  /** B3: the live layer is drawn on the Simulate step while it holds particles; the Results step's otherwise. */
+  private liveShown(): boolean {
+    return this.liveOn && stepStore.get() === 'simulate';
+  }
+
+  /** Which particle layer is drawn: each GPU group only with its own step, and the shown one owns the shared ramp. */
+  private showLayers(): void {
+    const live = this.liveShown();
+    this.live.setShown(live);
+    this.live.gpu.group.visible = live;
+    this.results.gpu.group.visible = stepStore.get() === 'results';
+    (live ? this.live : this.results).gpu.claimRamp();
+  }
+
+  /** B3: the live particles (null clears the layer), in `look` with `trails`-step trails; returns the look in force. */
+  setLive(p: Particles | null, look: ParticleLook, trails: number): ParticleLook {
+    this.live.setParticles(p, p ? { run: 'live', bandHz: p.bandHz, particles: p.particleCount, records: p.recordCount } : null);
+    this.live.setTrails(p ? trails : 0);
+    const inForce = this.live.setParticleLook(look);
+    this.liveOn = !!p;
+    this.showLayers();
+    this.invalidate();
+    return inForce;
+  }
+
+  /** B3: the live clock, fractional steps. */
+  setLiveTime(t: number): void {
+    this.live.setStep(Math.floor(t));
+    this.live.setTime(t);
+    if (this.liveShown()) this.invalidate();
+  }
+
+  /** B3's hook: what the live layer holds and draws. */
+  liveState(): { on: boolean; shown: boolean; look: ParticleLook; particles: number; records: number; active: boolean; step: number; dim: number } {
+    const m = this.live.particleMeta;
+    return { on: this.liveOn, shown: this.liveShown(), look: this.live.gpu.currentLook(), particles: m?.particles ?? 0, records: m?.records ?? 0, active: this.live.gpu.active(), step: this.live.particleStep(), dim: this.shared.nmDim.value as number };
   }
 
   /** Round 2, item 5: keep the map at full strength while the light plays (else it fades to 25 %). */
@@ -1237,6 +1289,7 @@ class ViewportEngine {
       const c = new Vector3((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2);
       const range = fadeRange(this.persp.position.distanceTo(c), Math.hypot(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]) / 2);
       this.results.gpu.setDepthRange(range.near, range.far);
+      this.live.gpu.setDepthRange(range.near, range.far);
     }
     if (!perspective || !b || !viewStyle.get().fade) {
       u.nmFadeMax.value = 0;
@@ -2366,6 +2419,19 @@ export const offMapPoint = () => engine.offMapPoint();
 export const framePixels = () => engine.framePixels();
 /** W9: the frame as drawn, top row first (export/snapshot.ts composites and encodes it). */
 export const frameRgba = () => engine.frameRgba();
+
+/** B3: the running solve's saved particles on the Simulate step (null clears); returns the look in force. */
+export function showLive(p: Particles | null, look: ParticleLook, trails: number): ParticleLook {
+  return engine.setLive(p, look, trails);
+}
+
+/** B3: the live clock, fractional steps. */
+export function setLiveTime(t: number): void {
+  engine.setLiveTime(t);
+}
+
+/** B3's hook. */
+export const liveState = () => engine.liveState();
 
 /** The layer itself, for the M12 test hooks (ResultsOverlay.tsx). */
 export const resultsLayer = (): ResultsLayer => engine.results;

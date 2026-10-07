@@ -650,6 +650,17 @@ function runEvents(id: number): (batch: RunStreamBatch) => void {
   };
 }
 
+/** B3: where a run's live particles go (liveView.ts registers itself; nothing until it has). */
+export interface LiveSink {
+  begin(runId: number): void;
+  batch(runId: number, buf: ArrayBuffer): void;
+  end(runId: number): void;
+}
+let liveSink: LiveSink | null = null;
+export function setLiveSink(s: LiveSink | null): void {
+  liveSink = s;
+}
+
 /**
  * Run (PQ1: the run is of what is on screen, so it saves first): with no path, Save as (a
  * cancelled dialog runs nothing); with unsaved changes, Save. Then the solvers are checked and
@@ -685,9 +696,17 @@ export async function runStart(
       status: 'starting',
     });
     const channel = new Channel<RunStreamBatch>();
-    channel.onmessage = runEvents(id);
+    const onEvent = runEvents(id);
+    channel.onmessage = (batch) => {
+      onEvent(batch);
+      if (batch.events.some((e) => e.kind === 'ended' || e.kind === 'failed') || batch.last) liveSink?.end(id);
+    };
+    // B3: only a run on the GPU sends live particles; the channel is passed for every run.
+    const live = new Channel<ArrayBuffer>();
+    live.onmessage = (buf) => liveSink?.batch(id, buf);
+    if (device === 'gpu') liveSink?.begin(id);
     try {
-      const started = await backend.runStart(solver, device, channel);
+      const started = await backend.runStart(solver, device, channel, live);
       const on = started.gpu_device ? ` on the GPU (${started.gpu_device})` : '';
       log('INFO', `${solver.toUpperCase()} run started${on}: ${started.project_path}`);
       resendCancel(id);
@@ -695,6 +714,7 @@ export async function runStart(
     } catch (e) {
       // This run's state only: never a run that another start put there.
       if (runStore.get()?.id === id) runStore.set(null);
+      liveSink?.end(id);
       const err = asCmdError(e);
       log('FAIL', `Could not start the run: ${err.message} (${err.code})`);
       throw e;

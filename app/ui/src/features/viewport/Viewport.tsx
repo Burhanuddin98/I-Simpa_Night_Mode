@@ -18,9 +18,11 @@ import * as actions from '../../actions';
 import { MeasureTool, OrbitTool, ReceiverTool, SectionTool, SelectTool } from '../../chrome/icons';
 import { REGROUP_LABEL, regroupFaces } from '../../chrome/sceneModel';
 import { onWindowEntityKey } from '../../chrome/sceneUi';
-import { sceneStore, selectionStore, toolStore, useStore, type Tool } from '../../store';
+import { sceneStore, selectionStore, stepStore, toolStore, useStore, type Tool } from '../../store';
 import { attachViewport, frameModel, presentStore, setPresent, setTurntable, setView, viewportUi, type ViewMode } from './engine';
 import { VIEWPORT_LIBRARIES } from './libraries';
+import { liveStore, setLiveLook } from './liveView';
+import { PARTICLE_LOOKS } from './rays';
 import { ResultsOverlay } from './ResultsOverlay';
 import { ViewStyleMenu } from './ViewStyleMenu';
 import './viewport.css';
@@ -81,6 +83,8 @@ const NOT_YET = [
   ['Measure', MeasureTool],
 ] as const;
 
+const LIVE_LOOK_LABELS = { dots: 'Dots', glow: 'Glow', rays: 'Rays' } as const;
+
 const VIEWS: { key: ViewMode | 'section'; label: string }[] = [
   { key: 'perspective', label: 'Perspective' },
   { key: 'plan', label: 'Plan' },
@@ -98,6 +102,8 @@ export function Viewport() {
   const info = useStore(sceneStore)?.info ?? null;
   const selection = useStore(selectionStore);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const live = useStore(liveStore);
+  const step = useStore(stepStore);
   const rightDown = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
@@ -211,6 +217,21 @@ export function Viewport() {
           <div className="vp-chip fail" data-part="check-chip" role="status">
             <span className="swatch" aria-hidden />
             <span className="vp-fail">Problem</span> · {n} {n === 1 ? 'face' : 'faces'} highlighted
+          </div>
+        )}
+        {live && step === 'simulate' && (
+          // B3: the running GPU solve's saved particles, drawn by the live layer while the run is live.
+          <div className="vp-chip live" data-part="live-caption" role="status" title="The particles the run saves (particles saved per source), drawn as each is traced; the Results step replays the same ones">
+            <span className="live-dot" aria-hidden />
+            <span data-part="live-caption-text">{live.caption}</span>
+            <span className="live-looks" role="radiogroup" aria-label="Live particles">
+              {PARTICLE_LOOKS.map((l) => (
+                <button key={l} className="vp-chip-btn" role="radio" data-live-look={l} aria-checked={live.look === l} onClick={() => setLiveLook(l)}>
+                  {LIVE_LOOK_LABELS[l]}
+                </button>
+              ))}
+            </span>
+            {live.lookNote && <span className="live-note">{live.lookNote}</span>}
           </div>
         )}
         {placing && ui.hasModel && (

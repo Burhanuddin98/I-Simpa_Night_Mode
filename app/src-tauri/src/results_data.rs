@@ -603,7 +603,7 @@ pub fn surface_map_bytes_within(
 }
 
 /// A `.pbin` as PART v1 (the module's header).
-fn encode_particles(p: &pbin::ParticleFile, band_hz: i32) -> CmdResult<Vec<u8>> {
+pub(crate) fn encode_particles(p: &pbin::ParticleFile, band_hz: i32) -> CmdResult<Vec<u8>> {
     let (np, nr) = (p.particles.len(), p.steps.len());
     let mut b = Vec::with_capacity(HEADER + 8 * np + 4 + 16 * nr);
     put_u32(&mut b, PART_MAGIC);
