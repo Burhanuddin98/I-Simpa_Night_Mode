@@ -185,3 +185,46 @@ of sound, 100 frames a second of sound) the overhead falls to 0.07 s a band (2 s
 particle for k steps, so late in the decay most threads are idle unless the array is compacted every few
 launches, which the slot-major scheme avoids by construction. Forecast: **a frame every 10 ms of sound for
 roughly +10 % on a 27-band CR4 solve, if compaction is cheap; measured, not assumed, before it is built.**
+
+## Fixes after audit (2026-10-07 11:02-11:07)
+
+The audit's verdict was SHIP-WITH-FIXES. Three fixes, each its own commit; `main.cu` unchanged, so `spps-gpu.exe`
+was neither rebuilt nor re-pinned.
+
+1. **A stale stream (`cd81f36`).** The tail could open an old `spps-gpu.pstream` (a reused folder, or any
+   order where one exists before the solver truncates it) and keep its header and its offset into the new
+   file. Now `spawn_tail` opens the path afresh at every poll and checks it is still the stream it has read:
+   not shorter than what was read and the same first 64 bytes (header and the start of the first frame).
+   When it is not, the decoder, the offset and the count start again from the file's first byte
+   (`TailStats.resets`). When the path is gone (the solver's removal) the last handle keeps reading. Test
+   `live::tests::a_replaced_or_truncated_stream_is_read_again_from_its_start`: an old stream present at
+   the start, then replaced (deleted and written with another header and a shorter frame), then truncated
+   in place and rewritten: batches of bands 500, 1000, 2000 in that order, counts 3, 1, 1, 2 resets;
+   passed 6 runs of 6.
+2. **The stream left by a cancelled or crashed solve (`9222b31`).** `run_thread` removes
+   `solve/spps-gpu.pstream` once the tail has stopped (and a stale one at `started`, before the solver
+   runs), unless `SPPS_GPU_STREAM=keep` is set in the environment the app and its solver share; nothing
+   else in the folder is touched. Unit test: `runs::tests::a_live_run_tails_its_stream_and_stops_before_the_last_event`
+   now starts with a stale stream and a `config.xml` beside it and ends with no stream and `config.xml`
+   byte for byte. In the app (`tools/devtools/bed-b3-cancel.py`, receipt
+   `.out\b3\audit-cancel-2\cancel-bed.json`): CR4 1 kHz on the GPU, cancelled 0.35 s into the solve stage
+   while the stream existed (its 28-byte header written); the run read CANCELLED, `spps-gpu.exe` with its
+   device line; afterwards no `spps-gpu.pstream`, `solve\` holds `config.xml`, `mesh.cbin`,
+   `tetramesh.mbin`, and the run folder `mesh`, `run.json`, `solve`, `solver.stderr.txt`,
+   `solver.stdout.txt`; the live layer cleared. (`.out\b3\audit-cancel\` is a first try in which the GPU
+   entry had not been chosen yet when Run was pressed: a CPU SPPS run, no stream; the bed now refuses that.)
+3. **A step change during a live run (`d0708d2`).** Defined and tested: the run's batches are **kept** on any
+   step (no frame is dropped; the caption's count follows them); the live layer's tables are rebuilt only
+   while the Simulate step is shown, and at once when it is shown again, with everything that arrived
+   meanwhile and the clock at wall-clock now; the run's end (`ended`, `failed` or the stream's last batch)
+   clears the layer whatever step is shown, once, and nothing of that run is kept after it. The logic is
+   `LiveRun` in `live.ts` (pure); `liveView.ts` drives the view from it and from `stepStore`. UI test "a run
+   is kept while the Simulate step is away, drawn when it is back, and its end clears it on any step". Not
+   driven in the app.
+
+Checks after the fixes: `npm run typecheck` clean; `npm test` 336 of 336; the app crate's live tests 7 of 7
+(C: had 23 GB free before each `cargo test`). Smoke, headless (`bed-b3.py`, `.out\b3\audit-smoke-cr4-1k\`):
+CR4 1 kHz on the GPU from the Run button, OK in 3.66 s from the click; one 200 ms sample caught the layer
+live (400 of 400 arrived, 226 drawn at that moment, Glow); afterwards the layer cleared, no stream file left,
+`spps-gpu.json` 400 frames, the Results step "verified" with its 400 particles. The untested list above
+changes: the stale stream and the leftover stream are now handled; a step change is unit-tested, not driven.
