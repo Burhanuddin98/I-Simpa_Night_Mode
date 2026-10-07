@@ -24,6 +24,11 @@ use crate::process::{self, CancelToken, Spec};
 /// The executable's file name, as `solvers/manifest.json` lists it.
 pub const SPPS_GPU_EXE_NAME: &str = "spps-gpu.exe";
 
+/// The variable that switches `spps-gpu.exe` to its CPU walk (`main.cu`: `SPPS_GPU_BACKEND=cpu`). A
+/// run on the GPU never passes it on: the run records the GPU's device, so the walk must be the
+/// GPU's.
+pub const BACKEND_ENV: &str = "SPPS_GPU_BACKEND";
+
 /// The argument that asks for the device and nothing else.
 pub const PROBE_ARGUMENT: &str = "--probe";
 
@@ -65,6 +70,7 @@ pub fn probe(exe: &Path, timeout: Duration) -> Result<String, String> {
         program: exe.to_path_buf(),
         args: vec![PROBE_ARGUMENT.into()],
         cwd,
+        env_remove: vec![BACKEND_ENV.into()],
     };
     let cancel = CancelToken::new();
     let mut out: Vec<String> = Vec::new();

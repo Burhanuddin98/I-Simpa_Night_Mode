@@ -305,6 +305,22 @@ pub fn solver_exe_name(solver: SolverKind) -> &'static str {
     }
 }
 
+/// The solver's launch: `config.xml` in `solve`. SPPS on the GPU does not inherit
+/// `SPPS_GPU_BACKEND` ([`super::gpu::BACKEND_ENV`]), which would make `spps-gpu.exe` trace on the
+/// CPU under a `run.json` that records the GPU's device.
+pub(crate) fn solver_spec(opts: &RunOptions, solve: &Path) -> Spec {
+    Spec {
+        program: opts.solver_exe.clone(),
+        args: vec![SOLVER_ARGUMENT.into()],
+        cwd: solve.to_path_buf(),
+        env_remove: if opts.on_gpu().is_some() {
+            vec![super::gpu::BACKEND_ENV.into()]
+        } else {
+            Vec::new()
+        },
+    }
+}
+
 /// The executable a run of `solver` launches, `gpu` when it runs on the GPU (decision 70): SPPS on
 /// the GPU is `spps-gpu.exe`; TCR has no GPU build, so `gpu` changes nothing for it. The name
 /// `solvers/manifest.json` checks it by, and the one [`crate::results::solver_build`] looks for.
@@ -1619,11 +1635,7 @@ fn launch(rec: &Record, cancel: &CancelToken, on_event: &mut dyn FnMut(&RunEvent
         Ok(l) => l,
         Err(reason) => return not_launched(reason, ClassCounts::default()),
     };
-    let spec = Spec {
-        program: opts.solver_exe.clone(),
-        args: vec![SOLVER_ARGUMENT.into()],
-        cwd: rec.solve.clone(),
-    };
+    let spec = solver_spec(opts, &rec.solve);
     let mut classifier = Classifier::new();
     let mut sink = Sink {
         on_event,
@@ -1690,6 +1702,47 @@ fn judged(rec: &Record, outcome: Outcome, lines: &[Classified]) -> Launched {
         lines: ClassCounts::of(lines),
         files,
         particles: outputs.stats.and_then(Result::ok),
+    }
+}
+
+#[cfg(test)]
+mod spec_tests {
+    use super::*;
+
+    fn opts(solver: SolverKind, gpu: Option<&str>) -> RunOptions {
+        RunOptions {
+            solver,
+            solver_exe: PathBuf::from(r"C:\s\spps-gpu.exe"),
+            runs_root: PathBuf::from("r"),
+            loss_limit: 0.01,
+            cancel_after_ms: None,
+            cancel_after_progress: None,
+            verify: None,
+            gpu_device: gpu.map(str::to_string),
+        }
+    }
+
+    /// A5 audit fix 1: a run of SPPS on the GPU never passes `SPPS_GPU_BACKEND` on; a CPU run, and
+    /// TCR with a device line by mistake, are launched as before.
+    #[test]
+    fn a_gpu_run_does_not_inherit_the_backend_switch() {
+        let s = solver_spec(&opts(SolverKind::Spps, Some("RTX")), Path::new("solve"));
+        assert_eq!(
+            s.env_remove,
+            vec![std::ffi::OsString::from("SPPS_GPU_BACKEND")]
+        );
+        assert_eq!(s.args, vec![std::ffi::OsString::from("config.xml")]);
+        assert_eq!(s.cwd, Path::new("solve"));
+        assert!(
+            solver_spec(&opts(SolverKind::Spps, None), Path::new("s"))
+                .env_remove
+                .is_empty()
+        );
+        assert!(
+            solver_spec(&opts(SolverKind::Tcr, Some("RTX")), Path::new("s"))
+                .env_remove
+                .is_empty()
+        );
     }
 }
 

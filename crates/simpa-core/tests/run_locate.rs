@@ -96,6 +96,7 @@ fn spps(dir: &Path) -> (Option<u32>, bool) {
         program: solver_exe("spps.exe"),
         args: vec!["config.xml".into()],
         cwd: dir.to_path_buf(),
+        env_remove: Vec::new(),
     };
     let mut end = false;
     let outcome = process::run(&spec, &CancelToken::new(), &mut |l: &Line| {

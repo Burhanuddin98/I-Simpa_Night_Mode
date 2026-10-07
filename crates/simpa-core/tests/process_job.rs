@@ -42,6 +42,7 @@ fn spec(program: &str, args: &[&str], cwd: PathBuf) -> Spec {
         program: program.into(),
         args: args.iter().map(OsString::from).collect(),
         cwd,
+        env_remove: Vec::new(),
     }
 }
 
@@ -642,4 +643,22 @@ fn a_program_that_does_not_exist_is_an_error() {
 fn a_cwd_that_does_not_exist_is_an_error() {
     let cwd = work_dir("missing").join("no-such-folder");
     assert!(process::run(&cmd("echo hi", cwd), &CancelToken::new(), &mut |_| {}).is_err());
+}
+
+/// A5 audit fix 1: a variable named in `env_remove` does not reach the child; without it the
+/// child inherits it (the control). SPPS on the GPU names `SPPS_GPU_BACKEND` there.
+#[test]
+fn a_removed_variable_does_not_reach_the_child() {
+    // SAFETY: no other test of this binary reads this variable.
+    unsafe { std::env::set_var("NM_A5_ENV_REMOVE_PROBE", "present") };
+    let script = "echo [%NM_A5_ENV_REMOVE_PROBE%]";
+    let (kept, _) = collect(&cmd(script, work_dir("env-kept")));
+    assert_eq!(on(&kept, Stream::Stdout), full(&["[present]"]));
+    let mut removed = cmd(script, work_dir("env-removed"));
+    removed.env_remove = vec!["NM_A5_ENV_REMOVE_PROBE".into()];
+    let (gone, _) = collect(&removed);
+    assert_eq!(
+        on(&gone, Stream::Stdout),
+        full(&["[%NM_A5_ENV_REMOVE_PROBE%]"])
+    );
 }

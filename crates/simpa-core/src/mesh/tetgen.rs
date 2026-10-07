@@ -92,6 +92,7 @@ pub(super) fn run_logged(
         program: exe.to_path_buf(),
         args: args.iter().map(OsString::from).collect(),
         cwd: dir.to_path_buf(),
+        env_remove: Vec::new(),
     };
     let outcome = process::run(&spec, cancel, &mut |line: &Line| {
         let log = match line.stream {
