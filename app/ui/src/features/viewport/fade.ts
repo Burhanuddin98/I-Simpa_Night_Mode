@@ -5,6 +5,10 @@
 // Only those two layers: the selection, markers, planes and the Results step's map are never faded
 // (the map's colours are measurements). Off in the plan view and its inset, where depth is height.
 
+import { T } from './tsl.ts';
+
+const { positionView, smoothstep } = T;
+
 /** How far the far side goes toward the background (surfaces) or toward clear (edges). */
 export const FADE_MAX = 0.6;
 /** The page's background (theme.css --bg), which the canvas shows through. */
@@ -15,29 +19,17 @@ export function fadeRange(cameraToCentre: number, radius: number): { near: numbe
   return { near: Math.max(0, cameraToCentre - radius), far: cameraToCentre + radius };
 }
 
-const anchor = (src: string, at: string, what: string): void => {
-  if (!src.includes(at)) throw new Error(`fade: the ${what} shader has no '${at}' (three.js changed its chunks)`);
-};
+/** The fade's uniforms (engine.ts sets them before each render). */
+export interface FadeUniforms {
+  near: any;
+  far: any;
+  max: any;
+}
 
 /**
- * The shaders with the fade added just before the colour is written: `mix` toward `nmFadeColor` for
- * opaque surfaces, `alpha` for lines drawn see-through. `nmFadeMax` 0 turns it off.
+ * How far a fragment goes toward the background (surfaces: mix toward `FADE_BG`) or toward clear (edges:
+ * its opacity times 1 minus this): `max` times its depth's place between `near` and `far`. `max` 0 is off.
  */
-export function withFade(vertex: string, fragment: string, mode: 'mix' | 'alpha'): { vertex: string; fragment: string } {
-  for (const [src, what] of [[vertex, 'vertex'], [fragment, 'fragment']] as const) anchor(src, '#include <common>', what);
-  anchor(vertex, '#include <project_vertex>', 'vertex');
-  anchor(fragment, '#include <opaque_fragment>', 'fragment');
-  const amount = 'nmFadeMax * smoothstep(nmFadeNear, nmFadeFar, vNmDepth)';
-  const apply = mode === 'mix' ? `outgoingLight = mix(outgoingLight, nmFadeColor, ${amount});` : `diffuseColor.a *= 1.0 - ${amount};`;
-  return {
-    vertex: vertex
-      .replace('#include <common>', '#include <common>\nvarying float vNmDepth;')
-      .replace('#include <project_vertex>', '#include <project_vertex>\n\tvNmDepth = -mvPosition.z;'),
-    fragment: fragment
-      .replace(
-        '#include <common>',
-        '#include <common>\nvarying float vNmDepth;\nuniform float nmFadeNear;\nuniform float nmFadeFar;\nuniform float nmFadeMax;\nuniform vec3 nmFadeColor;',
-      )
-      .replace('#include <opaque_fragment>', `${apply}\n\t#include <opaque_fragment>`),
-  };
+export function fadeAmount(u: FadeUniforms): any {
+  return u.max.mul(smoothstep(u.near, u.far, positionView.z.negate()));
 }

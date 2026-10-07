@@ -1,5 +1,12 @@
-// The 3D view's engine (PLAN.md 6.1): the one WebGLRenderer and its canvas, created on the
-// first mount and kept for the app's lifetime (PLAN.md 2.4, rule 3), rendering on demand.
+// The 3D view's engine (PLAN.md 6.1): the one renderer and its canvas, created on the first mount
+// and kept for the app's lifetime (PLAN.md 2.4, rule 3), rendering on demand.
+//
+//   - Decision 68 (b): the renderer is three.js's WebGPURenderer, one GPU context: WebGPU where the
+//     WebView has it, WebGL2 where it does not (three falls back by itself; `nm.forceWebGL` in
+//     localStorage forces the fallback for testing). Its start is asynchronous (`init()`); the view
+//     draws from the first frame after. Every material is a node material (TSL), so both backends
+//     draw the same picture; colour is converted to sRGB inside each material as WebGLRenderer did
+//     (nodes.ts), so blending and every pixel stay as they were.
 //
 //   - The mesh comes from `meshStore`: f64 positions sent to the GPU as f32, indexed in project
 //     face order. Faces are drawn BackSide, so the near walls drop away (the inside view), and
@@ -17,7 +24,13 @@
 // step's layer (resultsLayer.ts: the surface map and particle playback, M12 P3) is drawn in this
 // scene, only on that step, at the shared Animator's step (animator.ts).
 import {
+  AddEquation,
+  AlwaysDepth,
   AmbientLight,
+  CustomBlending,
+  HalfFloatType,
+  OneFactor,
+  RenderTarget,
   BackSide,
   FrontSide,
   BufferAttribute,
@@ -28,35 +41,39 @@ import {
   DoubleSide,
   EdgesGeometry,
   Float32BufferAttribute,
+  InstancedBufferAttribute,
   LinearFilter,
-  LineBasicMaterial,
+  LinearSRGBColorSpace,
   LineSegments,
   Mesh,
-  MeshBasicMaterial,
-  MeshLambertMaterial,
-  MeshMatcapMaterial,
+  NoBlending,
+  NoToneMapping,
   OrthographicCamera,
   PerspectiveCamera,
   PlaneGeometry,
-  ShaderMaterial,
-  Points,
-  PointsMaterial,
   Ray,
+  REVISION,
   Raycaster,
   RGBAFormat,
   Scene,
+  Sprite,
   SRGBColorSpace,
   Vector2,
   Vector3,
-  WebGLRenderer,
   type Camera,
-  type IUniform,
-  type Material,
 } from 'three';
+import {
+  LineBasicNodeMaterial,
+  MeshBasicNodeMaterial,
+  MeshLambertNodeMaterial,
+  MeshMatcapNodeMaterial,
+  PointsNodeMaterial,
+  QuadMesh,
+  WebGPURenderer,
+} from 'three/webgpu';
+import { T } from './tsl';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
-import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
-import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
+import { LineSegments2 } from 'three/addons/lines/webgpu/LineSegments2.js';
 import type { MeshBVH } from 'three-mesh-bvh';
 import * as actions from '../../actions';
 import type { SceneMesh } from '../../mesh';
@@ -65,20 +82,25 @@ import { effectiveMaterial } from '../../chrome/sceneModel';
 import { log, meshStore, sceneStore, selectionStore, stepStore, Store, toolStore, viewportStore, type Selection } from '../../store';
 import { registerHook } from '../../testhooks';
 import { buildTopology, coplanarFaces, faceNormalOf, type FaceTopology } from './floodfill';
-import { flipRows } from './snapshot';
+import { bgraToRgba, flipRows, unpadRows } from './snapshot';
 import { animatorStore } from './animator';
 import { firstFace, modelGeometry, pickingBvh } from './pick';
 import { ResultsLayer, type MapMeta, type ParticleMeta } from './resultsLayer';
 import { faceBounds, faceCentroid, fitOrtho, gizmoAxes, isFloorLike, placementPoint, planDimensions, rayOnFacePlane, type Box, type Vec } from './geometry';
 import { BG, glowPixels, RED, ringPixels, WHITE } from './sprites';
-import { GLOW_MAX, GLOW_RGB, glowLevel, glowRadius, pulsePhase, spriteScale, STILL_PHASE, withGlow } from './glow';
-import { aoReach, bakeAo, withAo } from './ao';
-import { FADE_BG, FADE_MAX, fadeRange, withFade } from './fade';
-import { withGlass } from './glass';
-import { BUILD_MS, buildHeight, NO_CUT, swingAngle, withBuild } from './build';
-import { GROUND_FRAGMENT, GROUND_VERTEX, groundLayout } from './ground';
+import { GLOW_MAX, GLOW_RGB, glowLevel, glowRadius, glowTerm, pulsePhase, spriteScale, STILL_PHASE } from './glow';
+import { aoFactor, aoReach, bakeAo } from './ao';
+import { FADE_BG, FADE_MAX, fadeAmount, fadeRange } from './fade';
+import { glassOpacity } from './glass';
+import { BUILD_MS, buildHeight, buildKeep, buildLine, NO_CUT, swingAngle } from './build';
+import { groundColour, groundLayout } from './ground';
+import { emptyFat, emptyGeometry, FatLineMaterial, inSrgb, rawColor } from './nodes';
+import { bloom } from 'three/addons/tsl/display/BloomNode.js';
+import type { ParticleLook } from './rays';
 import { planeCells, roomBox } from '../../chrome/planes';
 import { dimensionLines } from './dims';
+
+const { acesFilmicToneMapping, clamp, Fn, max, screenUV, texture, float, instancedBufferAttribute, materialOpacity, mix, output, positionGeometry, sRGBTransferOETF, uniform, uniformArray, vec3, vec4 } = T;
 
 export type ViewMode = 'perspective' | 'plan';
 
@@ -93,7 +115,7 @@ export interface ViewportUi {
   planLabel: string | null;
   /** A transient message from a placement click. */
   notice: string | null;
-  /** Why the 3D view cannot draw (no WebGL). */
+  /** Why the 3D view cannot draw (no GPU renderer could start). */
   error: string | null;
 }
 
@@ -114,6 +136,13 @@ export function drawnSteps(): { t: number; step: number }[] {
 }
 
 export const mapPointerStore = new Store<{ face: number; x: number; y: number } | null>(null);
+
+/** Round 2: the presentation view (no panels) and its turntable camera. */
+export const presentStore = new Store<{ on: boolean; turntable: boolean }>({ on: false, turntable: false });
+/** The benchmark's replication in force (the card says so in words), or null: the real saved particles. */
+export const replicaStore = new Store<{ saved: number; copies: number } | null>(null);
+/** The turntable's speed, degrees a second. */
+const TURN_DEG_S = 6;
 
 export const viewportUi = new Store<ViewportUi>({
   view: 'perspective',
@@ -188,7 +217,7 @@ export interface ViewportDom {
 }
 
 // Colours: the design's (concept-b-approved.dc.html) and theme.css's tokens.
-const PANEL = new Color(0x131010);
+const PANEL = 0x131010;
 const LINE = 0xededef;
 const WARN = 0xf2a93b;
 const SELECT = 0xe0202e;
@@ -264,15 +293,118 @@ function matcapTexture(): DataTexture {
   return dataTexture(pixels, n);
 }
 
-function markerMaterial(pixels: Uint8Array, texSize: number, px: number): PointsMaterial {
-  return new PointsMaterial({
-    size: px,
-    sizeAttenuation: false,
-    map: dataTexture(pixels, texSize),
-    transparent: true,
-    depthWrite: false,
-    alphaTest: 0.01,
-  });
+/**
+ * Markers drawn as sprites of a fixed size on screen, one instance a marker (WebGPU draws points one pixel
+ * wide, so WebGL's sized points are instanced quads here): the DataTexture sprite in sRGB, as PointsMaterial
+ * drew it. The positions live in one instanced buffer, grown when a project has more markers.
+ */
+class MarkerSprites {
+  readonly sprite: Sprite;
+  readonly material: PointsNodeMaterial;
+  private positions = new InstancedBufferAttribute(new Float32Array(3 * 16), 3);
+
+  constructor(pixels: Uint8Array, texSize: number, px: number) {
+    this.material = inSrgb(new PointsNodeMaterial({ size: px, sizeAttenuation: false, map: dataTexture(pixels, texSize), transparent: true, depthWrite: false, alphaTest: 0.01 }));
+    this.material.alphaToCoverage = false;
+    this.material.positionNode = instancedBufferAttribute(this.positions);
+    this.sprite = new Sprite(this.material);
+    this.sprite.frustumCulled = false;
+    this.sprite.count = 0;
+    this.sprite.visible = false;
+  }
+
+  /** The markers at `xyz` (three numbers each). */
+  set(xyz: number[]): void {
+    const n = xyz.length / 3;
+    if (n > this.positions.count) {
+      this.positions = new InstancedBufferAttribute(new Float32Array(3 * Math.max(n, 2 * this.positions.count)), 3);
+      this.material.positionNode = instancedBufferAttribute(this.positions);
+      this.material.needsUpdate = true;
+    }
+    (this.positions.array as Float32Array).set(xyz);
+    this.positions.needsUpdate = true;
+    this.sprite.count = n;
+    this.sprite.visible = n > 0;
+  }
+}
+
+/** The surface and edge materials' shared uniforms: corner shading (ao.ts), the build-up (build.ts), the distance fade (fade.ts) and the sources' glow (glow.ts). */
+function sharedUniforms() {
+  return {
+    nmAoMix: uniform(1),
+    /** Decision 69: the room dimmed (0 to 1) while the particles' light plays, so the light carries the image. */
+    nmDim: uniform(0),
+    nmBuildZ: uniform(NO_CUT),
+    nmBuildBand: uniform(0.3),
+    nmFadeNear: uniform(0),
+    nmFadeFar: uniform(1),
+    nmFadeMax: uniform(0),
+    nmFadeColor: uniform(new Color(FADE_BG)),
+    glowPos: uniformArray(Array.from({ length: GLOW_MAX }, () => new Vector3()), 'vec3'),
+    glowCount: uniform(0, 'int'),
+    glowRadius: uniform(1.5),
+    glowLevel: uniform(0),
+    glowColor: uniform(new Vector3(...GLOW_RGB)),
+  };
+}
+type Shared = ReturnType<typeof sharedUniforms>;
+
+// The few WebGPU objects the frame read-back touches (the app's TypeScript has no WebGPU types).
+const GPU_MAP_READ = 0x0001;
+const GPU_COPY_DST = 0x0008;
+const GPU_MAP_MODE_READ = 0x0001;
+interface GpuBuffer {
+  mapAsync(mode: number): Promise<void>;
+  getMappedRange(): ArrayBuffer;
+  destroy(): void;
+}
+interface GpuTexture {
+  width: number;
+  height: number;
+  format: string;
+}
+interface GpuDevice {
+  createBuffer(d: { size: number; usage: number }): GpuBuffer;
+  createCommandEncoder(): { copyTextureToBuffer(src: { texture: GpuTexture }, dst: { buffer: GpuBuffer; bytesPerRow: number }, size: number[]): void; finish(): unknown };
+  queue: { submit(buffers: unknown[]): void };
+}
+interface GpuCanvas {
+  getCurrentTexture(): GpuTexture;
+}
+
+/** The WebGL2 fallback forced, for testing it on a machine with WebGPU: `localStorage['nm.forceWebGL'] = '1'`, then reload. */
+function forceWebGL(): boolean {
+  try {
+    return localStorage.getItem('nm.forceWebGL') === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** GPU timestamps for the benchmark hook: `localStorage['nm.gpuTiming'] = '1'`, then reload (off by default: it queries every pass). */
+function gpuTiming(): boolean {
+  try {
+    return localStorage.getItem('nm.gpuTiming') === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** How strongly the particles' light blooms (decision 69: "so it can be toned down for measurement"). */
+export type Glow = 'off' | 'soft' | 'full';
+export const GLOW_STRENGTH: Record<Glow, number> = { off: 0, soft: 0.6, full: 1.2 };
+
+/**
+ * The adapter's own limits for what the view needs beyond WebGPU's defaults (a map texture wider than
+ * 8192, large particle buffers, big compute workgroups); undefined without WebGPU (the fallback).
+ */
+async function gpuLimits(): Promise<Record<string, number> | undefined> {
+  const gpu = (navigator as unknown as { gpu?: { requestAdapter(o: object): Promise<{ limits: Record<string, number> } | null> } }).gpu;
+  if (!gpu || forceWebGL()) return undefined;
+  const adapter = await gpu.requestAdapter({ powerPreference: 'high-performance' });
+  if (!adapter) return undefined;
+  const want = ['maxTextureDimension2D', 'maxBufferSize', 'maxStorageBufferBindingSize', 'maxComputeWorkgroupSizeX', 'maxComputeInvocationsPerWorkgroup', 'maxComputeWorkgroupStorageSize'];
+  return Object.fromEntries(want.map((k) => [k, adapter.limits[k]]));
 }
 
 /** The glow's pulse holds still under prefers-reduced-motion, and under WebDriver, where the gates compare frames. */
@@ -285,20 +417,21 @@ function stillMotion(): boolean {
 }
 
 /**
- * `m` with the corner shading (ao.ts), the sources' glow (glow.ts) and the distance fade (fade.ts)
- * in its colour, in that order, reading the shared `uniforms`.
+ * `m` with the corner shading (ao.ts), the sources' glow (glow.ts), the build-up's line (build.ts) and
+ * the distance fade (fade.ts) in its colour, in that order, then converted to sRGB as WebGLRenderer
+ * did; fragments above the build-up's cut are discarded.
  */
-function shaded<M extends Material>(m: M, uniforms: Record<string, IUniform>): M {
-  m.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, uniforms);
-    const a = withAo(shader.vertexShader, shader.fragmentShader);
-    const g = withGlow(a.vertex, a.fragment);
-    const b = withBuild(g.vertex, g.fragment, 'surface');
-    const f = withFade(b.vertex, b.fragment, 'mix');
-    shader.vertexShader = f.vertex;
-    shader.fragmentShader = f.fragment;
-  };
-  m.customProgramCacheKey = () => 'nm-shaded';
+function shaded<M extends { maskNode: unknown; outputNode: unknown; opacityNode: unknown }>(m: M, u: Shared): M {
+  m.maskNode = buildKeep(u.nmBuildZ);
+  // Ghosted while the light plays (engine.setGhosted makes the surfaces see-through): 10 % at full dim.
+  m.opacityNode = materialOpacity.mul(float(1).sub(u.nmDim.mul(0.9)));
+  const lit = output.rgb
+    .mul(aoFactor(u.nmAoMix))
+    .add(glowTerm({ pos: u.glowPos, count: u.glowCount, radius: u.glowRadius, level: u.glowLevel, color: u.glowColor }))
+    .add(buildLine(u.nmBuildZ, u.nmBuildBand))
+    .mul(float(1).sub(u.nmDim.mul(0.75)));
+  const faded = mix(lit, u.nmFadeColor, fadeAmount({ near: u.nmFadeNear, far: u.nmFadeFar, max: u.nmFadeMax }));
+  m.outputNode = vec4(sRGBTransferOETF(faded), output.a);
   return m;
 }
 
@@ -325,26 +458,59 @@ function underPanel(left: number, top: number, w: number, h: number, rects: DOMR
   return rects.some((r) => left <= r.right && left + w >= r.left && top <= r.bottom && top + h >= r.top);
 }
 
-/** The edges with the distance fade taken from their opacity (fade.ts). */
-function fadingLines<M extends Material>(m: M, uniforms: Record<string, IUniform>): M {
-  m.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, uniforms);
-    const b = withBuild(shader.vertexShader, shader.fragmentShader, 'line');
-    const f = withFade(b.vertex, b.fragment, 'alpha');
-    shader.vertexShader = f.vertex;
-    shader.fragmentShader = f.fragment;
-  };
-  m.customProgramCacheKey = () => 'nm-fading-lines';
-  return m;
+/** The edges with the distance fade taken from their opacity (fade.ts), cut by the build-up, in sRGB. */
+function fadingLines(m: LineBasicNodeMaterial, u: Shared): LineBasicNodeMaterial {
+  m.maskNode = buildKeep(u.nmBuildZ);
+  m.opacityNode = materialOpacity.mul(float(1).sub(fadeAmount({ near: u.nmFadeNear, far: u.nmFadeFar, max: u.nmFadeMax }))).mul(float(1).sub(u.nmDim.mul(0.6)));
+  return inSrgb(m);
+}
+
+/**
+ * The surfaces' geometry before a model: empty, but with every attribute their materials read (the face
+ * colours, the corner shading). A node material is built for the attributes its first geometry has, and a
+ * build without `nmAo` reads it as 0: every surface black (seen on the WebGL2 fallback).
+ */
+function emptyTint(): BufferGeometry {
+  const g = emptyGeometry();
+  g.setAttribute('color', new Float32BufferAttribute(new Float32Array(0), 3));
+  g.setAttribute('nmAo', new Float32BufferAttribute(new Float32Array(0), 1));
+  return g;
 }
 
 /** Faces baked per frame: about 15 ms of rays on Grace, so the view stays live while a hall bakes. */
 const AO_SLICE = 220;
 
 class ViewportEngine {
-  private renderer: WebGLRenderer | null = null;
+  private renderer: WebGPURenderer | null = null;
   private canvas: HTMLCanvasElement | null = null;
   private contextLost = false;
+  /** Which backend the renderer runs on, once it has started. */
+  private backend: 'webgpu' | 'webgl2' | null = null;
+  /**
+   * Decision 69's light: the GPU particle looks drawn additively into a half-float target with the room's
+   * depth (`fxDepth`, the picked faces' geometry, depth only), bloomed, tone mapped (ACES, black stays
+   * black) and added onto the frame. Only while a GPU look is on; otherwise nothing of it runs.
+   */
+  private readonly fxScene = new Scene();
+  private readonly fxDepth: Mesh;
+  private fxTarget: RenderTarget | null = null;
+  private readonly fxInput = texture(new DataTexture(new Uint8Array(4), 1, 1));
+  private readonly fxStrength = uniform(GLOW_STRENGTH.soft);
+  private fxGlow: Glow = 'soft';
+  /** The composite: a full-view quad in a scene of its own, drawn like the inset's background (a QuadMesh pass on the canvas lost the frame). */
+  private fxBloomed: Scene | null = null;
+  private fxPlain: Scene | null = null;
+  /** The bloom, drawn into its own target first (its node renders passes of its own, which must not run inside the frame's). */
+  private fxBloomPass: QuadMesh | null = null;
+  private fxBloomTarget: RenderTarget | null = null;
+  private readonly fxBloomInput = texture(new DataTexture(new Uint8Array(4), 1, 1));
+  private dimHold = false;
+  private dimAt = 0;
+  private ghosted = false;
+  private mapFullWhilePlaying = false;
+  private turnFrame = 0;
+  /** The inset's background: a quad that replaces colour and depth inside the scissor (WebGPU clears whole attachments only). */
+  private readonly insetClear = new Scene();
   private readonly scene = new Scene();
   private readonly persp = new PerspectiveCamera(45, 1, 0.01, 1000);
   private readonly plan = new OrthographicCamera(-1, 1, 1, -1, 0.01, 1000);
@@ -370,18 +536,18 @@ class ViewportEngine {
   private readonly faces: Mesh;
   private readonly tint: Mesh;
   private readonly ghost: Mesh;
-  private readonly tintColour: MeshMatcapMaterial;
-  private readonly tintGrey: MeshMatcapMaterial;
-  private readonly tintWire: MeshLambertMaterial;
-  private triangleEdges: BufferGeometry = new BufferGeometry();
-  private featureEdges: BufferGeometry = new BufferGeometry();
+  private readonly tintColour: MeshMatcapNodeMaterial;
+  private readonly tintGrey: MeshMatcapNodeMaterial;
+  private readonly tintWire: MeshLambertNodeMaterial;
+  private triangleEdges: BufferGeometry = emptyGeometry();
+  private featureEdges: BufferGeometry = emptyGeometry();
   private readonly edges: LineSegments;
   private readonly highlight: Mesh;
   private readonly selectionWash: Mesh;
   private readonly selectionEdges: LineSegments2;
-  private readonly sourcePoints: Points;
-  private readonly receiverPoints: Points;
-  private readonly halo: Points;
+  private readonly sourcePoints: MarkerSprites;
+  private readonly receiverPoints: MarkerSprites;
+  private readonly halo: MarkerSprites;
   private readonly sourceStems: LineSegments;
   private readonly receiverStems: LineSegments;
   /** W1: each cutting plane's outline, and its cell grid off the Results step (upstream's DrawPlan). */
@@ -392,19 +558,18 @@ class ViewportEngine {
    * The surface and edge materials' shared uniforms: the corner shading's switch (ao.ts), the
    * distance fade (fade.ts, set before each render) and the sources' glow (glow.ts).
    */
-  private readonly shared = {
-    nmAoMix: { value: 1 },
-    nmBuildZ: { value: NO_CUT },
-    nmBuildBand: { value: 0.3 },
-    nmFadeNear: { value: 0 },
-    nmFadeFar: { value: 1 },
-    nmFadeMax: { value: 0 },
-    nmFadeColor: { value: new Color(FADE_BG) },
-    glowPos: { value: Array.from({ length: GLOW_MAX }, () => new Vector3()) },
-    glowCount: { value: 0 },
-    glowRadius: { value: 1.5 },
-    glowLevel: { value: 0 },
-    glowColor: { value: new Vector3(...GLOW_RGB) },
+  private readonly shared: Shared = sharedUniforms();
+  /** The ground's uniforms (ground.ts). */
+  private readonly groundU = {
+    centre: uniform(new Vector2()),
+    half: uniform(1),
+    step: uniform(1),
+    footMin: uniform(new Vector2()),
+    footMax: uniform(new Vector2()),
+    soft: uniform(1),
+    line: uniform(new Color(LINE)),
+    lineA: uniform(0.14),
+    shadowA: uniform(0.55),
   };
   private glowFrame = 0;
   private glowDrawn = 0;
@@ -443,74 +608,61 @@ class ViewportEngine {
     // because groups share vertices: per-vertex colour on the indexed mesh would bleed across seams.
     const matcap = matcapTexture();
     this.faces = new Mesh(
-      new BufferGeometry(),
-      new MeshMatcapMaterial({ matcap, side: BackSide, flatShading: true, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, colorWrite: false }),
+      emptyGeometry(),
+      new MeshMatcapNodeMaterial({ matcap, side: BackSide, flatShading: true, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, colorWrite: false }),
     );
     const flat = { side: BackSide, flatShading: true, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 } as const;
-    this.tintColour = new MeshMatcapMaterial({ matcap, vertexColors: true, ...flat });
-    this.tintGrey = new MeshMatcapMaterial({ matcap, ...flat });
+    this.tintColour = new MeshMatcapNodeMaterial({ matcap, vertexColors: true, ...flat });
+    this.tintGrey = new MeshMatcapNodeMaterial({ matcap, ...flat });
     // The old look, kept as Wireframe in the menu: near-black Lambert faces under every edge.
-    this.tintWire = new MeshLambertMaterial({ color: 0x19191d, ...flat });
-    this.tint = new Mesh(new BufferGeometry(), this.tintColour);
+    this.tintWire = new MeshLambertNodeMaterial({ color: 0x19191d, ...flat });
+    this.tint = new Mesh(emptyTint(), this.tintColour);
     // See-through: the near walls drawn again as glass on top, writing no depth, so nothing behind
     // them is hidden (the proof page's layer 2, decision 59).
-    this.ghost = new Mesh(
-      new BufferGeometry(),
-      new MeshMatcapMaterial({ matcap, vertexColors: true, side: FrontSide, flatShading: true, transparent: true, opacity: 0.15, depthWrite: false }),
-    );
+    const ghostMaterial = new MeshMatcapNodeMaterial({ matcap, vertexColors: true, side: FrontSide, flatShading: true, transparent: true, opacity: 0.15, depthWrite: false });
+    this.ghost = new Mesh(this.tint.geometry, ghostMaterial);
     this.ghost.visible = false;
-    for (const m of [this.tintColour, this.tintGrey, this.tintWire, this.ghost.material as MeshMatcapMaterial]) shaded(m, this.shared);
-    // The glass case (glass.ts): the see-through layer's opacity by view angle, after the shared shading.
-    const ghostMaterial = this.ghost.material as MeshMatcapMaterial;
-    const shade = ghostMaterial.onBeforeCompile;
-    ghostMaterial.onBeforeCompile = (shader, r) => {
-      shade.call(ghostMaterial, shader, r);
-      shader.fragmentShader = withGlass(shader.fragmentShader);
-    };
-    ghostMaterial.customProgramCacheKey = () => 'nm-shaded-glass';
-    this.edges = new LineSegments(new BufferGeometry(), fadingLines(new LineBasicMaterial({ color: LINE, transparent: true, opacity: 0.3, depthWrite: false }), this.shared));
+    for (const m of [this.tintColour, this.tintGrey, this.tintWire, ghostMaterial]) shaded(m, this.shared);
+    // The glass case (glass.ts): the see-through layer's opacity by view angle.
+    ghostMaterial.opacityNode = glassOpacity(materialOpacity);
+    this.edges = new LineSegments(emptyGeometry(), fadingLines(new LineBasicNodeMaterial({ color: LINE, transparent: true, opacity: 0.3, depthWrite: false }), this.shared));
     this.highlight = new Mesh(
-      new BufferGeometry(),
-      new MeshBasicMaterial({ color: WARN, transparent: true, opacity: 0.55, side: DoubleSide, depthWrite: false }),
+      emptyGeometry(),
+      inSrgb(new MeshBasicNodeMaterial({ color: WARN, transparent: true, opacity: 0.55, side: DoubleSide, depthWrite: false })),
     );
     this.selectionWash = new Mesh(
-      new BufferGeometry(),
-      new MeshBasicMaterial({ color: SELECT, transparent: true, opacity: 0.3, side: BackSide, depthWrite: false }),
+      emptyGeometry(),
+      inSrgb(new MeshBasicNodeMaterial({ color: SELECT, transparent: true, opacity: 0.3, side: BackSide, depthWrite: false })),
     );
-    // The red outlines are fat lines (WebGL draws 1 px whatever is asked): the selection 2 px, a sound-level
+    // The red outlines are fat lines (a GPU draws 1 px lines whatever is asked): the selection 2 px, a sound-level
     // plane's outline 3.5 px and its grid 1.5 px (Burhan 2026-10-06: "the red lines need to be a bit thicker ... like the sound-level plane").
-    this.selectionEdges = new LineSegments2(new LineSegmentsGeometry(), new LineMaterial({ color: SELECT, linewidth: 2, transparent: true, opacity: 1 }));
-    this.sourcePoints = new Points(new BufferGeometry(), markerMaterial(glowPixels(64), 64, SOURCE_PX));
-    this.receiverPoints = new Points(new BufferGeometry(), markerMaterial(ringPixels(32, 0.55, 0.85, WHITE, BG), 32, RECEIVER_PX));
-    this.halo = new Points(new BufferGeometry(), markerMaterial(ringPixels(64, 0.78, 0.92, RED, null), 64, HALO_PX));
-    this.sourceStems = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color: SELECT, transparent: true, opacity: 0.9 }));
-    this.receiverStems = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color: LINE, transparent: true, opacity: 0.5 }));
-    this.planeOutline = new LineSegments2(new LineSegmentsGeometry(), new LineMaterial({ color: SELECT, linewidth: 3.5, transparent: true, opacity: 0.95, depthWrite: false }));
-    this.planeGrid = new LineSegments2(new LineSegmentsGeometry(), new LineMaterial({ color: SELECT, linewidth: 1.5, transparent: true, opacity: 0.45, depthWrite: false }));
-    this.ground = new Mesh(
-      new PlaneGeometry(1, 1),
-      new ShaderMaterial({
-        vertexShader: GROUND_VERTEX,
-        fragmentShader: GROUND_FRAGMENT,
-        transparent: true,
-        depthWrite: false,
-        side: DoubleSide,
-        uniforms: {
-          uCentre: { value: new Vector2() },
-          uHalf: { value: 1 },
-          uStep: { value: 1 },
-          uFootMin: { value: new Vector2() },
-          uFootMax: { value: new Vector2() },
-          uSoft: { value: 1 },
-          uLine: { value: new Color(LINE) },
-          uLineA: { value: 0.14 },
-          uShadowA: { value: 0.55 },
-        },
-      }),
-    );
+    this.selectionEdges = new LineSegments2(emptyFat(), new FatLineMaterial({ color: SELECT, linewidth: 2, opacity: 1 }));
+    this.sourcePoints = new MarkerSprites(glowPixels(64), 64, SOURCE_PX);
+    this.receiverPoints = new MarkerSprites(ringPixels(32, 0.55, 0.85, WHITE, BG), 32, RECEIVER_PX);
+    this.halo = new MarkerSprites(ringPixels(64, 0.78, 0.92, RED, null), 64, HALO_PX);
+    this.sourceStems = new LineSegments(emptyGeometry(), inSrgb(new LineBasicNodeMaterial({ color: SELECT, transparent: true, opacity: 0.9 })));
+    this.receiverStems = new LineSegments(emptyGeometry(), inSrgb(new LineBasicNodeMaterial({ color: LINE, transparent: true, opacity: 0.5 })));
+    this.planeOutline = new LineSegments2(emptyFat(), new FatLineMaterial({ color: SELECT, linewidth: 3.5, opacity: 0.95, depthWrite: false }));
+    this.planeGrid = new LineSegments2(emptyFat(), new FatLineMaterial({ color: SELECT, linewidth: 1.5, opacity: 0.45, depthWrite: false }));
+    // The ground (ground.ts) writes its colour raw, as its WebGL ShaderMaterial did.
+    const groundMaterial = new MeshBasicNodeMaterial({ transparent: true, depthWrite: false, side: DoubleSide });
+    groundMaterial.fragmentNode = groundColour(this.groundU);
+    this.ground = new Mesh(new PlaneGeometry(1, 1), groundMaterial);
+    // The plan inset's background (decision-log row 50: a floating panel, see-through), as WebGL's
+    // scissored clear wrote it: the panel colour at 35 %, premultiplied, and the far depth.
+    const panel = rawColor(PANEL);
+    const clear = new MeshBasicNodeMaterial({ blending: NoBlending, depthTest: true, depthWrite: true, depthFunc: AlwaysDepth });
+    clear.vertexNode = vec4(positionGeometry.xy, 0.5, 1);
+    clear.fragmentNode = vec4(vec3(panel.r, panel.g, panel.b).mul(0.35), 0.35);
+    clear.depthNode = float(1);
+    const clearQuad = new Mesh(new PlaneGeometry(2, 2), clear);
+    clearQuad.frustumCulled = false;
+    this.insetClear.add(clearQuad);
+    this.fxDepth = new Mesh(emptyGeometry(), new MeshBasicNodeMaterial({ side: BackSide, colorWrite: false, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }));
+    this.fxScene.add(this.fxDepth, this.results.gpu.group);
     this.ground.visible = false;
     // Drawn over everything, like a drawing's dimension lines, so a wall never hides one.
-    this.dimLines = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color: LINE, transparent: true, opacity: 0.85, depthTest: false, depthWrite: false }));
+    this.dimLines = new LineSegments(emptyGeometry(), inSrgb(new LineBasicNodeMaterial({ color: LINE, transparent: true, opacity: 0.85, depthTest: false, depthWrite: false })));
     this.dimLines.frustumCulled = false;
     this.dimLines.visible = false;
     const order: [{ renderOrder: number }, number][] = [
@@ -527,9 +679,9 @@ class ViewportEngine {
       [this.receiverStems, 5],
       [this.planeGrid, 4],
       [this.planeOutline, 5],
-      [this.receiverPoints, 6],
-      [this.sourcePoints, 7],
-      [this.halo, 8],
+      [this.receiverPoints.sprite, 6],
+      [this.sourcePoints.sprite, 7],
+      [this.halo.sprite, 8],
     ];
     for (const [o, n] of order) o.renderOrder = n;
     this.scene.add(
@@ -544,9 +696,9 @@ class ViewportEngine {
       this.receiverStems,
       this.planeGrid,
       this.planeOutline,
-      this.receiverPoints,
-      this.sourcePoints,
-      this.halo,
+      this.receiverPoints.sprite,
+      this.sourcePoints.sprite,
+      this.halo.sprite,
       this.ground,
       this.dimLines,
       this.results.group,
@@ -560,7 +712,7 @@ class ViewportEngine {
   /** Mounts the view into `dom`. The renderer and canvas are made on the first call only. */
   attach(dom: ViewportDom): () => void {
     this.dom = dom;
-    if (!this.renderer && !viewportUi.get().error) this.createRenderer();
+    if (!this.canvas && !viewportUi.get().error) this.createRenderer();
     if (this.canvas) {
       dom.host.appendChild(this.canvas);
       this.controls?.connect(this.canvas);
@@ -589,7 +741,10 @@ class ViewportEngine {
         this.invalidate();
       }),
       animatorStore.subscribe(() => {
-        this.results.setStep(animatorStore.get().step);
+        const a = animatorStore.get();
+        this.results.setStep(a.step);
+        // B2: the GPU looks move between records at the fraction of the step the timeline has carried.
+        if (a.playing) this.results.setTime(a.step + a.carry);
         this.invalidate();
       }),
       () => resize.disconnect(),
@@ -613,10 +768,41 @@ class ViewportEngine {
       registerHook('highlightPixels', () => this.highlightPixels()),
       // W1: the cutting planes the view draws (outline corners, cells, grid lines drawn).
       registerHook('planeOutlines', () => this.planeSummary),
+      // Decision 68 (b): which backend draws the view, once it has started (null while it starts).
+      registerHook('gpuBackend', () => this.backend),
+      // The device the view runs on: its limits and features as granted (the WebGL2 fallback: its texture limit).
+      registerHook('gpuInfo', () => this.gpuInfo()),
+      // B2: the GPU particles: their look, glow and count; their computed state; the dimming held; the benchmark.
+      registerHook('gpuParticles', () => ({ look: this.results.gpu.currentLook(), glow: this.fxGlow, particles: this.results.gpu.particles(), active: this.results.gpu.active(), dim: this.shared.nmDim.value, refusal: { glow: this.results.particleLookRefusal('glow'), rays: this.results.particleLookRefusal('rays') } })),
+      registerHook('gpuParticleState', (indices: number[]) => this.results.gpu.readState(indices)),
+      registerHook('gpuParticleCheck', (indices: number[], t: number) => this.results.checkGpuParticles(indices, t)),
+      registerHook('gpuDimHold', (on: boolean) => {
+        this.dimHold = on;
+        this.invalidate();
+        return on;
+      }),
+      registerHook('present', (on: boolean, turntable = false) => {
+        this.setPresent(on);
+        if (on) this.setTurntable(turntable);
+        return presentStore.get();
+      }),
+      registerHook('gpuGlow', (g: Glow) => {
+        this.setGlow(g);
+        return g;
+      }),
+      registerHook('gpuBench', (n: number | null, frames: number, look: ParticleLook, glow: Glow) => this.bench(n, frames, look, glow)),
+      // The benchmark's particle count held (null: the file's own), to look at what it draws.
+      registerHook('gpuBenchSet', (n: number | null) => {
+        const c = this.results.gpu.bench(n);
+        replicaStore.set(this.results.gpu.replicas());
+        this.results.setParticleLook(this.results.gpu.currentLook());
+        this.invalidate();
+        return c;
+      }),
     ];
     // A remount (React StrictMode in dev) rebuilds the DOM-side state from the stores.
     this.setMesh(meshStore.get(), true);
-    viewportStore.set({ live: this.renderer !== null, drawnRev: null });
+    viewportStore.set({ live: this.canvas !== null, drawnRev: null });
     this.invalidate();
     return () => this.detach();
   }
@@ -639,24 +825,16 @@ class ViewportEngine {
     viewportStore.set({ live: false, drawnRev: null });
   }
 
+  /**
+   * Makes the canvas, its input handlers and the orbit controls now, and starts the renderer, which
+   * draws from the first frame after its asynchronous start. A canvas with a renderer still starting
+   * is live: the e2e's idle() then waits for the first drawn frame of the model.
+   */
   private createRenderer(): void {
     const canvas = document.createElement('canvas');
     canvas.className = 'viewport-canvas';
-    let renderer: WebGLRenderer;
-    try {
-      renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      log('FAIL', `The 3D view could not start WebGL: ${message}`);
-      this.setUi({ error: message });
-      return;
-    }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.outputColorSpace = SRGBColorSpace;
-    renderer.autoClear = false;
-    this.renderer = renderer;
     this.canvas = canvas;
-    this.results.setRenderer(renderer);
+    void this.startRenderer(canvas);
 
     canvas.addEventListener('webglcontextlost', (e) => {
       e.preventDefault();
@@ -692,6 +870,48 @@ class ViewportEngine {
     this.frame();
   }
 
+  private gpuInfo(): { backend: string | null; maxTexture: number; features: string[]; limits: Record<string, number> } | null {
+    const r = this.renderer;
+    if (!r) return null;
+    const dev = (r.backend as unknown as { device?: { features: Set<string>; limits: Record<string, number> } }).device;
+    const limits: Record<string, number> = {};
+    if (dev) for (const k of ['maxTextureDimension2D', 'maxBufferSize', 'maxStorageBufferBindingSize', 'maxComputeWorkgroupSizeX', 'maxComputeInvocationsPerWorkgroup']) limits[k] = dev.limits[k];
+    return { backend: this.backend, maxTexture: this.results.maxTextureSize(), features: dev ? [...dev.features].sort() : [], limits };
+  }
+
+  /** Starts WebGPURenderer on `canvas`: WebGPU, or WebGL2 where the WebView has no WebGPU (or `nm.forceWebGL` is set). */
+  private async startRenderer(canvas: HTMLCanvasElement): Promise<void> {
+    let renderer: WebGPURenderer;
+    try {
+      renderer = new WebGPURenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance', forceWebGL: forceWebGL(), requiredLimits: await gpuLimits(), trackTimestamp: gpuTiming() });
+      await renderer.init();
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      log('FAIL', `The 3D view could not start its GPU renderer: ${message}`);
+      this.canvas = null;
+      canvas.remove();
+      this.setUi({ error: message });
+      viewportStore.set({ live: false, drawnRev: null });
+      return;
+    }
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    // Linear output: no framebuffer pass, each material writes sRGB itself (nodes.ts).
+    renderer.outputColorSpace = LinearSRGBColorSpace;
+    renderer.toneMapping = NoToneMapping;
+    renderer.autoClear = false;
+    const webgpu = (renderer.backend as unknown as { isWebGPUBackend?: boolean }).isWebGPUBackend === true;
+    this.backend = webgpu ? 'webgpu' : 'webgl2';
+    renderer.onDeviceLost = (info) => {
+      this.contextLost = true;
+      log('WARN', `The 3D view lost its GPU device (${info.reason ?? 'unknown'}): ${info.message}`);
+    };
+    this.renderer = renderer;
+    this.results.setRenderer(renderer);
+    log('INFO', `3D view: ${webgpu ? 'WebGPU' : 'WebGL2 (no WebGPU in this WebView)'}, three r${REVISION}`);
+    this.frame();
+    this.invalidate();
+  }
+
   // ---- drawing --------------------------------------------------------------------------
 
   invalidate(): void {
@@ -722,9 +942,7 @@ class ViewportEngine {
       this.persp.aspect = w / h;
       this.persp.updateProjectionMatrix();
     }
-    // Fat lines measure their width against the canvas: told on every check, not only on a resize,
-    // or a canvas sized before they existed leaves them at the default 1 x 1 and they draw wrong.
-    for (const m of [this.selectionEdges.material, this.planeOutline.material, this.planeGrid.material]) m.resolution.set(w, h);
+    // The fat lines (FatLineMaterial) take their width from the viewport the renderer draws to.
     return { w, h };
   }
 
@@ -744,7 +962,14 @@ class ViewportEngine {
       // The ground only from above, in the perspective view; never in plan, where it would be a second grid.
       this.ground.visible = main === this.persp && !!this.bounds && viewStyle.get().ground && this.persp.position.z > this.groundZ;
       this.updateDims(main === this.persp);
+      const fx = stepStore.get() === 'results' && this.results.gpu.active();
+      this.easeDim(fx);
+      if (fx) this.results.computeFrame();
       r.render(this.scene, main);
+      if (fx) {
+        this.fxParticles(r, main);
+        this.fxComposite(r, w, h);
+      }
       if (this.results.particleMeta && stepStore.get() === 'results') noteDrawn(this.results.particleStep());
       if (this.view === 'perspective' && this.bounds) this.renderInset(r, dom.inset);
       const covers = panelRects();
@@ -752,15 +977,267 @@ class ViewportEngine {
       this.placeDims(main, w, h, covers);
       this.placeGizmo(main);
     }
+    // While the renderer starts the view is live but has drawn nothing: idle() waits for the first frame.
     const vp = viewportStore.get();
-    const live = this.renderer !== null;
-    if (vp.live !== live || vp.drawnRev !== this.builtRev) viewportStore.set({ live, drawnRev: this.builtRev });
+    const live = this.canvas !== null;
+    const drawnRev = this.renderer ? this.builtRev : vp.drawnRev;
+    if (vp.live !== live || vp.drawnRev !== drawnRev) viewportStore.set({ live, drawnRev });
+  }
+
+  /** The room dimmed while the light plays (or is held for a still), eased over about a third of a second. */
+  private easeDim(fx: boolean): void {
+    const now = performance.now();
+    const dt = this.dimAt ? Math.min(100, now - this.dimAt) : 16;
+    this.dimAt = now;
+    const target = fx && (animatorStore.get().playing || this.dimHold) ? 1 : 0;
+    const u = this.shared.nmDim;
+    const cur = u.value as number;
+    const next = stillMotion() ? target : cur + (target - cur) * Math.min(1, dt / 120);
+    u.value = Math.abs(next - target) < 0.004 ? target : next;
+    if (u.value !== target) this.invalidate();
+    this.setGhosted((u.value as number) > 0);
+    this.results.setMapFade(this.mapFullWhilePlaying ? 1 : 1 - 0.75 * (u.value as number));
+  }
+
+  /**
+   * Round 2, item 4: while the light plays the room is a ghost, its surfaces see-through (10 %, depth-faded)
+   * and its edges thin dim lines, so no slab hides a particle; the depth that hid the light behind the walls is
+   * off. Restored, exactly as drawn before, when the dimming has eased back to 0.
+   */
+  private setGhosted(on: boolean): void {
+    if (on === this.ghosted) return;
+    this.ghosted = on;
+    for (const m of [this.tintColour, this.tintGrey, this.tintWire]) {
+      m.transparent = on;
+      m.depthWrite = !on;
+      m.needsUpdate = true;
+    }
+    this.faces.visible = !on;
+    this.fxDepth.visible = !on;
+  }
+
+  /** Round 2, item 5: keep the map at full strength while the light plays (else it fades to 25 %). */
+  setMapWhilePlaying(full: boolean): void {
+    this.mapFullWhilePlaying = full;
+    this.invalidate();
+  }
+
+  /**
+   * Round 2, item 6: the presentation view (H, or the tools' button): every panel hidden, the canvas alone. The
+   * turntable (O while presenting, or its button) circles the camera slowly about the view's target.
+   */
+  setPresent(on: boolean): void {
+    presentStore.set({ ...presentStore.get(), on });
+    try {
+      document.documentElement.classList.toggle('present', on);
+    } catch {
+      // No document (tests).
+    }
+    if (!on) this.setTurntable(false);
+    this.invalidate();
+  }
+
+  setTurntable(on: boolean): void {
+    presentStore.set({ ...presentStore.get(), turntable: on });
+    if (this.turnFrame) cancelAnimationFrame(this.turnFrame);
+    this.turnFrame = 0;
+    const controls = this.controls;
+    if (!on || !controls || stillMotion()) return;
+    let last = 0;
+    const stop = () => this.setTurntable(false);
+    controls.addEventListener('start', stop);
+    const tick = (now: number) => {
+      if (!presentStore.get().turntable) {
+        controls.removeEventListener('start', stop);
+        return;
+      }
+      const dt = last ? Math.min(50, now - last) : 16;
+      last = now;
+      const off = this.persp.position.clone().sub(controls.target).applyAxisAngle(new Vector3(0, 0, 1), (TURN_DEG_S * Math.PI * dt) / 180000);
+      this.persp.position.copy(controls.target).add(off);
+      controls.update();
+      this.invalidate();
+      this.turnFrame = requestAnimationFrame(tick);
+    };
+    this.turnFrame = requestAnimationFrame(tick);
+  }
+
+  /** The light pass: the GPU looks, additive, into the half-float target at the drawing buffer's size, against the room's depth. */
+  private fxParticles(r: WebGPURenderer, camera: Camera): void {
+    const size = r.getDrawingBufferSize(new Vector2());
+    if (!this.fxTarget) {
+      this.fxTarget = new RenderTarget(size.x, size.y, { type: HalfFloatType, samples: 4, depthBuffer: true });
+      this.fxInput.value = this.fxTarget.texture;
+    } else if (this.fxTarget.width !== size.x || this.fxTarget.height !== size.y) {
+      this.fxTarget.setSize(size.x, size.y);
+    }
+    const prev = r.getRenderTarget();
+    r.setRenderTarget(this.fxTarget);
+    r.setClearColor(0x000000, 0);
+    r.clear();
+    r.render(this.fxScene, camera);
+    r.setRenderTarget(prev);
+  }
+
+  /** The light onto the frame: plus its bloom (unless the glow is off), ACES tone mapped, to sRGB, added. */
+  private fxComposite(r: WebGPURenderer, w: number, h: number): void {
+    if (this.fxGlow !== 'off' && this.fxTarget) {
+      if (!this.fxBloomPass) {
+        const bm = new MeshBasicNodeMaterial({ depthTest: false, depthWrite: false });
+        // Only the hottest light blooms (threshold on luminance), in a tight radius: sparks, not smudges.
+        bm.fragmentNode = bloom(this.fxInput, this.fxStrength, 0.12, 0.85);
+        this.fxBloomPass = new QuadMesh(bm);
+      }
+      if (!this.fxBloomTarget) {
+        this.fxBloomTarget = new RenderTarget(this.fxTarget.width, this.fxTarget.height, { type: HalfFloatType, depthBuffer: false });
+        this.fxBloomInput.value = this.fxBloomTarget.texture;
+      } else if (this.fxBloomTarget.width !== this.fxTarget.width || this.fxBloomTarget.height !== this.fxTarget.height) {
+        this.fxBloomTarget.setSize(this.fxTarget.width, this.fxTarget.height);
+      }
+      const prev = r.getRenderTarget();
+      r.setRenderTarget(this.fxBloomTarget);
+      this.fxBloomPass.render(r);
+      r.setRenderTarget(prev);
+    }
+    const quad = this.fxGlow === 'off' ? (this.fxPlain ??= this.fxQuad(false)) : (this.fxBloomed ??= this.fxQuad(true));
+    r.setScissorTest(false);
+    r.setViewport(0, 0, w, h);
+    r.render(quad, this.persp);
+  }
+
+  private fxQuad(withBloom: boolean): Scene {
+    const m = new MeshBasicNodeMaterial({ transparent: true, depthTest: false, depthWrite: false });
+    m.blending = CustomBlending;
+    m.blendSrc = OneFactor;
+    m.blendDst = OneFactor;
+    m.blendEquation = AddEquation;
+    m.blendSrcAlpha = OneFactor;
+    m.blendDstAlpha = OneFactor;
+    m.blendEquationAlpha = AddEquation;
+    m.fragmentNode = Fn(() => {
+      const light = withBloom ? texture(this.fxInput, screenUV).rgb.add(texture(this.fxBloomInput, screenUV).rgb) : texture(this.fxInput, screenUV).rgb;
+      const c = sRGBTransferOETF(clamp(acesFilmicToneMapping(light, float(1)), 0, 1)).toVar();
+      return vec4(c, clamp(max(c.r, max(c.g, c.b)), 0, 1));
+    })();
+    m.vertexNode = vec4(positionGeometry.xy, 0.5, 1);
+    const quad = new Mesh(new PlaneGeometry(2, 2), m);
+    quad.frustumCulled = false;
+    const scene = new Scene();
+    scene.add(quad);
+    return scene;
+  }
+
+  /** Decision 69's glow control: off (no bloom pass), soft or full. */
+  setGlow(g: Glow): void {
+    this.fxGlow = g;
+    this.fxStrength.value = GLOW_STRENGTH[g];
+    this.invalidate();
+  }
+
+  glow(): Glow {
+    return this.fxGlow;
+  }
+
+  /**
+   * B2's measurement: `frames` frames of `n` particles (null: the file's own) in `look` and `glow`, the
+   * timeline advancing a quarter step a frame. Wall: the interval between animation frames and the CPU time
+   * of the draw. GPU (with `nm.gpuTiming`): timestamp queries per stage, each stage resolved before the next.
+   */
+  private async bench(n: number | null, frames: number, look: ParticleLook, glow: Glow): Promise<Record<string, unknown>> {
+    const r = this.renderer;
+    if (!r || !this.dom) throw new Error('no renderer');
+    if (stepStore.get() !== 'results') throw new Error('open the Results step first');
+    const gpu = this.results.gpu;
+    const count = gpu.bench(n);
+    replicaStore.set(gpu.replicas());
+    const inForce = this.results.setParticleLook(look);
+    this.setGlow(glow);
+    const t0 = animatorStore.get().step;
+    const stats = (xs: number[]) => {
+      const s = [...xs].sort((a, b) => a - b);
+      const q = (p: number) => s[Math.min(s.length - 1, Math.floor(p * s.length))];
+      return { mean: +(s.reduce((a, b) => a + b, 0) / s.length).toFixed(3), p50: +q(0.5).toFixed(3), p95: +q(0.95).toFixed(3), max: +s[s.length - 1].toFixed(3) };
+    };
+    const wall: number[] = [];
+    const cpu: number[] = [];
+    await new Promise<void>((done) => {
+      let i = 0;
+      let last = 0;
+      const tick = (now: number) => {
+        if (last) wall.push(now - last);
+        last = now;
+        this.results.setTime(t0 + 0.25 * i);
+        const c0 = performance.now();
+        this.renderNow();
+        cpu.push(performance.now() - c0);
+        if (++i <= frames) requestAnimationFrame(tick);
+        else done();
+      };
+      requestAnimationFrame(tick);
+    });
+    const out: Record<string, unknown> = { particles: count, look: inForce, glow, frames, backend: this.backend, canvas: r.getDrawingBufferSize(new Vector2()).toArray(), wallMs: stats(wall), fps: +(1000 / stats(wall).mean).toFixed(1), drawCpuMs: stats(cpu) };
+    // Unthrottled (no display refresh): each frame drawn and waited for on the GPU queue, and the same frames back to back.
+    const dev = (r.backend as unknown as { device?: { queue: { onSubmittedWorkDone(): Promise<void> } } }).device;
+    if (dev) {
+      const synced: number[] = [];
+      for (let i = 0; i < frames; i++) {
+        const a = performance.now();
+        this.results.setTime(t0 + 0.25 * i);
+        this.renderNow();
+        await dev.queue.onSubmittedWorkDone();
+        synced.push(performance.now() - a);
+      }
+      const b0 = performance.now();
+      for (let i = 0; i < frames; i++) {
+        this.results.setTime(t0 + 0.25 * i);
+        this.renderNow();
+      }
+      await dev.queue.onSubmittedWorkDone();
+      out.frameSyncedMs = stats(synced);
+      out.frameBatchedMs = +((performance.now() - b0) / frames).toFixed(3);
+    }
+    if (gpuTiming() && this.backend === 'webgpu') {
+      const comp: number[] = [];
+      const main: number[] = [];
+      const part: number[] = [];
+      const post: number[] = [];
+      const size = this.syncSize();
+      const cam = this.mainCamera(size ? size.w / size.h : 1);
+      await r.resolveTimestampsAsync('render');
+      await r.resolveTimestampsAsync('compute');
+      for (let i = 0; i < frames; i++) {
+        this.results.setTime(t0 + 0.25 * i);
+        gpu.invalidate();
+        gpu.update();
+        comp.push((await r.resolveTimestampsAsync('compute')) ?? NaN);
+        r.setViewport(0, 0, size?.w ?? 1, size?.h ?? 1);
+        r.setClearColor(0x000000, 0);
+        r.clear();
+        r.render(this.scene, cam);
+        main.push((await r.resolveTimestampsAsync('render')) ?? NaN);
+        this.fxParticles(r, cam);
+        part.push((await r.resolveTimestampsAsync('render')) ?? NaN);
+        this.fxComposite(r, size?.w ?? 1, size?.h ?? 1);
+        post.push((await r.resolveTimestampsAsync('render')) ?? NaN);
+      }
+      out.gpuMs = { compute: stats(comp), scene: stats(main), particles: stats(part), bloomAndComposite: stats(post) };
+    }
+    gpu.bench(null);
+    replicaStore.set(null);
+    this.results.setTime(t0);
+    this.invalidate();
+    return out;
   }
 
   /** The distance fade (fade.ts) across the model's bounding sphere as the perspective camera sees it; none in plan. */
   private setFade(perspective: boolean): void {
     const u = this.shared;
     const b = this.bounds;
+    if (b) {
+      const c = new Vector3((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2);
+      const range = fadeRange(this.persp.position.distanceTo(c), Math.hypot(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]) / 2);
+      this.results.gpu.setDepthRange(range.near, range.far);
+    }
     if (!perspective || !b || !viewStyle.get().fade) {
       u.nmFadeMax.value = 0;
       return;
@@ -774,18 +1251,19 @@ class ViewportEngine {
   }
 
   /** The plan inset: the same scene through the top camera, scissored to the DOM box. */
-  private renderInset(r: WebGLRenderer, inset: HTMLElement): void {
+  private renderInset(r: WebGPURenderer, inset: HTMLElement): void {
     const c = this.canvas?.getBoundingClientRect();
     const b = inset.getBoundingClientRect();
     if (!c || b.width < 2 || b.height < 2) return;
+    // WebGPURenderer's viewport and scissor run from the top left (WebGLRenderer's from the bottom left).
     const x = b.left - c.left;
-    const y = c.bottom - b.bottom;
+    const y = b.top - c.top;
     r.setScissorTest(true);
     r.setScissor(x, y, b.width, b.height);
     r.setViewport(x, y, b.width, b.height);
-    // The inset is a floating panel too (decision-log row 50): its box is see-through.
-    r.setClearColor(PANEL, 0.35);
-    r.clear();
+    // The inset is a floating panel too (decision-log row 50): its box is see-through. A clear would
+    // take the whole canvas on WebGPU; the quad replaces colour and depth inside the scissor only.
+    r.render(this.insetClear, this.plan);
     this.setFade(false);
     this.ground.visible = false;
     this.dimLines.visible = false;
@@ -796,9 +1274,9 @@ class ViewportEngine {
   }
 
   private setMarkerScale(k: number): void {
-    (this.sourcePoints.material as PointsMaterial).size = SOURCE_PX * k * spriteScale(this.glowPhase);
-    (this.receiverPoints.material as PointsMaterial).size = RECEIVER_PX * k;
-    (this.halo.material as PointsMaterial).size = HALO_PX * k;
+    this.sourcePoints.material.size = SOURCE_PX * k * spriteScale(this.glowPhase);
+    this.receiverPoints.material.size = RECEIVER_PX * k;
+    this.halo.material.size = HALO_PX * k;
   }
 
   private mainCamera(aspect: number): Camera {
@@ -940,6 +1418,7 @@ class ViewportEngine {
       this.bounds = faceBounds(mesh.positions, mesh.indices);
       if (this.bounds) this.layoutGround(this.bounds);
       this.faces.geometry = geometry;
+      this.fxDepth.geometry = geometry;
       this.tint.geometry = geometry.toNonIndexed();
       this.ghost.geometry = this.tint.geometry;
       this.bakeCorners(mesh);
@@ -1003,13 +1482,13 @@ class ViewportEngine {
     this.groundZ = g.z;
     this.ground.position.set(g.centre[0], g.centre[1], g.z);
     this.ground.scale.set(2 * g.half, 2 * g.half, 1);
-    const u = (this.ground.material as ShaderMaterial).uniforms;
-    u.uCentre.value.set(g.centre[0], g.centre[1]);
-    u.uHalf.value = g.half;
-    u.uStep.value = g.step;
-    u.uFootMin.value.set(box.min[0], box.min[1]);
-    u.uFootMax.value.set(box.max[0], box.max[1]);
-    u.uSoft.value = g.soft;
+    const u = this.groundU;
+    u.centre.value.set(g.centre[0], g.centre[1]);
+    u.half.value = g.half;
+    u.step.value = g.step;
+    u.footMin.value.set(box.min[0], box.min[1]);
+    u.footMax.value.set(box.max[0], box.max[1]);
+    u.soft.value = g.soft;
   }
 
   /**
@@ -1054,16 +1533,18 @@ class ViewportEngine {
     this.aoFrame = 0;
     for (const o of [this.faces, this.tint, this.highlight, this.selectionWash]) {
       o.geometry.dispose();
-      o.geometry = new BufferGeometry();
+      o.geometry = emptyGeometry();
     }
-    this.ghost.geometry = new BufferGeometry();
+    this.tint.geometry = emptyTint();
+    this.ghost.geometry = this.tint.geometry;
+    this.fxDepth.geometry = emptyGeometry();
     this.triangleEdges.dispose();
     this.featureEdges.dispose();
-    this.triangleEdges = new BufferGeometry();
-    this.featureEdges = new BufferGeometry();
+    this.triangleEdges = emptyGeometry();
+    this.featureEdges = emptyGeometry();
     this.edges.geometry = this.triangleEdges;
     this.selectionEdges.geometry.dispose();
-    this.selectionEdges.geometry = new LineSegmentsGeometry();
+    this.selectionEdges.geometry = emptyFat();
     this.bvh = null;
     this.positions32 = null;
     this.topo = null;
@@ -1072,7 +1553,7 @@ class ViewportEngine {
 
   /** An overlay geometry of `faces` over the model's positions (its own GPU buffer). */
   private overlay(faces: ArrayLike<number>): BufferGeometry {
-    const g = new BufferGeometry();
+    const g = emptyGeometry();
     const mesh = this.mesh;
     if (!mesh || !this.positions32 || faces.length === 0) return g;
     const index = new Uint32Array(faces.length * 3);
@@ -1095,7 +1576,7 @@ class ViewportEngine {
     const st = viewStyle.get();
     this.tint.material = st.surfaces === 'wire' ? this.tintWire : st.surfaces === 'grey' ? this.tintGrey : this.tintColour;
     this.ghost.visible = st.surfaces === 'glass';
-    (this.ghost.material as MeshMatcapMaterial).opacity = st.glass / 100;
+    (this.ghost.material as MeshMatcapNodeMaterial).opacity = st.glass / 100;
     this.edges.geometry = st.edges === 'feature' ? this.featureEdges : this.triangleEdges;
     this.shared.nmAoMix.value = st.corners ? 1 : 0;
     this.invalidate();
@@ -1170,7 +1651,7 @@ class ViewportEngine {
     this.selectionEdges.geometry.dispose();
     const g = this.overlay(faces);
     this.selectionWash.geometry = g;
-    const fat = new LineSegmentsGeometry();
+    const fat = emptyFat();
     if (faces.length > 0) {
       const e = new EdgesGeometry(g, 1);
       fat.setPositions(e.getAttribute('position').array as Float32Array);
@@ -1259,12 +1740,10 @@ class ViewportEngine {
 
     const points = (kind: MarkerKind) => {
       const ms = list.filter((m) => m.kind === kind);
-      const g = new BufferGeometry();
-      g.setAttribute('position', new Float32BufferAttribute(ms.flatMap((m) => [m.p.x, m.p.y, m.p.z]), 3));
-      return { g, ms };
+      return { xyz: ms.flatMap((m) => [m.p.x, m.p.y, m.p.z]), ms };
     };
     const stems = (ms: Marker[]) => {
-      const g = new BufferGeometry();
+      const g = emptyGeometry();
       if (this.bvh && this.bounds) {
         const flat: number[] = [];
         for (const m of ms) {
@@ -1278,18 +1757,16 @@ class ViewportEngine {
     };
     const src = points('source');
     const rcv = points('receiver');
-    for (const o of [this.sourcePoints, this.receiverPoints, this.halo, this.sourceStems, this.receiverStems]) o.geometry.dispose();
-    this.sourcePoints.geometry = src.g;
-    this.receiverPoints.geometry = rcv.g;
+    for (const o of [this.sourceStems, this.receiverStems]) o.geometry.dispose();
+    this.sourcePoints.set(src.xyz);
+    this.receiverPoints.set(rcv.xyz);
     this.sourceStems.geometry = stems(src.ms);
     this.receiverStems.geometry = stems(rcv.ms);
     const picked = list.find((m) => (sel.kind === 'source' || sel.kind === 'receiver') && m.kind === sel.kind && m.id === sel.id);
-    const halo = new BufferGeometry();
-    if (picked) halo.setAttribute('position', new Float32BufferAttribute([picked.p.x, picked.p.y, picked.p.z], 3));
-    this.halo.geometry = halo;
+    this.halo.set(picked ? [picked.p.x, picked.p.y, picked.p.z] : []);
 
     const lit = (view?.sources ?? []).filter((s) => s.enabled && s.position.every(finite)).slice(0, GLOW_MAX);
-    lit.forEach((s, i) => this.shared.glowPos.value[i].set(...(s.position as [number, number, number])));
+    lit.forEach((s, i) => (this.shared.glowPos.array[i] as Vector3).set(...(s.position as [number, number, number])));
     this.shared.glowCount.value = lit.length;
     this.updateGlow();
   }
@@ -1368,9 +1845,9 @@ class ViewportEngine {
       summary.push({ name: r.name, corners: [A, B, C, D].map((p) => [p.x, p.y, p.z] as Vec), u: cells?.u ?? 0, v: cells?.v ?? 0, gridLines: lines });
     }
     for (const o of [this.planeOutline, this.planeGrid]) o.geometry.dispose();
-    const g1 = new LineSegmentsGeometry();
+    const g1 = emptyFat();
     if (outline.length > 0) g1.setPositions(outline);
-    const g2 = new LineSegmentsGeometry();
+    const g2 = emptyFat();
     if (grid.length > 0) g2.setPositions(grid);
     this.planeOutline.geometry = g1;
     this.planeGrid.geometry = g2;
@@ -1590,30 +2067,78 @@ class ViewportEngine {
     return null;
   }
 
-  /** W5's hook: an FNV-1a hash of the frame as drawn now, to tell two looks of the map apart. */
-  framePixels(): { pixels: number; hash: number } | null {
+  /**
+   * Draws the view now and copies the canvas as drawn; the promise gives its pixels, top row first,
+   * premultiplied RGBA as the GPU holds them. Several grabs in one task (a frame, then the same frame
+   * with an overlay hidden) each read their own frame: the copy is queued behind the draw it follows.
+   * Null without a live renderer.
+   */
+  private grabFrame(): Promise<{ width: number; height: number; rgba: Uint8Array }> | null {
     const r = this.renderer;
-    if (!r || !this.dom || this.contextLost || !this.syncSize()) return null;
-    const gl = r.getContext();
+    const c = this.canvas;
+    if (!r || !c || !this.dom || this.contextLost || !this.syncSize()) return null;
     this.renderNow();
-    const px = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
-    gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, px);
-    let h = 0x811c9dc5;
-    for (let i = 0; i < px.length; i++) h = Math.imul(h ^ px[i], 0x01000193) >>> 0;
-    return { pixels: px.length / 4, hash: h };
-  }
-
-  /** W9: the frame as drawn now, top row first, the GPU's premultiplied RGBA; null without a view. */
-  frameRgba(): { width: number; height: number; rgba: Uint8ClampedArray } | null {
-    const r = this.renderer;
-    if (!r || !this.dom || this.contextLost || !this.syncSize()) return null;
-    const gl = r.getContext();
-    this.renderNow();
+    const b = r.backend as unknown as { isWebGPUBackend?: boolean; device?: GpuDevice; gl?: WebGL2RenderingContext };
+    if (b.isWebGPUBackend && b.device) {
+      const device = b.device;
+      const ctx = c.getContext('webgpu') as unknown as GpuCanvas;
+      const tex = ctx.getCurrentTexture();
+      const w = tex.width;
+      const h = tex.height;
+      const bytesPerRow = Math.ceil((4 * w) / 256) * 256;
+      const buffer = device.createBuffer({ size: bytesPerRow * h, usage: GPU_MAP_READ | GPU_COPY_DST });
+      const enc = device.createCommandEncoder();
+      enc.copyTextureToBuffer({ texture: tex }, { buffer, bytesPerRow }, [w, h]);
+      device.queue.submit([enc.finish()]);
+      const bgra = tex.format.startsWith('bgra');
+      return buffer.mapAsync(GPU_MAP_MODE_READ).then(() => {
+        const px = unpadRows(new Uint8Array(buffer.getMappedRange()), w, h, bytesPerRow);
+        buffer.destroy();
+        return { width: w, height: h, rgba: bgra ? bgraToRgba(px) : px };
+      });
+    }
+    const gl = b.gl;
+    if (!gl) return null;
     const w = gl.drawingBufferWidth;
     const h = gl.drawingBufferHeight;
     const px = new Uint8Array(w * h * 4);
+    const prev = gl.getParameter(gl.READ_FRAMEBUFFER_BINDING) as WebGLFramebuffer | null;
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
     gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
-    return { width: w, height: h, rgba: flipRows(px, w, h) };
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, prev);
+    return Promise.resolve({ width: w, height: h, rgba: new Uint8Array(flipRows(px, w, h)) });
+  }
+
+  /** W5's hook: an FNV-1a hash of the frame as drawn now (top row first), to tell two looks of the map apart. */
+  async framePixels(): Promise<{ pixels: number; hash: number } | null> {
+    const f = await this.grabFrame();
+    if (!f) return null;
+    let h = 0x811c9dc5;
+    for (let i = 0; i < f.rgba.length; i++) h = Math.imul(h ^ f.rgba[i], 0x01000193) >>> 0;
+    return { pixels: f.rgba.length / 4, hash: h };
+  }
+
+  /** W9: the frame as drawn now, top row first, the GPU's premultiplied RGBA; null without a view. */
+  async frameRgba(): Promise<{ width: number; height: number; rgba: Uint8ClampedArray } | null> {
+    const f = await this.grabFrame();
+    return f ? { width: f.width, height: f.height, rgba: new Uint8ClampedArray(f.rgba.buffer, f.rgba.byteOffset, f.rgba.length) } : null;
+  }
+
+  /** The frame as drawn, and as drawn with `hide` applied (restored at once), both grabbed in one task. */
+  private async framePair(hide: () => () => void): Promise<{ drawn: Uint8Array; bare: Uint8Array } | null> {
+    const a = this.grabFrame();
+    if (!a) return null;
+    const restore = hide();
+    let b: ReturnType<ViewportEngine['grabFrame']>;
+    try {
+      b = this.grabFrame();
+    } finally {
+      restore();
+    }
+    this.renderNow();
+    if (!b) return null;
+    const [drawn, bare] = await Promise.all([a, b]);
+    return { drawn: drawn.rgba, bare: bare.rgba };
   }
 
   private onClick(x: number, y: number): void {
@@ -1746,25 +2271,10 @@ class ViewportEngine {
    * with the map hidden, in one task (as `highlightPixels`). A map whose shader does not compile,
    * or that draws nothing, changes 0.
    */
-  mapPixels(): { pixels: number; changed: number } | null {
-    const r = this.renderer;
-    if (!r || !this.dom || this.contextLost || !this.syncSize()) return null;
-    const gl = r.getContext();
-    const read = () => {
-      const px = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
-      gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, px);
-      return px;
-    };
-    this.renderNow();
-    const drawn = read();
-    const restore = this.results.hideMapFor();
-    try {
-      this.renderNow();
-    } finally {
-      restore();
-    }
-    const bare = read();
-    this.renderNow();
+  async mapPixels(): Promise<{ pixels: number; changed: number } | null> {
+    const pair = await this.framePair(() => this.results.hideMapFor());
+    if (!pair) return null;
+    const { drawn, bare } = pair;
     let changed = 0;
     for (let i = 0; i < drawn.length; i += 4) {
       if (Math.max(Math.abs(drawn[i] - bare[i]), Math.abs(drawn[i + 1] - bare[i + 1]), Math.abs(drawn[i + 2] - bare[i + 2])) > 2) changed++;
@@ -1772,26 +2282,16 @@ class ViewportEngine {
     return { pixels: drawn.length / 4, changed };
   }
 
-  private highlightPixels(): { pixels: number; changed: number; warn: number } | null {
-    const r = this.renderer;
-    if (!r || !this.dom || this.contextLost || !this.syncSize()) return null;
-    const gl = r.getContext();
-    const read = () => {
-      const px = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
-      gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, px);
-      return px;
-    };
-    this.renderNow();
-    const drawn = read();
-    const was = this.highlight.visible;
-    this.highlight.visible = false;
-    try {
-      this.renderNow();
-    } finally {
-      this.highlight.visible = was;
-    }
-    const bare = read();
-    this.renderNow();
+  private async highlightPixels(): Promise<{ pixels: number; changed: number; warn: number } | null> {
+    const pair = await this.framePair(() => {
+      const was = this.highlight.visible;
+      this.highlight.visible = false;
+      return () => {
+        this.highlight.visible = was;
+      };
+    });
+    if (!pair) return null;
+    const { drawn, bare } = pair;
     if (drawn.length !== bare.length) return null;
 
     const warn = [(WARN >> 16) & 0xff, (WARN >> 8) & 0xff, WARN & 0xff];
@@ -1853,7 +2353,7 @@ export function showParticles(p: Particles | null, meta?: ParticleMeta): void {
 }
 
 /** What the surface map changes on screen (the m12 pixel hook). */
-export function mapPixels(): { pixels: number; changed: number } | null {
+export function mapPixels(): Promise<{ pixels: number; changed: number } | null> {
   return engine.mapPixels();
 }
 
@@ -1873,6 +2373,24 @@ export const resultsLayer = (): ResultsLayer => engine.results;
 /** Draws now (a test hook's read must see the current step). */
 export function renderNow(): void {
   engine.invalidate();
+}
+
+/** Decision 69: the particles' light, bloom off, soft or full. */
+export function setGlow(g: Glow): void {
+  engine.setGlow(g);
+}
+
+/** Round 2: the map at full strength while the light plays (else faded to 25 %). */
+export function setMapWhilePlaying(full: boolean): void {
+  engine.setMapWhilePlaying(full);
+}
+
+/** Round 2: the presentation view and its turntable. */
+export function setPresent(on: boolean): void {
+  engine.setPresent(on);
+}
+export function setTurntable(on: boolean): void {
+  engine.setTurntable(on);
 }
 
 /** Frames the model in the perspective view (View › Frame model may call it). */

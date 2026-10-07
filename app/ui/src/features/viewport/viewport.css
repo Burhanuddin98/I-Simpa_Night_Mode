@@ -544,3 +544,25 @@
   accent-color: var(--red);
   width: 90px;
 }
+
+/* Decision 69: the particles' warm ramp, under the look and glow rows of the timeline card. */
+.vp-warm-legend {
+  margin: 2px 0 6px;
+}
+.vp-warm-legend .vp-legend-bar {
+  height: 6px;
+}
+
+/* Round 2: the presentation view (H). The canvas alone: every panel, label and tool hidden. */
+html.present .menubar,
+html.present .stepbar,
+html.present .statusbar,
+html.present .scene,
+html.present .props,
+html.present .dock,
+html.present .viewport > :not(.viewport-host) {
+  display: none !important;
+}
+.vp-replica-note {
+  color: var(--red-hi);
+}

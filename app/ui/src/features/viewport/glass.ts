@@ -4,6 +4,10 @@
 // straight at a wall, `EDGE_ON` times it at a grazing angle, never past `CAP`. 0 on the slider is
 // still invisible.
 
+import { T } from './tsl.ts';
+
+const { abs, dot, float, min, mix, normalView, positionViewDirection, pow } = T;
+
 export const FACE_ON = 0.4;
 export const EDGE_ON = 2.5;
 export const CAP = 0.85;
@@ -14,14 +18,8 @@ export function glassFactor(cosView: number): number {
   return FACE_ON + (EDGE_ON - FACE_ON) * f;
 }
 
-const AT = 'vec3 outgoingLight = diffuseColor.rgb * matcapColor.rgb;';
-
-/** The matcap fragment shader with its opacity scaled by the view angle (`glassFactor`), capped at `CAP`. */
-export function withGlass(fragment: string): string {
-  if (!fragment.includes(AT)) throw new Error(`glass: the matcap fragment shader has no '${AT}' (three.js changed it)`);
-  return fragment.replace(
-    AT,
-    `${AT}
-	diffuseColor.a = min(${CAP.toFixed(2)}, diffuseColor.a * mix(${FACE_ON.toFixed(2)}, ${EDGE_ON.toFixed(2)}, pow(1.0 - abs(dot(normal, viewDir)), 2.0)));`,
-  );
+/** The see-through layer's opacity (a material's `opacityNode`): `opacity` scaled by the view angle (`glassFactor`), capped at `CAP`. */
+export function glassOpacity(opacity: any): any {
+  const facing = float(1).sub(abs(dot(normalView, positionViewDirection)));
+  return min(CAP, opacity.mul(mix(FACE_ON, EDGE_ON, pow(facing, 2))));
 }

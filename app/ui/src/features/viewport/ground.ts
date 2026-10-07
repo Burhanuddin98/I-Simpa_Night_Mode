@@ -3,7 +3,10 @@
 // instead of floating in black. One transparent plane drawn by its own small shader. A drawing aid
 // with no acoustic meaning: grey, never the red of the sound-level planes, and not pickable (picking
 // runs on the model's BVH, not on the scene).
+import { T } from './tsl.ts';
 import type { Box } from './geometry.ts';
+
+const { abs, Discard, float, Fn, fract, fwidth, length, max, min, positionWorld, smoothstep, vec4 } = T;
 
 /** The grid's spacings, metres; the one used gives 10 to 25 cells across the room's longest side. */
 const STEPS = [0.5, 1, 2, 5, 10, 20];
@@ -37,39 +40,38 @@ export function groundLayout(box: Box): GroundLayout {
   };
 }
 
-export const GROUND_VERTEX = /* glsl */ `
-varying vec2 vXY;
-void main() {
-  vec4 world = modelMatrix * vec4(position, 1.0);
-  vXY = world.xy;
-  gl_Position = projectionMatrix * viewMatrix * world;
-}`;
+/** The ground's uniforms (engine.ts lays them out per model). */
+export interface GroundUniforms {
+  centre: any;
+  half: any;
+  step: any;
+  footMin: any;
+  footMax: any;
+  soft: any;
+  /** The grid's colour, written raw as the WebGL ShaderMaterial wrote it. */
+  line: any;
+  lineA: any;
+  shadowA: any;
+}
 
 /**
- * Grid lines one pixel wide at any distance (fwidth), faded out from 55 % to 100 % of the half-size;
- * the shadow a soft box over the footprint (a signed distance, smoothed by `uSoft`).
+ * The ground's colour (a `fragmentNode`, raw, as the ShaderMaterial wrote it): grid lines one pixel wide
+ * at any distance (fwidth), faded out from 55 % to 100 % of the half-size; the shadow a soft box over the
+ * footprint (a signed distance, smoothed by `soft`).
  */
-export const GROUND_FRAGMENT = /* glsl */ `
-uniform vec2 uCentre;
-uniform float uHalf;
-uniform float uStep;
-uniform vec2 uFootMin;
-uniform vec2 uFootMax;
-uniform float uSoft;
-uniform vec3 uLine;
-uniform float uLineA;
-uniform float uShadowA;
-varying vec2 vXY;
-void main() {
-  vec2 cell = vXY / uStep;
-  vec2 g = abs(fract(cell - 0.5) - 0.5) / fwidth(cell);
-  float line = 1.0 - min(min(g.x, g.y), 1.0);
-  float r = length(vXY - uCentre) / uHalf;
-  float a = line * uLineA * (1.0 - smoothstep(0.55, 1.0, r));
-  vec2 q = abs(vXY - 0.5 * (uFootMin + uFootMax)) - 0.5 * (uFootMax - uFootMin);
-  float sd = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
-  float s = uShadowA * (1.0 - smoothstep(-uSoft, 1.5 * uSoft, sd));
-  float alpha = a + s * (1.0 - a);
-  if (alpha <= 0.0) discard;
-  gl_FragColor = vec4(uLine * a / alpha, alpha);
-}`;
+export function groundColour(u: GroundUniforms): any {
+  return Fn(() => {
+    const xy = positionWorld.xy;
+    const cell = xy.div(u.step);
+    const g = abs(fract(cell.sub(0.5)).sub(0.5)).div(fwidth(cell));
+    const line = float(1).sub(min(min(g.x, g.y), 1));
+    const r = length(xy.sub(u.centre)).div(u.half);
+    const a = line.mul(u.lineA).mul(float(1).sub(smoothstep(0.55, 1, r)));
+    const q = abs(xy.sub(u.footMin.add(u.footMax).mul(0.5))).sub(u.footMax.sub(u.footMin).mul(0.5));
+    const sd = length(max(q, 0)).add(min(max(q.x, q.y), 0));
+    const s = u.shadowA.mul(float(1).sub(smoothstep(u.soft.negate(), u.soft.mul(1.5), sd)));
+    const alpha = a.add(s.mul(float(1).sub(a))).toVar();
+    Discard(alpha.lessThanEqual(0));
+    return vec4(u.line.mul(a).div(alpha), alpha);
+  })();
+}

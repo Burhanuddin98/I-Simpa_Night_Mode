@@ -28,10 +28,21 @@ import { registerHook } from '../../testhooks';
 import { asCmdError } from '../../actions';
 import { exportParams, exportView, lastExportStore } from '../export/exportActions';
 import { Animator, animatorStore, rateText, readout, SPEEDS, speedLabel, stepsPerSecond } from './animator';
-import { drawnSteps, framePixels, frameRgba, mapFacePoint, mapPixels, mapPointerStore, offMapPoint, resultsLayer } from './engine';
+import { drawnSteps, framePixels, frameRgba, mapFacePoint, mapPixels, mapPointerStore, offMapPoint, replicaStore, resultsLayer } from './engine';
 import { CUMULATIVE_HINT, CUMULATIVE_NOTE } from './cumulative';
 import { CONTOUR_STEPS_DB, contourText, parseRange, probeOf, type ProbeView } from './mapView';
 import { TRAIL_HINT, TRAIL_LENGTHS, TRAIL_NOTE } from './particles';
+import { PARTICLE_LOOKS, type ParticleLook } from './rays';
+import { warmGradient, warmLabels } from './warmRamp';
+
+/** Decision 69: the particle looks, as the card names them. */
+const LOOK_LABELS: Record<ParticleLook, string> = { dots: 'Dots', glow: 'Glow', rays: 'Rays' };
+const LOOK_TITLES: Record<ParticleLook, string> = {
+  dots: "Each saved particle as a dot at its step, in the map's colours: the measuring view",
+  glow: 'Each particle as light, moving smoothly between its saved steps, with a trail that cools behind it',
+  rays: "Each particle's whole path so far, glowing, with a spark where it turns at a wall",
+};
+const LOOK_HINT = 'How the saved particles are drawn. Glow and rays are light: brighter where louder, against a dimmed room while they play.';
 import { bandLabel, bandName, resultsView, resultsViewStore, shownMaps, startResultsView } from './resultsView';
 import { WINDOW_CHOICES_MS, windowChoice, WINDOW_CUMULATIVE_REFUSAL, WINDOW_HINT } from './window';
 
@@ -94,7 +105,7 @@ function registerM12Hooks(): () => void {
     registerHook('wowOffMapPoint', () => offMapPoint()),
     registerHook('wowFramePixels', () => framePixels()),
     // W3: the trails' state, and the segments the draw keeps now, counted on the GPU.
-    registerHook('wowTrails', () => ({ ...layer.trailState(), step: layer.particleStep(), drawn: layer.trailState().on ? layer.countTrails() : 0 })),
+    registerHook('wowTrails', async () => ({ ...layer.trailState(), step: layer.particleStep(), drawn: layer.trailState().on ? await layer.countTrails() : 0 })),
     // The bottom dock's cards and the panels around them, as client rectangles (W9's layout check).
     registerHook('wowCardRects', () => cardRects()),
     // W9: an export to `path` (the dialog's answer, given), as File › Export does; its refusal as {code, message}.
@@ -107,8 +118,8 @@ function registerM12Hooks(): () => void {
     }),
     registerHook('wowLastExport', () => lastExportStore.get()),
     // W9: the frame's own RGBA (premultiplied, as the GPU holds it) at buffer points, top row first.
-    registerHook('wowFrameSamples', (points: [number, number][]) => {
-      const f = frameRgba();
+    registerHook('wowFrameSamples', async (points: [number, number][]) => {
+      const f = await frameRgba();
       if (!f) return null;
       return { width: f.width, height: f.height, rgba: points.map(([x, y]) => [...f.rgba.subarray(4 * (y * f.width + x), 4 * (y * f.width + x) + 4)]) };
     }),
@@ -127,7 +138,7 @@ function registerM12Hooks(): () => void {
       return { ...a, stepsPerSecond: stepsPerSecond(a), rate: rateText(a) };
     }),
     registerHook('m12DrawnSteps', () => drawnSteps()),
-    registerHook('m12Particles', () => {
+    registerHook('m12Particles', async () => {
       const meta = layer.particleMeta;
       if (!meta) return null;
       return {
@@ -135,7 +146,7 @@ function registerM12Hooks(): () => void {
         bandHz: meta.bandHz,
         step: layer.particleStep(),
         mapStep: layer.mapStep(),
-        rendered: layer.countParticles(),
+        rendered: await layer.countParticles(),
         particles: meta.particles,
         records: meta.records,
         bufferBytes: layer.sizes().particleBytes,
@@ -304,7 +315,10 @@ function RangeFields({ lo, hi }: { lo: number; hi: number }) {
 export function ResultsOverlay() {
   const step = useStore(stepStore);
   const v = useStore(resultsViewStore);
+  const replicas = useStore(replicaStore);
   const anim = useStore(animatorStore);
+  // The legend's span: the band's fitted span, or in Rays the span fitted to the step shown.
+  const warmSpan = v.look === 'rays' ? resultsLayer().gpu.raySpanAt(anim.step) : v.warmDepth;
   const scene = useStore(sceneStore);
 
   useEffect(() => {
@@ -582,6 +596,68 @@ export function ResultsOverlay() {
                   </button>
                 ))}
               </div>
+            )}
+            {v.particles.state === 'shown' && (
+              <div className="vp-row" role="radiogroup" aria-label="Particles drawn as" data-part="particle-look">
+                <span className="vp-row-label" title={LOOK_HINT}>
+                  Particles
+                </span>
+                {PARTICLE_LOOKS.map((l) => {
+                  const refusal = l === 'dots' ? null : v.lookRefusal[l];
+                  return (
+                    <button
+                      key={l}
+                      className="vp-chip-btn mono"
+                      role="radio"
+                      data-look={l}
+                      aria-checked={v.look === l}
+                      disabled={refusal !== null}
+                      title={refusal ? `${refusal}.` : LOOK_TITLES[l]}
+                      onClick={() => resultsView.setLook(l)}
+                    >
+                      {LOOK_LABELS[l]}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {v.particles.state === 'shown' && v.look !== 'dots' && (
+              <>
+                <div className="vp-row" role="radiogroup" aria-label="Glow" data-part="particle-glow">
+                  <span className="vp-row-label" title="How strongly the light blooms; off draws the particles without the bloom pass.">
+                    Glow
+                  </span>
+                  {(['off', 'soft', 'full'] as const).map((g) => (
+                    <button key={g} className="vp-chip-btn mono" role="radio" data-glow={g} aria-checked={v.glow === g} onClick={() => resultsView.setGlow(g)}>
+                      {g === 'off' ? 'Off' : g === 'soft' ? 'Soft' : 'Full'}
+                    </button>
+                  ))}
+                </div>
+                <div className="vp-row" role="radiogroup" aria-label="Map while playing" data-part="map-while-playing">
+                  <span className="vp-row-label" title="While the particles play the map fades so their light carries the image; Full keeps it as measured.">
+                    Map
+                  </span>
+                  <button className="vp-chip-btn mono" role="radio" data-map-full="false" aria-checked={!v.mapFull} onClick={() => resultsView.setMapFull(false)}>
+                    Faded
+                  </button>
+                  <button className="vp-chip-btn mono" role="radio" data-map-full="true" aria-checked={v.mapFull} onClick={() => resultsView.setMapFull(true)}>
+                    Full
+                  </button>
+                </div>
+                <div className="vp-warm-legend" data-part="warm-legend" data-results-region title="Each particle's level against the loudest particle of the band, drawn as light: louder is hotter and brighter. The span fits this band's particles.">
+                  <div className="vp-legend-bar" style={{ background: warmGradient() }} />
+                  <div className="vp-legend-labels">
+                    <span>{warmLabels(warmSpan).lo}</span>
+                    <span>{warmLabels(warmSpan).mid}</span>
+                    <span>{warmLabels(warmSpan).hi} re loudest</span>
+                  </div>
+                </div>
+                {replicas && (
+                  <div className="vp-diff-note vp-replica-note" data-part="replica-note" role="status">
+                    {replicas.saved.toLocaleString('en-GB')} saved paths, each shown {replicas.copies.toLocaleString('en-GB')}×, offset: a visual density, not more particles.
+                  </div>
+                )}
+              </>
             )}
             {v.trails > 0 && !v.trailRefusal && (
               <div className="vp-diff-note" data-part="trails-note" title={TRAIL_HINT}>

@@ -84,7 +84,7 @@ export async function exportView(path?: string): Promise<ExportDone | null> {
   const project = sceneStore.get()?.info.name ?? null;
   const target = await actions.exportPath('png', exportName(project, stepStore.get() === 'results' ? number : null, 'png'), path);
   if (target === null) return null;
-  const frame = frameRgba();
+  const frame = await frameRgba();
   if (!frame) return nothing('The 3D view is not drawing');
   const bgText = cssVar('--bg', '#09090b');
   const bg = hexRgb(bgText) ?? [9, 9, 11];

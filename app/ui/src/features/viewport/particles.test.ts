@@ -6,14 +6,17 @@ import {
   aliveCounts,
   emissionStep,
   noParticlesText,
-  PARTICLE_VERTEX_GLSL,
+  keptRecord,
+  keptTrail,
+  NUMBER_OPS,
+  rampPlace,
   recordSteps,
   TRAIL_BUDGET_BYTES,
   TRAIL_BYTES_PER_SEGMENT,
   TRAIL_HINT,
   TRAIL_NOTE,
   TRAIL_LENGTHS,
-  TRAIL_VERTEX_GLSL,
+  trailAlpha,
   trailCount,
   trailRefusal,
   trailSegments,
@@ -81,28 +84,34 @@ test('the emission step is the first step any saved particle is alive', () => {
   assert.equal(emissionStep(particles([])), 0, 'no particles: step 0');
 });
 
-test('count mode (gate (d)) and the draw keep the same records: one kept() gate, then the count branch, no cull after it', () => {
-  // Assay (M12, LOW): count mode returned before the draw's own code, so a cull the draw made
-  // after that point (on energy, say) would not be counted. Every condition on the data is
-  // now one function both modes pass through first.
-  const glsl = PARTICLE_VERTEX_GLSL.replace(/\/\/[^\n]*/g, '');
-  const kept = /bool kept\(\)\s*\{([\s\S]*?)\n\s*\}/.exec(glsl);
-  assert.ok(kept, 'a kept() function holds the records drawn');
-  // Alive is the .pbin's own definition (particles.ts): a record at its step. Energy is colour,
-  // never a cull: a record alive by the file is drawn and counted whatever its energy.
-  assert.match(kept[1], /aStep/);
-  assert.doesNotMatch(kept[1], /aEnergy/);
-  const main = glsl.slice(glsl.indexOf('void main()'));
-  const gate = /if \(!kept\(\)\) \{[^}]*\}/.exec(main);
-  assert.ok(gate, 'main starts at the kept() gate');
-  assert.match(main.slice(0, gate.index), /^void main\(\) \{\s*$/, 'nothing before the gate');
-  const afterGate = main.slice(gate.index + gate[0].length);
-  const count = /^\s*if \(uCount > 0\.5\) \{[^}]*\}/.exec(afterGate);
-  assert.ok(count, 'the count branch follows the gate directly');
-  const draw = afterGate.slice(count[0].length);
-  for (const cull of [/return/, /discard/, /gl_PointSize\s*=\s*0\.0/, /gl_Position\s*=\s*vec4\(2\.0/, /if\s*\(/]) {
-    assert.doesNotMatch(draw, cull, `the draw culls after the count branch: ${cull}`);
+test('count mode (gate (d)) and the draw keep the same records: keptRecord(), run as JavaScript, keeps exactly the particles aliveCounts counts', () => {
+  // Assay (M12, LOW): a cull the draw made outside the shared gate would not be counted. The draw and
+  // the count mode both build their gate from `keptRecord` (resultsLayer.ts), whose only inputs are the
+  // record's step and the timeline's: energy is colour, never a cull.
+  assert.equal(keptRecord.length, 3, 'keptRecord takes the ops, the record step and the step: no energy');
+  const p = particles([
+    [0, 30],
+    [3, 12],
+    [20, 9],
+    [7, 0],
+  ]);
+  const steps = recordSteps(p);
+  const alive = aliveCounts(p, 40);
+  for (let s = 0; s < 40; s++) {
+    let c = 0;
+    for (let k = 0; k < p.recordCount; k++) if (keptRecord(NUMBER_OPS, steps[k], s)) c++;
+    assert.equal(c, alive[s], `step ${s}`);
   }
+});
+
+test("the playback's colour and the trails' fade: the hot ramp's top 45 % over 40 dB, older segments fainter", () => {
+  assert.equal(rampPlace(1, 0), 1);
+  assert.ok(Math.abs(rampPlace(1e-2, 0) - (0.55 + 0.45 * 0.5)) < 1e-12, '20 dB down is half way');
+  assert.equal(rampPlace(1e-5, 0), 0.55, '40 dB down and below: the floor');
+  assert.equal(rampPlace(0, 0), 0.55, 'no energy: the floor, still drawn');
+  assert.equal(trailAlpha(10, 10, 5), 1);
+  assert.ok(Math.abs(trailAlpha(10, 5, 5) - 0.15) < 1e-12);
+  assert.ok(trailAlpha(10, 8, 5) > trailAlpha(10, 6, 5));
 });
 
 test("W3 trails: one segment per pair of consecutive records, tagged with its head step and the particle's last step", () => {
@@ -162,24 +171,10 @@ test('W3 trails: refused without particles and above the GPU budget, with the si
   assert.deepEqual(TRAIL_LENGTHS, [1, 5, 20, 60]);
 });
 
-test('W3 trails: the draw and its count mode keep segments by one keptTrail() gate on the steps, never on energy', () => {
-  const glsl = TRAIL_VERTEX_GLSL.replace(/\/\/[^\n]*/g, '');
-  const kept = /bool keptTrail\(\)\s*\{([\s\S]*?)\n\s*\}/.exec(glsl);
-  assert.ok(kept);
-  assert.match(kept[1], /aHead/);
-  assert.match(kept[1], /aLast/);
-  assert.doesNotMatch(kept[1], /aEnergy/);
-  const main = glsl.slice(glsl.indexOf('void main()'));
-  assert.match(main, /^void main\(\) \{\s*if \(!keptTrail\(\)\)/);
-  const afterGate = main.slice(main.indexOf('}') + 1);
-  assert.match(afterGate, /^\s*if \(uCount > 0\.5\)/);
-});
-
-test('W3 trails: the shader\'s keptTrail(), run as JavaScript, keeps exactly the segments trailCount counts', () => {
-  // The e2e caught the window one step too long (6 heads for 5 steps): the GLSL itself is held here.
-  const body = /bool keptTrail\(\)\s*\{\s*return ([^;]+);/.exec(TRAIL_VERTEX_GLSL);
-  assert.ok(body);
-  const kept = new Function('aLast', 'aHead', 'uStep', 'uLength', `return ${body[1]};`) as (l: number, h: number, s: number, n: number) => boolean;
+test("W3 trails: keptTrail(), the rule the GPU runs, run as JavaScript, keeps exactly the segments trailCount counts", () => {
+  // The e2e caught the window one step too long (6 heads for 5 steps): the rule itself is held here.
+  assert.equal(keptTrail.length, 5, 'keptTrail takes the ops, last, head, step and length: no energy');
+  const kept = (l: number, h: number, s: number, n: number) => keptTrail(NUMBER_OPS, l, h, s, n);
   const p = particles([
     [0, 30],
     [3, 12],

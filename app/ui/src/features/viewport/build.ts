@@ -4,6 +4,10 @@
 // line where it cuts (not red: red is for actions and selection), while the camera swings `SWING_DEG`
 // into its framing. Only when a new model loads; never under prefers-reduced-motion or WebDriver.
 
+import { T } from './tsl.ts';
+
+const { float, positionWorld, smoothstep, vec3 } = T;
+
 /** Burhan 04:08 asked for 6 s; 04:11, having seen it: "make it 2.4 seconds". */
 export const BUILD_MS = 2400;
 export const SWING_DEG = 25;
@@ -27,28 +31,12 @@ export function swingAngle(f: number): number {
   return -(1 - easeOut(f)) * ((SWING_DEG * Math.PI) / 180);
 }
 
-const anchor = (src: string, at: string, what: string): void => {
-  if (!src.includes(at)) throw new Error(`build: the ${what} shader has no '${at}' (three.js changed its chunks)`);
-};
+/** The cut as a mask (a material's `maskNode`): a fragment above `cutZ` is discarded. */
+export function buildKeep(cutZ: any): any {
+  return positionWorld.z.lessThanEqual(cutZ);
+}
 
-/**
- * The shaders with the cut: fragments above `nmBuildZ` discarded, and for surfaces a faint warm line
- * `nmBuildBand` deep just under the cut.
- */
-export function withBuild(vertex: string, fragment: string, mode: 'surface' | 'line'): { vertex: string; fragment: string } {
-  for (const [src, what] of [[vertex, 'vertex'], [fragment, 'fragment']] as const) anchor(src, '#include <common>', what);
-  anchor(vertex, '#include <project_vertex>', 'vertex');
-  anchor(fragment, '#include <opaque_fragment>', 'fragment');
-  const line =
-    mode === 'surface'
-      ? '\n\toutgoingLight += vec3(1.0, 0.86, 0.78) * 0.35 * (1.0 - smoothstep(0.0, nmBuildBand, nmBuildZ - vNmWorldZ));'
-      : '';
-  return {
-    vertex: vertex
-      .replace('#include <common>', '#include <common>\nvarying float vNmWorldZ;')
-      .replace('#include <project_vertex>', '#include <project_vertex>\n\tvNmWorldZ = (modelMatrix * vec4(transformed, 1.0)).z;'),
-    fragment: fragment
-      .replace('#include <common>', '#include <common>\nvarying float vNmWorldZ;\nuniform float nmBuildZ;\nuniform float nmBuildBand;')
-      .replace('#include <opaque_fragment>', `if (vNmWorldZ > nmBuildZ) discard;${line}\n\t#include <opaque_fragment>`),
-  };
+/** For surfaces, the faint warm line `band` deep just under the cut, added to the colour. */
+export function buildLine(cutZ: any, band: any): any {
+  return vec3(1, 0.86, 0.78).mul(0.35).mul(float(1).sub(smoothstep(0, band, cutZ.sub(positionWorld.z))));
 }

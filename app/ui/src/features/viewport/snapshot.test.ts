@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { composite, flipRows, hexRgb, STRIP_PX, stripLines } from './snapshot.ts';
+import { bgraToRgba, composite, flipRows, hexRgb, STRIP_PX, stripLines, unpadRows } from './snapshot.ts';
 
 test('the frame over the window background: a premultiplied pixel plus the background behind what it leaves', () => {
   const bg: [number, number, number] = [9, 9, 11];
@@ -41,4 +41,20 @@ test('the strip holds the legend shown and nothing else: no map, no strip', () =
     note: null,
   });
   assert.ok(STRIP_PX >= 56);
+});
+
+test("WebGPU's padded copy rows packed tight, and its BGRA turned RGBA", () => {
+  // 3 pixels a row (12 bytes) padded to 16, two rows.
+  const src = new Uint8Array(16 + 12);
+  for (let i = 0; i < 12; i++) {
+    src[i] = i + 1;
+    src[16 + i] = 101 + i;
+  }
+  src.fill(255, 12, 16);
+  const out = unpadRows(src, 3, 2, 16);
+  assert.deepEqual([...out], [...Array.from({ length: 12 }, (_, i) => i + 1), ...Array.from({ length: 12 }, (_, i) => 101 + i)]);
+  assert.deepEqual([...unpadRows(new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]), 1, 2, 4)], [1, 2, 3, 4, 5, 6, 7, 8], 'no padding: the bytes as they are');
+  assert.throws(() => unpadRows(new Uint8Array(8), 3, 1, 8), RangeError);
+  assert.throws(() => unpadRows(new Uint8Array(20), 3, 2, 16), RangeError);
+  assert.deepEqual([...bgraToRgba(new Uint8Array([10, 20, 30, 40, 1, 2, 3, 4]))], [30, 20, 10, 40, 3, 2, 1, 4]);
 });
