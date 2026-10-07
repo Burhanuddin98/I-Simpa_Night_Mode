@@ -641,7 +641,8 @@ pub fn moving_sum(x: &[f64], w: usize) -> Vec<f64> {
 }
 
 /// Each of `xs` through its band's filter of `filters` (zero-phase, two bands to a transform),
-/// padded to twice the length, so a filter's ringing (its acausal half too, at the low bands\n/// several hundred ms) never wraps round into the response's end.
+/// padded to twice the length, so a filter's ringing (its acausal half too, at the low bands
+/// several hundred ms) never wraps round into the response's end.
 fn band_limit(xs: &[Vec<f64>], filters: &Filters, rate: u32) -> Vec<Vec<f64>> {
     let n = xs.first().map_or(0, Vec::len);
     let nfft = next_pow2(2 * n);
@@ -735,15 +736,24 @@ pub fn analyse(x: &[f64], filters: &Filters, rate: u32) -> Vec<Vec<f64>> {
     analyse_by(x, filters.bands.len(), rate, |b, f| filters.amplitude(b, f))
 }
 
-/// The order of the bed's Butterworth prototype ([`analyse_butterworth`]).
-pub const BED_ORDER: i32 = 6;
+/// The prototype order of the bed's IEC 61260 class-1-like bank: a third-order Butterworth
+/// low-pass prototype, which makes a sixth-order band-pass ([`analyse_butterworth`]). The CR4
+/// bed's headline uses this bank: it is the kind of filter a room-acoustic measurement uses
+/// (ISO 3382-1 asks for IEC 61260 filters). It is chosen for that, not for its result: it is the
+/// less favourable of the two banks.
+pub const IEC_PROTOTYPE_ORDER: i32 = 3;
 
-/// The bed's own bank, independent of the synthesis's: on the same edges, a twelfth-order
-/// Butterworth band-pass magnitude ([`BED_ORDER`] prototype), `|H|² = 1 / (1 + ((f² − f₀²) /
-/// (f·(f_hi − f_lo)))¹²)` with `f₀ = √(f_lo·f_hi)`, applied zero-phase. The EDT and T30 the bed holds
-/// to the JND are measured through it, so the correction (module docs, step 5), which works through
-/// [`analyse`], is not graded by its own instrument.
-pub fn analyse_butterworth(x: &[f64], filters: &Filters, rate: u32) -> Vec<Vec<f64>> {
+/// The prototype order of the bed's steeper bank: a sixth-order Butterworth prototype, a
+/// twelfth-order band-pass. Reported beside the headline: its skirts let less of a neighbouring
+/// band (with its own decay) into the measurement.
+pub const STEEP_PROTOTYPE_ORDER: i32 = 6;
+
+/// The bed's own banks, independent of the synthesis's: on the same edges, a Butterworth band-pass
+/// magnitude of prototype order `n` (band-pass order `2n`), `|H|² = 1 / (1 + ((f² − f₀²) /
+/// (f·(f_hi − f_lo)))^(2n))` with `f₀ = √(f_lo·f_hi)`, applied zero-phase. The EDT and T30 the bed
+/// holds to the JND are measured through it, so the correction (module docs, step 5), which works
+/// through [`analyse`], is not graded by its own instrument.
+pub fn analyse_butterworth(x: &[f64], filters: &Filters, rate: u32, n: i32) -> Vec<Vec<f64>> {
     analyse_by(x, filters.bands.len(), rate, |b, f| {
         let band = &filters.bands[b];
         if f.is_nan() || f <= 0.0 {
@@ -751,7 +761,7 @@ pub fn analyse_butterworth(x: &[f64], filters: &Filters, rate: u32) -> Vec<Vec<f
         }
         let f0sq = band.lo_hz * band.hi_hz;
         let r = (f * f - f0sq) / (f * (band.hi_hz - band.lo_hz));
-        (1.0 / (1.0 + r.powi(2 * BED_ORDER))).sqrt()
+        (1.0 / (1.0 + r.powi(2 * n))).sqrt()
     })
 }
 

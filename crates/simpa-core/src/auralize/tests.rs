@@ -353,7 +353,7 @@ fn edt_and_t30_of_a_synthetic_decay_survive_synthesis() {
     let e = synthetic(&f, steps);
     let s = synthesise(&e, &f, SAMPLE_RATE, SEED, 0).unwrap();
     let bounds = step_bounds(steps, e.dt_s, SAMPLE_RATE);
-    let anal = analyse_butterworth(&s.samples, &f, SAMPLE_RATE);
+    let anal = analyse_butterworth(&s.samples, &f, SAMPLE_RATE, IEC_PROTOTYPE_ORDER);
     for (b, band) in anal.iter().enumerate() {
         let (edt0, t300) = decay_times(&e.energy[b], e.dt_s);
         let (edt1, t301) = decay_times(&step_energies(band, &bounds), e.dt_s);
