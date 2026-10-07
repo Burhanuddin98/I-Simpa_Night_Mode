@@ -1002,8 +1002,10 @@ mod tests {
             f32_bits_at(&b, 24),
             (file.time_step * per_bin as f32).to_bits()
         );
-        // Each face's energy, summed over its served records, is its file records' sum.
-        let off = HEADER + 16 * nf;
+        // Each face's energy, summed over its served records, is its file records' sum. The face
+        // offsets come after the node positions (12 bytes a node) and the faces' 16 bytes each.
+        let nn = u32_at(&b, 8) as usize;
+        let off = HEADER + 12 * nn + 16 * nf;
         let steps = off + 4 * (nf + 1);
         let vals = steps + 4 * nr;
         let faces: Vec<&csbin::Face> = file
