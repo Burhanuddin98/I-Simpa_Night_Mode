@@ -16,8 +16,10 @@ attr=value pairs set <simulation> attributes (e.g. nbparticules=20000 random_see
 import os, re, shutil, subprocess, sys, time
 import xml.etree.ElementTree as ET
 
+# SPPS_GPU_BED_ROOTS (os.pathsep-separated) replaces the two roots, for a bed run by another step (B3).
 ROOTS = [os.path.normcase(os.path.abspath(p)) + os.sep for p in (
-    r"B:\repos\I-Simpa_Night_Mode\.out\spps-gpu", r"C:\tmp\nm-spps-gpu")]
+    os.environ["SPPS_GPU_BED_ROOTS"].split(os.pathsep) if os.environ.get("SPPS_GPU_BED_ROOTS")
+    else (r"B:\repos\I-Simpa_Night_Mode\.out\spps-gpu", r"C:\tmp\nm-spps-gpu"))]
 INPUTS = ("config.xml", "mesh.cbin", "tetramesh.mbin")
 
 

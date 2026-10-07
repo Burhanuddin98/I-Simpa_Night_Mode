@@ -4,6 +4,9 @@
 //   spps-gpu --probe                print the CUDA device, or why there is none; exit 0 or 1
 // Bed options (A2 verification): --dump-walk <file> writes every primary particle's step count,
 // fate and final energy; --dump-sums <file> writes the double accumulators of every band.
+// B3's live stream (output.h LiveStream): on by default when particles are saved, written to
+// spps-gpu.pstream and removed at the end; --stream off|on|keep, or SPPS_GPU_STREAM=0|1|keep when the
+// caller passes only the path (`simpa run-folder`). The flag wins over the variable.
 #include <cuda_runtime.h>
 #include <omp.h>
 #include <chrono>
@@ -25,7 +28,7 @@
 
 using namespace spg;
 
-static const char* VERSION = "0.1.1 (A5, 2026-10-07)";
+static const char* VERSION = "0.1.2 (B3, 2026-10-07)";
 
 constexpr unsigned TOTAL_REPLICAS = 256;
 
@@ -330,10 +333,11 @@ struct Progress {
 int main(int argc, char** argv) {
   std::string path;
   bool cpu = false, probeOnly = false;
-  std::string dumpWalk, dumpSums;
+  std::string dumpWalk, dumpSums, streamMode;
   for (int i = 1; i < argc; i++) {
     std::string a = argv[i];
     if (a == "--cpu") cpu = true;
+    else if (a == "--stream" && i + 1 < argc) streamMode = argv[++i];
     else if (a == "--gpu") cpu = false;
     else if (a == "--probe") probeOnly = true;
     else if (a == "--dump-walk" && i + 1 < argc) dumpWalk = argv[++i];
@@ -351,6 +355,12 @@ int main(int argc, char** argv) {
   if (const char* env = getenv("SPPS_GPU_BACKEND")) {
     if (std::string(env) == "cpu") cpu = true;
   }
+  if (streamMode.empty()) {
+    const char* env = getenv("SPPS_GPU_STREAM");
+    streamMode = env ? env : "on";
+  }
+  if (streamMode == "0" || streamMode == "off") streamMode = "off";
+  else if (streamMode != "keep") streamMode = "on";
   if (path.empty()) {
     std::cout << "The path of the XML configuration file must be specified!" << std::endl;
     return 1;
@@ -501,6 +511,8 @@ int main(int argc, char** argv) {
   int bandsDone = 0;
   const int nbCalc = std::max(1, cfg.nbBandsCalc);
   int threads = 1;
+  LiveStream live;
+  if (streamMode != "off" && (size_t)cfg.nbPartRender * NS != 0) live.open(cfg.wd + "spps-gpu.pstream", cfg);
 
   for (size_t bi = 0; bi < cfg.bands.size(); bi++) {
     if (!cfg.bands[bi].docalc) continue;
@@ -676,7 +688,7 @@ int main(int argc, char** argv) {
     // the same walk re-traces those particles on the host, identical paths, to record them
     if ((size_t)cfg.nbPartRender * NS != 0) {
       auto tr0 = std::chrono::steady_clock::now();
-      ParticleFiles pf(cfg, (int)bi);
+      ParticleFiles pf(cfg, (int)bi, live.isOpen() ? &live : nullptr);
       Scene hsc = sc;
       hsc.tf = hs.tf.data();
       hsc.nodes = m.nodes.data(); hsc.fv = m.fv.data(); hsc.fn = m.fn.data(); hsc.nb = m.nb.data(); hsc.sf = m.sf.data(); hsc.rf = m.rf.data();
@@ -730,6 +742,8 @@ int main(int argc, char** argv) {
     bandOutSeconds += std::chrono::duration<double>(std::chrono::steady_clock::now() - to0).count();
     bandsDone++;
   }
+  const bool streamed = live.isOpen();
+  live.close(streamMode == "keep");
   auto tf0 = std::chrono::steady_clock::now();
   report.finish();
   finishSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - tf0).count();
@@ -747,6 +761,8 @@ int main(int argc, char** argv) {
     j << "  \"band_output_seconds\": " << bandOutSeconds << ",\n  \"finish_seconds\": " << finishSeconds << ",\n";
     j << "  \"gpu_slots\": " << nslots << ",\n  \"gpu_launches\": " << launches << ",\n";
     j << "  \"kernel_seconds\": " << kernelSeconds << ",\n";
+    j << "  \"stream\": \"" << (streamed ? streamMode : std::string("off")) << "\",\n  \"stream_frames\": " << live.frames << ",\n";
+    j << "  \"stream_bytes\": " << live.bytes << ",\n  \"stream_seconds\": " << live.seconds << ",\n";
     j << "  \"trace_seconds\": " << traceSeconds << ",\n  \"wall_seconds\": " << wall << ",\n";
     j << "  \"child_queue_overflow\": " << overflowTotal << "\n}\n";
   }

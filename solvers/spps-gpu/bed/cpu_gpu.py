@@ -8,7 +8,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import stage  # noqa: E402
 
-EXE = r"C:\tmp\nm-spps-gpu\bin\spps-gpu.exe"
+EXE = os.environ.get("SPPS_GPU_BED_EXE", r"C:\tmp\nm-spps-gpu\bin\spps-gpu.exe")   # B3: overridable
 
 if __name__ == "__main__":
     if len(sys.argv) < 5:
