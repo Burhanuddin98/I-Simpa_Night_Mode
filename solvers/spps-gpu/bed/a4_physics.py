@@ -84,14 +84,16 @@ def beam_expect(alpha_p, alpha_w, tl):
             "B2a": J2 * (1 + b) / q, "B2b": J2 * (1 + b) / q}
 
 
-def beam_model(alpha_p, alpha_w, tl, starts, two_sided=True, transmit=True, eps_exp=7.0):
+def beam_model(alpha_p, alpha_w, tl, starts, two_sided=True, transmit=True, eps_exp=7.0, cap=None):
     """The beam's exact truncated reference: every particle of one family followed along the axis with
     SPPS's energetic rules (CalculationCore.cpp: wall E *= 1 - alpha; panel with 0 < alpha < 1: a
     child E tau when E tau > eps, then the parent E *= 1 - alpha and reflects; panel with alpha == 1:
     the parent itself passes with E *= tau; death when E <= eps = E0 10^-trans_epsilon; a single-sided
     panel is passed when the particle moves -y, against its +y normal), with alpha and tau rounded to
     float as SPPS stores them. Returns each receiver's passes as (path length from the source, E)
-    (E0 = 1, chord 1) and the family's particle count (SPPS's statistics count every child)."""
+    (E0 = 1, chord 1), the family's particle count (SPPS's statistics count every child), the deepest
+    the child queue got, and, with cap = n, the children a queue of n drops (spps-gpu's QCAP, walk.h
+    pushChild: a child that finds the queue full is counted and dropped) and their energy."""
     import numpy as np
     f32 = np.float32
     a = float(f32(1) - f32(alpha_p))
@@ -101,6 +103,7 @@ def beam_model(alpha_p, alpha_w, tl, starts, two_sided=True, transmit=True, eps_
     rx = {"B1a": 0.6, "B1b": 3.3, "B2a": 6.7, "B2b": 8.6}
     passes = {k: [] for k in rx}
     queue, n = [(y, d, E, 0.0) for y, d, E in starts], 0
+    deepest, dropped, dropped_e = 0, 0, 0.0
     while queue:
         y, d, E, s = queue.pop(0)
         n += 1
@@ -129,12 +132,19 @@ def beam_model(alpha_p, alpha_w, tl, starts, two_sided=True, transmit=True, eps_
                         break
                     continue           # passes, same direction
                 if transmit and tau != 0 and E * tau > eps:
-                    queue.append((5.0, d, E * tau, s))
+                    if cap is not None and len(queue) >= cap:
+                        dropped += 1
+                        dropped_e += E * tau
+                    else:
+                        queue.append((5.0, d, E * tau, s))
+                    deepest = max(deepest, len(queue))
                 E *= a
                 if E <= eps:
                     break
                 d = -d
-    return passes, n
+    if cap is None:
+        return passes, n
+    return passes, n, deepest, dropped, dropped_e
 
 
 def model_clusters(passes, radius=0.31, step=0.3432):
@@ -157,11 +167,15 @@ def analyse_beam(run, alpha_p):
     out = {}
     for band, tl in TL.items():
         passes, nfam = beam_model(alpha_p, ALPHA_W, tl, [(1.6, 1, 1.0)])
+        p16, n16, deep16, drop16, drope16 = beam_model(alpha_p, ALPHA_W, tl, [(1.6, 1, 1.0)], cap=16)
+        _, _, deepest, _, _ = beam_model(alpha_p, ALPHA_W, tl, [(1.6, 1, 1.0)], cap=10 ** 9)
         rx = {r: recp(run, r)[band] for r in ("B1a", "B1b", "B2a", "B2b")}
         cl = {r: clusters(v) for r, v in rx.items()}
         mc = {r: model_clusters(p) for r, p in passes.items()}
         ref = cl["B1b"][0][2]     # first arrival at B1b = E0 x chord
-        row = {"tau": 10 ** (-tl / 10), "model_particles_per_family": nfam}
+        row = {"tau": 10 ** (-tl / 10), "model_particles_per_family": nfam, "model_deepest_queue": deepest,
+               "model_qcap16_particles_per_family": n16, "model_qcap16_dropped_per_family": drop16,
+               "model_qcap16_dropped_energy_per_family_E0": drope16}
         for r in rx:
             for i in range(3):
                 if i < len(cl[r]) and i < len(mc[r]):
@@ -172,6 +186,10 @@ def analyse_beam(run, alpha_p):
             row[f"total_{r}_over_first_B1b"] = sum(rx[r]) / ref
             row[f"model_{r}"] = m
             row[f"dev_model_{r}"] = sum(rx[r]) / ref / m - 1
+            if alpha_p < 1:
+                m16 = sum(E for _, E in p16[r])
+                row[f"model_qcap16_{r}"] = m16
+                row[f"dev_model_qcap16_{r}"] = sum(rx[r]) / ref / m16 - 1
             if alpha_p < 1:
                 row[f"series_{r}"] = beam_expect(alpha_p, ALPHA_W, tl)[r]
         row["total_B2a_over_total_B1b"] = sum(rx["B2a"]) / sum(rx["B1b"])
@@ -215,15 +233,48 @@ def diffuse_expect(alpha_p, tl, f):
     return 10 * math.log10(A2 / (tau * S_PANEL)), A2, m
 
 
+SRC_TRANS = (2.1, 1.4, 1.45)
+RX_POS = {"R1a": (4.6, 2.9, 1.10), "R1b": (1.0, 3.9, 2.05), "R1c": (4.9, 0.8, 2.20), "R1d": (1.3, 4.3, 0.90)}
+
+
+def rect_omega(x1, x2, z1, z2, d):
+    """Solid angle of the rectangle [x1, x2] x [z1, z2] in a plane at distance d, seen from the foot
+    point's normal (signed corner decomposition)."""
+    def corner(a, b):
+        return math.copysign(1, a) * math.copysign(1, b) * math.atan(abs(a * b) / (d * math.sqrt(a * a + b * b + d * d)))
+    return corner(x2, z2) - corner(x1, z2) - corner(x2, z1) + corner(x1, z1)
+
+
 def analyse_trans(run, alpha_p):
+    """Plain: E2/E1 = tau S / A2 with E1, E2 the receivers' means. Refined: the same balance with the
+    two direct terms the plain form ignores taken out of the measurement, not modelled: each R1
+    receiver's direct pulse (its echogram from 1 step before the direct arrival to 2 steps after,
+    before any reflection can arrive) is removed from E1, and also gives the source's w/c through
+    D(r) = (w/c) / (4 pi r^2); the panel's direct share w Omega / (4 pi) is added to its incident
+    power: E2 = (4 tau / A2) [ (w/c) Omega / (4 pi) + S E1_rev / 4 ]."""
     out = {}
+    s = SRC_TRANS
+    om = rect_omega(0 - s[0], 6 - s[0], 0 - s[2], 3 - s[2], 5 - s[1])
     for band, tl in TL.items():
         f = float(band.split()[0])
+        tau = 10 ** (-tl / 10)
         e1 = [sum(recp(run, r)[band]) for r in ("R1a", "R1b", "R1c", "R1d")]
         e2 = [sum(recp(run, r)[band]) for r in ("R2a", "R2b", "R2c", "R2d")]
         dl = 10 * math.log10((sum(e1) / 4) / (sum(e2) / 4))
         pred, A2, m = diffuse_expect(alpha_p, tl, f)
-        out[band] = {"L1_minus_L2_dB": dl, "expect_dB": pred, "deviation_dB": dl - pred, "A2_m2": A2, "m_per_m": m,
+        rev, wc = [], []
+        for r, pos in RX_POS.items():
+            v = recp(run, r)[band]
+            dist = math.dist(pos, s)
+            i0 = int(dist / 343.2 / 0.001)
+            direct = sum(v[max(0, i0 - 1):i0 + 3])
+            rev.append(sum(v) - direct)
+            wc.append(direct * 4 * math.pi * dist * dist)
+        E2_ref = (4 * tau / A2) * ((sum(wc) / 4) * om / (4 * math.pi) + S_PANEL * (sum(rev) / 4) / 4)
+        pred_ref = 10 * math.log10((sum(e1) / 4) / E2_ref)
+        out[band] = {"L1_minus_L2_dB": dl, "expect_dB": pred, "deviation_dB": dl - pred,
+                     "expect_refined_dB": pred_ref, "deviation_refined_dB": dl - pred_ref,
+                     "panel_direct_share": om / (4 * math.pi), "A2_m2": A2, "m_per_m": m,
                      "R1_energies": e1, "R2_energies": e2}
     return out
 
