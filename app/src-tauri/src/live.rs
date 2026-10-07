@@ -108,7 +108,9 @@ impl Decoder {
             }
             let version = u32_at(b, 4);
             if version != STREAM_VERSION {
-                return Err(format!("live stream version {version}, this app reads {STREAM_VERSION}"));
+                return Err(format!(
+                    "live stream version {version}, this app reads {STREAM_VERSION}"
+                ));
             }
             let nb = u32_at(b, 20);
             if nb > MAX_BANDS {
@@ -122,7 +124,9 @@ impl Decoder {
                 time_step: f32_at(b, 8),
                 steps: u32_at(b, 12),
                 per_band: u32_at(b, 16),
-                bands: (0..nb as usize).map(|i| u32_at(b, 24 + 4 * i) as i32).collect(),
+                bands: (0..nb as usize)
+                    .map(|i| u32_at(b, 24 + 4 * i) as i32)
+                    .collect(),
             });
             at = len;
         }
@@ -133,7 +137,7 @@ impl Decoder {
                 break;
             }
             let len = u32_at(b, at);
-            if !(16..=MAX_FRAME).contains(&len) || (len - 16) % 16 != 0 {
+            if !(16..=MAX_FRAME).contains(&len) || !(len - 16).is_multiple_of(16) {
                 return Err(format!("live stream frame of {len} bytes"));
             }
             if b.len() < at + 4 + len as usize {
@@ -142,7 +146,9 @@ impl Decoder {
             let f = at + 4;
             let n = u32_at(b, f + 12);
             if 16 + 16 * n as u64 != u64::from(len) {
-                return Err(format!("live stream frame of {len} bytes holds {n} records"));
+                return Err(format!(
+                    "live stream frame of {len} bytes holds {n} records"
+                ));
             }
             let n = n as usize;
             let pos = f + 16;
@@ -152,7 +158,13 @@ impl Decoder {
                 index: u32_at(b, f + 4),
                 first_step: u32_at(b, f + 8),
                 positions: (0..n)
-                    .map(|k| [f32_at(b, pos + 12 * k), f32_at(b, pos + 12 * k + 4), f32_at(b, pos + 12 * k + 8)])
+                    .map(|k| {
+                        [
+                            f32_at(b, pos + 12 * k),
+                            f32_at(b, pos + 12 * k + 4),
+                            f32_at(b, pos + 12 * k + 8),
+                        ]
+                    })
                     .collect(),
                 energies: (0..n).map(|k| f32_at(b, en + 4 * k)).collect(),
             });
@@ -164,7 +176,11 @@ impl Decoder {
 }
 
 /// One band's frames as a LIVE v1 batch: the envelope, then PART v1.
-pub fn encode_batch(h: &StreamHeader, frames: &[LiveFrame], so_far: u32) -> Result<Vec<u8>, String> {
+pub fn encode_batch(
+    h: &StreamHeader,
+    frames: &[LiveFrame],
+    so_far: u32,
+) -> Result<Vec<u8>, String> {
     let band_hz = frames.first().map_or(0, |f| f.band_hz);
     let file = pbin::ParticleFile {
         header: pbin::FileHeader {
@@ -185,11 +201,23 @@ pub fn encode_batch(h: &StreamHeader, frames: &[LiveFrame], so_far: u32) -> Resu
             .collect(),
         steps: frames
             .iter()
-            .flat_map(|f| f.positions.iter().zip(&f.energies).map(|(p, e)| pbin::TimeStep { position: *p, energy: *e }))
+            .flat_map(|f| {
+                f.positions
+                    .iter()
+                    .zip(&f.energies)
+                    .map(|(p, e)| pbin::TimeStep {
+                        position: *p,
+                        energy: *e,
+                    })
+            })
             .collect(),
     };
     let part = encode_particles(&file, band_hz).map_err(|e| e.message.clone())?;
-    let band_pos = h.bands.iter().position(|&b| b == band_hz).map_or(u32::MAX, |p| p as u32);
+    let band_pos = h
+        .bands
+        .iter()
+        .position(|&b| b == band_hz)
+        .map_or(u32::MAX, |p| p as u32);
     let mut b = Vec::with_capacity(LIVE_HEADER + part.len());
     for v in [
         LIVE_MAGIC,
@@ -232,7 +260,9 @@ pub struct TailStats {
 
 /// The stream file of a run folder.
 pub fn stream_path(run_dir: &Path) -> PathBuf {
-    run_dir.join(simpa_core::run::manager::SOLVE_DIR).join(STREAM_FILE)
+    run_dir
+        .join(simpa_core::run::manager::SOLVE_DIR)
+        .join(STREAM_FILE)
 }
 
 /// The stream is kept when the solver was asked to keep it (`SPPS_GPU_STREAM=keep` in the
@@ -277,78 +307,85 @@ fn same_stream(file: &mut File, len: u64, at: u64, prefix: &[u8]) -> bool {
 /// is opened afresh at every poll and checked against what was read (`same_stream`); when it is
 /// another stream the reading starts again from its first byte, the count with it. When the path is
 /// gone (the solver removes it at its end) the last handle keeps reading what was written.
-pub fn spawn_tail<S>(path: PathBuf, poll: Duration, stop: Arc<AtomicBool>, mut sink: S) -> std::io::Result<JoinHandle<TailStats>>
+pub fn spawn_tail<S>(
+    path: PathBuf,
+    poll: Duration,
+    stop: Arc<AtomicBool>,
+    mut sink: S,
+) -> std::io::Result<JoinHandle<TailStats>>
 where
     S: FnMut(Vec<u8>) -> bool + Send + 'static,
 {
-    std::thread::Builder::new().name("live-tail".to_string()).spawn(move || {
-        let mut stats = TailStats::default();
-        let mut dec = Decoder::default();
-        let mut file: Option<File> = None;
-        let mut at = 0u64;
-        let mut so_far = 0u32;
-        let mut prefix: Vec<u8> = Vec::new();
-        loop {
-            let stopping = stop.load(Ordering::SeqCst);
-            if let Ok(mut now) = File::open(&path) {
-                let len = now.metadata().map(|m| m.len()).unwrap_or(0);
-                if file.is_some() && !same_stream(&mut now, len, at, &prefix) {
-                    dec = Decoder::default();
-                    at = 0;
-                    so_far = 0;
-                    prefix.clear();
-                    stats.resets += 1;
-                }
-                file = Some(now);
-            }
-            if let Some(f) = file.as_mut() {
-                let more = match read_more(f, &mut at) {
-                    Ok(m) => m,
-                    Err(e) => {
-                        stats.error = Some(format!("reading {}: {e}", path.display()));
-                        break;
+    std::thread::Builder::new()
+        .name("live-tail".to_string())
+        .spawn(move || {
+            let mut stats = TailStats::default();
+            let mut dec = Decoder::default();
+            let mut file: Option<File> = None;
+            let mut at = 0u64;
+            let mut so_far = 0u32;
+            let mut prefix: Vec<u8> = Vec::new();
+            loop {
+                let stopping = stop.load(Ordering::SeqCst);
+                if let Ok(mut now) = File::open(&path) {
+                    let len = now.metadata().map(|m| m.len()).unwrap_or(0);
+                    if file.is_some() && !same_stream(&mut now, len, at, &prefix) {
+                        dec = Decoder::default();
+                        at = 0;
+                        so_far = 0;
+                        prefix.clear();
+                        stats.resets += 1;
                     }
-                };
-                if prefix.len() < PREFIX {
-                    let take = (PREFIX - prefix.len()).min(more.len());
-                    prefix.extend_from_slice(&more[..take]);
+                    file = Some(now);
                 }
-                stats.bytes += more.len() as u64;
-                match dec.feed(&more) {
-                    Ok(frames) if !frames.is_empty() => {
-                        let h = dec.header().cloned().expect("frames follow the header");
-                        for group in by_band(frames) {
-                            so_far = so_far.saturating_add(group.len() as u32);
-                            stats.frames += group.len() as u64;
-                            match encode_batch(&h, &group, so_far) {
-                                Ok(b) => {
-                                    stats.batches += 1;
-                                    sink(b);
+                if let Some(f) = file.as_mut() {
+                    let more = match read_more(f, &mut at) {
+                        Ok(m) => m,
+                        Err(e) => {
+                            stats.error = Some(format!("reading {}: {e}", path.display()));
+                            break;
+                        }
+                    };
+                    if prefix.len() < PREFIX {
+                        let take = (PREFIX - prefix.len()).min(more.len());
+                        prefix.extend_from_slice(&more[..take]);
+                    }
+                    stats.bytes += more.len() as u64;
+                    match dec.feed(&more) {
+                        Ok(frames) if !frames.is_empty() => {
+                            let h = dec.header().cloned().expect("frames follow the header");
+                            for group in by_band(frames) {
+                                so_far = so_far.saturating_add(group.len() as u32);
+                                stats.frames += group.len() as u64;
+                                match encode_batch(&h, &group, so_far) {
+                                    Ok(b) => {
+                                        stats.batches += 1;
+                                        sink(b);
+                                    }
+                                    Err(e) => stats.error = Some(e),
                                 }
-                                Err(e) => stats.error = Some(e),
                             }
                         }
-                    }
-                    Ok(_) => {}
-                    Err(e) => {
-                        stats.error = Some(e);
-                        break;
+                        Ok(_) => {}
+                        Err(e) => {
+                            stats.error = Some(e);
+                            break;
+                        }
                     }
                 }
+                if stopping {
+                    break;
+                }
+                // Sleep in short slices so a stop is seen within a few milliseconds.
+                let mut slept = Duration::ZERO;
+                while slept < poll && !stop.load(Ordering::SeqCst) {
+                    let d = Duration::from_millis(10).min(poll - slept);
+                    std::thread::sleep(d);
+                    slept += d;
+                }
             }
-            if stopping {
-                break;
-            }
-            // Sleep in short slices so a stop is seen within a few milliseconds.
-            let mut slept = Duration::ZERO;
-            while slept < poll && !stop.load(Ordering::SeqCst) {
-                let d = Duration::from_millis(10).min(poll - slept);
-                std::thread::sleep(d);
-                slept += d;
-            }
-        }
-        stats
-    })
+            stats
+        })
 }
 
 #[cfg(test)]
@@ -359,7 +396,14 @@ mod tests {
 
     fn header(bands: &[i32]) -> Vec<u8> {
         let mut b = Vec::new();
-        for v in [STREAM_MAGIC, STREAM_VERSION, 0.001f32.to_bits(), 10_000, 400, bands.len() as u32] {
+        for v in [
+            STREAM_MAGIC,
+            STREAM_VERSION,
+            0.001f32.to_bits(),
+            10_000,
+            400,
+            bands.len() as u32,
+        ] {
             b.extend_from_slice(&v.to_le_bytes());
         }
         for &f in bands {
@@ -375,7 +419,9 @@ mod tests {
         }
         for k in 0..n {
             for c in 0..3 {
-                b.extend_from_slice(&(index as f32 + k as f32 * 0.5 + c as f32 * 0.25).to_le_bytes());
+                b.extend_from_slice(
+                    &(index as f32 + k as f32 * 0.5 + c as f32 * 0.25).to_le_bytes(),
+                );
             }
         }
         for k in 0..n {
@@ -399,7 +445,15 @@ mod tests {
         assert_eq!(d.header().unwrap().bands, vec![500, 1000]);
         assert_eq!(d.header().unwrap().per_band, 400);
         assert_eq!(f.len(), 3);
-        assert_eq!((f[0].band_hz, f[0].index, f[0].first_step, f[0].energies.len()), (500, 0, 3, 4));
+        assert_eq!(
+            (
+                f[0].band_hz,
+                f[0].index,
+                f[0].first_step,
+                f[0].energies.len()
+            ),
+            (500, 0, 3, 4)
+        );
         assert_eq!(f[0].positions[1], [0.5, 0.75, 1.0]);
         assert_eq!(f[0].energies[3].to_bits(), 0.25f32.to_bits());
         assert_eq!((f[2].band_hz, f[2].first_step), (1000, 7));
@@ -485,10 +539,15 @@ mod tests {
         let got: Arc<Mutex<Vec<Vec<u8>>>> = Arc::default();
         let sink_got = got.clone();
         let stop = Arc::new(AtomicBool::new(false));
-        let h = spawn_tail(path.clone(), Duration::from_millis(5), stop.clone(), move |b| {
-            sink_got.lock().unwrap().push(b);
-            true
-        })
+        let h = spawn_tail(
+            path.clone(),
+            Duration::from_millis(5),
+            stop.clone(),
+            move |b| {
+                sink_got.lock().unwrap().push(b);
+                true
+            },
+        )
         .unwrap();
         std::thread::sleep(Duration::from_millis(20)); // no file yet: waited for
         let s = stream();
@@ -532,10 +591,15 @@ mod tests {
         let got: Arc<Mutex<Vec<Vec<u8>>>> = Arc::default();
         let sink_got = got.clone();
         let stop = Arc::new(AtomicBool::new(false));
-        let h = spawn_tail(path.clone(), Duration::from_millis(5), stop.clone(), move |b| {
-            sink_got.lock().unwrap().push(b);
-            true
-        })
+        let h = spawn_tail(
+            path.clone(),
+            Duration::from_millis(5),
+            stop.clone(),
+            move |b| {
+                sink_got.lock().unwrap().push(b);
+                true
+            },
+        )
         .unwrap();
         let wait = |n: usize| {
             let t0 = std::time::Instant::now();
@@ -554,7 +618,11 @@ mod tests {
         let mut third = header(&[2000]);
         third.extend(frame(2000, 0, 0, 1));
         {
-            let mut f = std::fs::OpenOptions::new().write(true).truncate(true).open(&path).unwrap();
+            let mut f = std::fs::OpenOptions::new()
+                .write(true)
+                .truncate(true)
+                .open(&path)
+                .unwrap();
             f.write_all(&third).unwrap();
         }
         wait(3);
@@ -563,11 +631,22 @@ mod tests {
         assert_eq!(stats.error, None);
         assert_eq!(stats.resets, 2, "{stats:?}");
         let got = got.lock().unwrap();
-        let bands: Vec<i32> = got.iter().map(|b| u32_at(&b[LIVE_HEADER..], 24) as i32).collect();
+        let bands: Vec<i32> = got
+            .iter()
+            .map(|b| u32_at(&b[LIVE_HEADER..], 24) as i32)
+            .collect();
         assert_eq!(bands, vec![500, 1000, 2000]);
         let so_far: Vec<u32> = got.iter().map(|b| u32_at(b, 8)).collect();
-        assert_eq!(so_far, vec![3, 1, 1], "the count starts again with each stream");
-        assert_eq!(u32_at(&got[1][LIVE_HEADER..], 32), 2, "the new stream's own first step");
+        assert_eq!(
+            so_far,
+            vec![3, 1, 1],
+            "the count starts again with each stream"
+        );
+        assert_eq!(
+            u32_at(&got[1][LIVE_HEADER..], 32),
+            2,
+            "the new stream's own first step"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -25,8 +25,8 @@ use crate::examples;
 use crate::guard::{self, CmdError, CmdResult, lock};
 use crate::results_data::{self, EchogramView, ReportView, RunDataIndex};
 use crate::runs::{
-    self, GpuCache, GpuStatus, LibraryMaterial, LibrarySpectrum, ResultsState, RunSlot, RunStarted, RunStreamBatch,
-    RunsView, SolversCache, SolversStatus,
+    self, GpuCache, GpuStatus, LibraryMaterial, LibrarySpectrum, ResultsState, RunSlot, RunStarted,
+    RunStreamBatch, RunsView, SolversCache, SolversStatus,
 };
 use crate::scene::{EditOutcome, SceneState};
 use crate::selftest::Selftest;
@@ -512,7 +512,9 @@ pub async fn run_start(
             &solver,
             device.as_deref(),
             on_event,
-            Some(Box::new(move |b: Vec<u8>| on_live.send(Response::new(b)).is_ok())),
+            Some(Box::new(move |b: Vec<u8>| {
+                on_live.send(Response::new(b)).is_ok()
+            })),
         )
     })
     .await

@@ -371,7 +371,12 @@ describe('M11 gate', () => {
     console.log(`m11-b38 receipt: Results step: ${JSON.stringify(r)}`);
     assert.equal(r.run, run);
     assert.deepEqual(r.codes, ['SOLVER_BUILD_UNRECORDED'], 'the reason code is shown');
-    assert.ok(r.text.includes('solver_build_unrecorded'), `the core code is shown: ${r.text}`);
+    // Re-pinned 2026-10-07 (C4): since 4677293 (10-06, "Run reasons in words", the UI study's
+    // increment 2) a reason on this step reads as its sentence (reasonWords.ts) with the UI code
+    // after it; the core code is on the Runs tab (checked below as the row's data-build-code, and
+    // as run_results' code). The sentence for the core's code must be the one shown.
+    assert.ok(r.text.includes('This run did not record which solver build made it.'), `the reason's sentence is shown: ${r.text}`);
+    assert.ok(r.text.includes('SOLVER_BUILD_UNRECORDED'), `the UI code is shown: ${r.text}`);
     assert.ok(!r.text.includes('Results verified'), `an unverified run reads "Results verified": ${r.text}`);
     assert.equal(r.results, 0, 'no [data-result] element');
     assert.ok(!/\d/.test(r.unlabelled), `a digit on the Results step outside [data-run-label]: ${r.unlabelled}`);

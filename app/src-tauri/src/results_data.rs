@@ -226,8 +226,10 @@ struct Loaded {
 /// `run_data` and `run_echogram` at once (2026-10-06 17:24: the app reached 6.5 GB on their
 /// concurrent loads). The results kept are summaries (`SurfaceFile`), so the cache is small; it is
 /// bounded anyway ([`CACHE_RUNS`]).
-static CACHE: LazyLock<Mutex<HashMap<PathBuf, Arc<Mutex<Option<Loaded>>>>>> =
-    LazyLock::new(Mutex::default);
+static CACHE: LazyLock<Mutex<HashMap<PathBuf, Slot>>> = LazyLock::new(Mutex::default);
+
+/// One run's place in [`CACHE`]: empty until loaded, held while a load runs.
+type Slot = Arc<Mutex<Option<Loaded>>>;
 
 /// Runs kept at once. One is viewed at a time; a few more cover switching back and forth. The
 /// unit tests share this process-wide cache across every test running in parallel, so there the
@@ -243,7 +245,7 @@ fn unpoisoned<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 
 /// The slot for `dir`, made if absent; the oldest-inserted slots are dropped past the bound (a
 /// dropped slot's results live on in any command still holding their `Arc`).
-fn slot_for(dir: &Path) -> Arc<Mutex<Option<Loaded>>> {
+fn slot_for(dir: &Path) -> Slot {
     let key = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
     let mut cache = unpoisoned(&CACHE);
     if let Some(s) = cache.get(&key) {
@@ -252,10 +254,10 @@ fn slot_for(dir: &Path) -> Arc<Mutex<Option<Loaded>>> {
     if cache.len() >= CACHE_RUNS {
         // HashMap has no order; drop every slot that is not loaded, then any one if still full.
         cache.retain(|_, s| unpoisoned(s).is_some());
-        if cache.len() >= CACHE_RUNS {
-            if let Some(k) = cache.keys().next().cloned() {
-                cache.remove(&k);
-            }
+        if cache.len() >= CACHE_RUNS
+            && let Some(k) = cache.keys().next().cloned()
+        {
+            cache.remove(&k);
         }
     }
     cache.entry(key).or_default().clone()
@@ -269,10 +271,10 @@ fn load_cached(dir: &Path) -> Result<Arc<RunResults>, results::Refusal> {
     let fingerprint = Fingerprint::of(&dir.join(simpa_core::run::manifest::FILE_NAME));
     let slot = slot_for(dir);
     let mut held = unpoisoned(&slot);
-    if let (Some(fp), Some(l)) = (&fingerprint, held.as_ref()) {
-        if l.fingerprint == *fp {
-            return Ok(l.results.clone());
-        }
+    if let (Some(fp), Some(l)) = (&fingerprint, held.as_ref())
+        && l.fingerprint == *fp
+    {
+        return Ok(l.results.clone());
     }
     let results = Arc::new(results::load(dir)?);
     if let Some(fp) = fingerprint {
@@ -592,13 +594,14 @@ pub fn surface_map_bytes_within(
     let records: usize = file.receivers.iter().map(|r| r.records).sum();
     let per_bin = bin_factor(file, records, max_records, max_texels);
     // `load` already read and checked this file; it is read again here, encoded, and dropped.
-    let data = csbin::read_file_binned(&r.folder.join("solve").join(&file.path), per_bin)
-        .map_err(|e| {
+    let data = csbin::read_file_binned(&r.folder.join("solve").join(&file.path), per_bin).map_err(
+        |e| {
             CmdError::new(
                 "MAP_UNREADABLE",
                 format!("run '{run}': surface map '{path}' does not read now: {e}"),
             )
-        })?;
+        },
+    )?;
     encode_surface(&data)
 }
 
@@ -870,9 +873,13 @@ mod tests {
         let d = data_index(&root, RUN).unwrap();
         assert!(d.data.is_none());
         assert_eq!(d.state, v.state);
-        let e =
-            surface_map_bytes(&root, RUN, "Surface receiver/Global/Sound level.csbin", None)
-                .unwrap_err();
+        let e = surface_map_bytes(
+            &root,
+            RUN,
+            "Surface receiver/Global/Sound level.csbin",
+            None,
+        )
+        .unwrap_err();
         assert_eq!(e.code, "RESULTS_REFUSED", "{e:?}");
         std::fs::remove_dir_all(&dir).unwrap();
     }
@@ -990,7 +997,10 @@ mod tests {
             .filter(|s| s.band_hz.is_some() && !s.cutting_plane)
             .max_by_key(|s| s.records)
             .unwrap();
-        assert!(info.time_step_count > 4 && info.records > info.faces, "{info:?}");
+        assert!(
+            info.time_step_count > 4 && info.records > info.faces,
+            "{info:?}"
+        );
         let file = csbin::read_file(&root.join(RUN).join("solve").join(&info.path)).unwrap();
         // Two bins a face at most.
         let max = info.faces * 2;
@@ -1011,11 +1021,7 @@ mod tests {
         let off = HEADER + 12 * nn + 16 * nf;
         let steps = off + 4 * (nf + 1);
         let vals = steps + 4 * nr;
-        let faces: Vec<&csbin::Face> = file
-            .receivers
-            .iter()
-            .flat_map(|r| r.faces.iter())
-            .collect();
+        let faces: Vec<&csbin::Face> = file.receivers.iter().flat_map(|r| r.faces.iter()).collect();
         for (k, f) in faces.iter().enumerate() {
             let (lo, hi) = (
                 u32_at(&b, off + 4 * k) as usize,
@@ -1036,19 +1042,27 @@ mod tests {
         }
         // Within the bound: the file's own records, as `surface_map_bytes` serves them.
         let own = surface_map_bytes_within(&root, RUN, &info.path, info.records, u64::MAX).unwrap();
-        assert_eq!(own, surface_map_bytes(&root, RUN, &info.path, None).unwrap());
+        assert_eq!(
+            own,
+            surface_map_bytes(&root, RUN, &info.path, None).unwrap()
+        );
         assert_eq!(u32_at(&own, 16) as usize, info.records);
         assert_eq!(u32_at(&own, 20), info.time_step_count);
         // The texel bound alone: three steps a face at most, whatever the records.
-        let t = surface_map_bytes_within(&root, RUN, &info.path, usize::MAX, (info.faces * 3) as u64)
-            .unwrap();
+        let t =
+            surface_map_bytes_within(&root, RUN, &info.path, usize::MAX, (info.faces * 3) as u64)
+                .unwrap();
         assert!(u32_at(&t, 20) <= 3, "{} steps served", u32_at(&t, 20));
         assert!((u32_at(&t, 12) as u64) * u64::from(u32_at(&t, 20)) <= (info.faces * 3) as u64);
         // The cutting plane and Global files take the same road.
         for s in d.surfaces.iter().filter(|s| s.path != info.path) {
             let cap = (s.faces * 2).max(1);
             let b = surface_map_bytes_within(&root, RUN, &s.path, cap, u64::MAX).unwrap();
-            assert!(u32_at(&b, 16) as usize <= cap.max(s.records.min(cap)), "{}", s.path);
+            assert!(
+                u32_at(&b, 16) as usize <= cap.max(s.records.min(cap)),
+                "{}",
+                s.path
+            );
         }
         std::fs::remove_dir_all(&dir).unwrap();
     }
@@ -1061,7 +1075,10 @@ mod tests {
         let (_, a) = open(&root, RUN).unwrap();
         let (_, b) = open(&root, RUN).unwrap();
         let (a, b) = (a.unwrap(), b.unwrap());
-        assert!(Arc::ptr_eq(&a, &b), "the second open is the first's results");
+        assert!(
+            Arc::ptr_eq(&a, &b),
+            "the second open is the first's results"
+        );
         // The data reads share it too.
         let c = loaded(&root, RUN).unwrap();
         assert!(Arc::ptr_eq(&a, &c));
@@ -1094,7 +1111,10 @@ mod tests {
         let saved = std::fs::read(&recp).unwrap();
         std::fs::remove_file(&recp).unwrap();
         forget_all();
-        assert!(open(&root, RUN).unwrap().1.is_none(), "refused without the file");
+        assert!(
+            open(&root, RUN).unwrap().1.is_none(),
+            "refused without the file"
+        );
         std::fs::write(&recp, &saved).unwrap();
         assert!(open(&root, RUN).unwrap().1.is_some(), "loads once repaired");
         std::fs::remove_dir_all(&dir).unwrap();

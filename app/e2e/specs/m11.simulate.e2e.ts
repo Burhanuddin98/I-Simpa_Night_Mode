@@ -235,13 +235,15 @@ describe('M11 simulate', () => {
     const blockers = await blockersOf('[data-part="run"]');
     console.log(`m11-sim-preflight receipt: hall rows ${JSON.stringify(hall)}; data-blockers ${blockers.join(' ')}`);
     const materials = hall.find((r) => r.key === 'materials');
-    assert.deepEqual([materials?.state, materials?.label], ['FAIL', 'FAIL'], 'the materials row fails, as text');
+    // Re-pinned 2026-10-07 (C4): the row's words are Ready / Blocked since 0aaae74 (10-06, "Step
+    // labels and badges in words", Burhan's 04:55 order); data-state still carries OK / FAIL.
+    assert.deepEqual([materials?.state, materials?.label], ['FAIL', 'Blocked'], 'the materials row fails, as text');
     assert.ok(materials?.codes.includes('MATERIALS_UNASSIGNED'), `materials codes: ${materials?.codes}`);
     assert.equal(hall.find((r) => r.key === 'model')?.state, 'OK', 'the corrected hall passes its model check');
     // Every blocker of the Run button is named on a FAIL row: the list never reads OK while Run is blocked.
     const onFail = new Set(hall.filter((r) => r.state === 'FAIL').flatMap((r) => r.codes));
     for (const b of blockers) if (b !== 'RUN_ACTIVE') assert.ok(onFail.has(b), `${b} is on no FAIL row`);
-    for (const r of hall) assert.ok(['OK', 'FAIL'].includes(r.label), `${r.key}: label '${r.label}'`);
+    for (const r of hall) assert.equal(r.label, r.state === 'OK' ? 'Ready' : 'Blocked', `${r.key}: label '${r.label}' for state ${r.state}`);
 
     // Control: the box may run, so every row reads OK and Run carries no blocker.
     await m10.openProject(box);
@@ -252,9 +254,11 @@ describe('M11 simulate', () => {
     const rows = await preflight();
     assert.deepEqual(
       rows.map((r) => r.key),
-      ['materials', 'model', 'source', 'receivers', 'air', 'solvers'],
+      // Re-pinned 2026-10-07 (C4): 0959499 (10-06, the result cube sized before every SPPS run,
+      // Burhan 06:39) added the memory row, between air and solvers.
+      ['materials', 'model', 'source', 'receivers', 'air', 'memory', 'solvers'],
     );
-    assert.ok(rows.every((r) => r.label === 'OK' && r.codes.length === 0));
+    assert.ok(rows.every((r) => r.label === 'Ready' && r.codes.length === 0));
     assert.deepEqual(await blockersOf('[data-part="run"]'), []);
     assert.deepEqual(await blockersOf('[data-part="run-panel"]'), []);
 

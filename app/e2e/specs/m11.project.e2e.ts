@@ -284,8 +284,11 @@ describe('M11 project', () => {
     };
     const assigned = p.surface_groups.filter((g) => !placeholder(g.material)).length;
     const s = await subs();
-    assert.equal(s.materials, `${assigned} / ${p.surface_groups.length}`);
-    assert.equal(s.sources, `${p.sources.filter((x) => x.enabled).length} · ${p.point_receivers.length}`);
+    // Re-pinned 2026-10-07 (C4): the subs are in words since 0aaae74 (10-06, "Step labels and
+    // badges in words", Burhan's 04:55 order; sceneModel.ts stepSubs), the counts unchanged.
+    const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
+    assert.equal(s.materials, `${assigned} of ${p.surface_groups.length} set`);
+    assert.equal(s.sources, `${plural(p.sources.filter((x) => x.enabled).length, 'source')} · ${plural(p.point_receivers.length, 'receiver')}`);
 
     // Its notes are INFO lines.
     const info = await consoleText('INFO');

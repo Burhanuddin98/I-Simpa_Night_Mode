@@ -427,9 +427,13 @@ pub fn edge_hint_folder(solve: &Path) -> Option<String> {
     let bytes = std::fs::read(solve.join(names::CONFIG)).ok()?;
     let text = String::from_utf8_lossy(bytes.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&bytes));
     let doc = Document::parse(&text).ok()?;
-    let mbin_name = expect::child(doc.root_element(), "simulation")?.attribute("tetrameshFileName")?;
+    let mbin_name =
+        expect::child(doc.root_element(), "simulation")?.attribute("tetrameshFileName")?;
     let mesh = mbin::read_file(&solve.join(mbin_name)).ok()?;
-    let names: Vec<String> = sources_on_edges(&doc, &mesh).iter().map(|p| p.label.clone()).collect();
+    let names: Vec<String> = sources_on_edges(&doc, &mesh)
+        .iter()
+        .map(|p| p.label.clone())
+        .collect();
     edge_hint(&names)
 }
 
@@ -439,7 +443,10 @@ pub fn edge_hint(names: &[String]) -> Option<String> {
         return None;
     }
     Some(if names.len() == 1 {
-        format!("Source {} sits on an edge of the room mesh; move it a few centimetres.", names[0])
+        format!(
+            "Source {} sits on an edge of the room mesh; move it a few centimetres.",
+            names[0]
+        )
     } else {
         format!(
             "Sources {} sit on edges of the room mesh; move them a few centimetres.",
@@ -531,7 +538,12 @@ mod tests {
                 id_volume: 0,
                 faces: [face; 4],
             }],
-            nodes: vec![[0.0, 0.0, 0.0], [6.0, 0.0, 0.0], [0.0, 10.0, 0.0], [6.0, 10.0, 3.0]],
+            nodes: vec![
+                [0.0, 0.0, 0.0],
+                [6.0, 0.0, 0.0],
+                [0.0, 10.0, 0.0],
+                [6.0, 10.0, 3.0],
+            ],
         };
         let config = |x: &str, y: &str, z: &str| {
             format!(
@@ -549,7 +561,10 @@ mod tests {
         ] {
             let text = config(x, y, z);
             let doc = Document::parse(&text).unwrap();
-            let named: Vec<String> = sources_on_edges(&doc, &mesh).into_iter().map(|p| p.label).collect();
+            let named: Vec<String> = sources_on_edges(&doc, &mesh)
+                .into_iter()
+                .map(|p| p.label)
+                .collect();
             assert_eq!(named == ["S1"], on, "({x}, {y}, {z}): {named:?}");
         }
         assert_eq!(
