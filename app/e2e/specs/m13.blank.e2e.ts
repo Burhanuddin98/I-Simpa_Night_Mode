@@ -307,7 +307,7 @@ describe('C1: a blank geometry to results', () => {
   const ids: Record<string, string> = {};
 
   before(async () => {
-    await waitForHooks(['idle', 'openImportDialog', 'projectJson', 'undo', 'redo', 'undoDepth', 'setStep', 'selection', 'aimAtFace', 'frame', 'saveAs', 'runsRows', 'waitRun', 'selectRun', 'dockTab', 'materialLibrary', 'm12Map']);
+    await waitForHooks(['idle', 'openImportDialog', 'projectJson', 'undo', 'redo', 'undoDepth', 'setStep', 'selection', 'aimAtFace', 'frame', 'saveAs', 'runsRows', 'waitRun', 'selectRun']);
     mkdirSync(path.join(WORK(), 'blank'), { recursive: true });
     mkdirSync(path.join(WORK(), 'grouped'), { recursive: true });
     writeBox(blank(), false);
