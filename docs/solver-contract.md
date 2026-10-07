@@ -368,8 +368,8 @@ TCR returns `MainProcess`'s value (`main_tc.cpp:160-173`):
 | `source_on_surface` | stderr | `^A sound source position is intersecting with the 3D model` | FAIL | `sppsNantes.cpp:323` |
 | `source_not_located` | stderr | `^Unable to find the source position!` (no newline; unreachable in practice) | FAIL | `sppsNantes.cpp:63` |
 | `particle_loss_reported` | stderr | `^Warning (\d+) particles has been in error on (\d+) particles\.` (no newline) | FAIL | `sppsNantes.cpp:425-439` |
-| `spps_gpu_refused` | stderr | `^spps-gpu: refused: [a-z_]+: ` (our GPU build of SPPS, decision 70: a project it does not take, or no CUDA device; exit 2) | FAIL | `solvers/spps-gpu/src/main.cu:372, 383, 443` |
-| `child_pool_overflow` | stderr | `^spps-gpu: (failed: child_pool_overflow\|warning: child_queue_overflow): ` (spps-gpu lost transmitted children, decision 72: the child pool was full, exit 2 and no receiver file; or an older build's dropped-children count, exit 0 with every file written, which must not pass as OK) | FAIL | `solvers/spps-gpu/src/main.cu:805` |
+| `spps_gpu_refused` | stderr | `^spps-gpu: refused: [a-z_]+: ` (our GPU build of SPPS, decision 70: a project it does not take, no CUDA device, or too little free device memory for the child pool, gpu_memory_low; exit 2) | FAIL | `solvers/spps-gpu/src/main.cu:483, 494, 557, 626` |
+| `child_pool_overflow` | stderr | `^spps-gpu: (failed: child_pool_overflow\|warning: child_queue_overflow): ` (spps-gpu lost transmitted children, decision 72: the child pool was full, exit 2, no receiver file and the earlier bands' files removed; or an older build's dropped-children count, exit 0 with every file written, which must not pass as OK) | FAIL | `solvers/spps-gpu/src/main.cu:837` |
 | `unclassified_line` | either | anything else | WARN | – |
 
 Notes on the classifier:

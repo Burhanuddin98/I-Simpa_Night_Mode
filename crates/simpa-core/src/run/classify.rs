@@ -295,7 +295,7 @@ pub const LINE_RULES: [LineRule; 24] = [
         ERR,
         Some(r"^spps-gpu: refused: [a-z_]+: "),
         Fail,
-        "solvers/spps-gpu/src/main.cu:372, 383, 443",
+        "solvers/spps-gpu/src/main.cu:483, 494, 557, 626",
     ),
     // spps-gpu lost transmitted children (decision 72, A6): a build with the child pool prints
     // `failed: child_pool_overflow` and exits 2; an older one printed `warning:
@@ -305,7 +305,7 @@ pub const LINE_RULES: [LineRule; 24] = [
         ERR,
         Some(r"^spps-gpu: (failed: child_pool_overflow|warning: child_queue_overflow): "),
         Fail,
-        "solvers/spps-gpu/src/main.cu:805",
+        "solvers/spps-gpu/src/main.cu:837",
     ),
     rule(UNCLASSIFIED, None, None, Warn, ""),
 ];

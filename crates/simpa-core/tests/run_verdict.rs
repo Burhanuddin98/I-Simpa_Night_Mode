@@ -260,12 +260,12 @@ fn fail_sample(id: &str) -> Vec<Line> {
                  result may be wrong, please check the particles statitics file for more details.",
             )
         }],
-        // spps-gpu.exe's refusal, exit 2 (decision 70; solvers/spps-gpu/src/main.cu:372).
+        // spps-gpu.exe's refusal, exit 2 (decision 70; solvers/spps-gpu/src/main.cu:483).
         "spps_gpu_refused" => vec![err(
             "spps-gpu: refused: fittings_unsupported: SPPS on the GPU does not support fittings in \
              this version; run SPPS on the CPU, or turn fittings off",
         )],
-        // spps-gpu's lost children (decision 72, A6; solvers/spps-gpu/src/main.cu:805).
+        // spps-gpu's lost children (decision 72, A6; solvers/spps-gpu/src/main.cu:837).
         "child_pool_overflow" => vec![err(
             "spps-gpu: failed: child_pool_overflow: 45000 transmitted particles did not fit the \
              child pool (1000 entries, 0 MiB) at 500 Hz, energy 3.40421e-07 J (0.0101965 of the \
