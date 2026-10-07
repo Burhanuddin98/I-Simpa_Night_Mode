@@ -9,7 +9,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 FIX = os.path.join(REPO, "tests", "fixtures", "results")
 CR4 = r"B:\repos\I-Simpa_Night_Mode\.out\ui\cr4-27\runs\20261006-193146-930-spps\solve"
-OUT = r"B:\repos\I-Simpa_Night_Mode\.out\spps-gpu\bed"
+OUT = os.environ.get("BED_OUT", r"B:\repos\I-Simpa_Night_Mode\.out\spps-gpu\bed")   # A6: .out\a6\a2bed
 
 # case: (source solve folder, simulation attributes). Particle counts raised above the fixtures' own
 # (2,000 and 50,000) so the parameters leave the noise model's "uncalibrated" region; equal in both arms.

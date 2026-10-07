@@ -14,13 +14,16 @@ import json, os, subprocess, sys, time
 sys.path.insert(0, os.path.dirname(__file__))
 import stage  # noqa: E402
 
-# Each overridable by SPPS_GPU_BED_<NAME>, for a bed run by another step (B3).
-_E = os.environ.get
-REPO = _E("SPPS_GPU_BED_REPO", r"B:\repos\I-Simpa_Night_Mode\.claude\worktrees\spps-gpu")
-OUT = _E("SPPS_GPU_BED_OUT", r"B:\repos\I-Simpa_Night_Mode\.out\spps-gpu\bed")
-SIMPA = _E("SPPS_GPU_BED_SIMPA", r"C:\tmp\nm-target\release\simpa.exe")
-SPPS = _E("SPPS_GPU_BED_SPPS", r"C:\tmp\nm-solvers-timebin\bin\spps.exe")
-GPU = _E("SPPS_GPU_BED_EXE", r"C:\tmp\nm-spps-gpu\bin\spps-gpu.exe")
+# Each overridable, for a bed run by another step: SPPS_GPU_BED_<NAME> (B3's names) or BED_<NAME> (A6's).
+def _E(name, default):
+    return os.environ.get("SPPS_GPU_BED_" + name) or os.environ.get("BED_" + name) or default
+
+
+REPO = _E("REPO", r"B:\repos\I-Simpa_Night_Mode\.claude\worktrees\spps-gpu")
+OUT = _E("OUT", r"B:\repos\I-Simpa_Night_Mode\.out\spps-gpu\bed")
+SIMPA = _E("SIMPA", r"C:\tmp\nm-target\release\simpa.exe")
+SPPS = _E("SPPS", r"C:\tmp\nm-solvers-timebin\bin\spps.exe")
+GPU = os.environ.get("SPPS_GPU_BED_EXE") or _E("GPU", r"C:\tmp\nm-spps-gpu\bin\spps-gpu.exe")
 
 
 def override_manifest():

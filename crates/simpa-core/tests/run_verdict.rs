@@ -260,10 +260,17 @@ fn fail_sample(id: &str) -> Vec<Line> {
                  result may be wrong, please check the particles statitics file for more details.",
             )
         }],
-        // spps-gpu.exe's refusal, exit 2 (decision 70; solvers/spps-gpu/src/main.cu:372).
+        // spps-gpu.exe's refusal, exit 2 (decision 70; solvers/spps-gpu/src/main.cu:483).
         "spps_gpu_refused" => vec![err(
             "spps-gpu: refused: fittings_unsupported: SPPS on the GPU does not support fittings in \
              this version; run SPPS on the CPU, or turn fittings off",
+        )],
+        // spps-gpu's lost children (decision 72, A6; solvers/spps-gpu/src/main.cu:837).
+        "child_pool_overflow" => vec![err(
+            "spps-gpu: failed: child_pool_overflow: 45000 transmitted particles did not fit the \
+             child pool (1000 entries, 0 MiB) at 500 Hz, energy 3.40421e-07 J (0.0101965 of the \
+             band's source energy) dropped; the run is stopped and its results are not written; \
+             run SPPS on the CPU",
         )],
         other => panic!("no sample for {other}"),
     }
@@ -276,7 +283,7 @@ fn each_fail_line_is_its_own_reason_code() {
         .filter(|r| r.class == LineClass::Fail)
         .map(|r| r.id)
         .collect();
-    assert_eq!(fails.len(), 12);
+    assert_eq!(fails.len(), 13);
     for solver in [SolverKind::Spps, SolverKind::Tcr] {
         let exp = tutorial1_expectation(solver);
         for id in &fails {
@@ -317,6 +324,59 @@ fn a_continuation_path_is_part_of_the_reason() {
         assert!(v.reasons[0].detail.contains(path), "{v:#?}");
         assert!(v.reasons[0].detail.ends_with("(2 lines)"), "{v:#?}");
     }
+}
+
+/// A6 (decision 72): spps-gpu's stderr when transmitted children are lost. The old build's line,
+/// verbatim from A4's `trans` run (`.out/a4/bed/runs/trans/20261007-101856-567-spps`), came with
+/// exit 0, every file and `End of calculation.`, and that run's verdict was OK with the line an
+/// `unclassified_line` warning. The new build's line comes with exit 2 and no receiver file.
+#[test]
+fn a6_lost_transmitted_children_fail_the_run_from_either_build() {
+    let exp = tutorial1_expectation(SolverKind::Spps);
+    // the old build: exit 0, a complete run, two overflow lines (one per band)
+    let mut lines = clean_spps_lines();
+    lines.splice(
+        1..1,
+        [
+            line(
+                Stream::Stderr,
+                "spps-gpu: warning: child_queue_overflow: 3968312 transmitted particles dropped at \
+                 500 Hz (queue of 16 per particle), energy 6.87536e-09 J",
+            ),
+            line(
+                Stream::Stderr,
+                "spps-gpu: warning: child_queue_overflow: 104146 transmitted particles dropped at \
+                 1000 Hz (queue of 16 per particle), energy 2.4335e-11 J",
+            ),
+        ],
+    );
+    let v = verdict_of(
+        SolverKind::Spps,
+        &exited(0),
+        &lines,
+        &exp,
+        &good_outputs(&exp),
+        DEFAULT_LOSS_LIMIT,
+    );
+    assert_only(&v, Status::Fail, "child_pool_overflow");
+    assert!(v.warnings.is_empty(), "{v:#?}");
+    assert!(v.reasons[0].detail.contains("3968312 transmitted particles dropped at 500 Hz"));
+    assert!(v.reasons[0].detail.ends_with("(2 lines)"), "{v:#?}");
+    // the new build: exit 2, the band's output stopped before any receiver file
+    let mut lines = clean_spps_lines();
+    lines.retain(|l| l.text != "End of calculation.");
+    lines.extend(fail_sample("child_pool_overflow"));
+    let v = verdict_of(
+        SolverKind::Spps,
+        &exited(2),
+        &lines,
+        &exp,
+        &Outputs::default(),
+        DEFAULT_LOSS_LIMIT,
+    );
+    assert_eq!(v.codes(), [EXIT_NONZERO, "child_pool_overflow"], "{v:#?}");
+    assert_eq!(v.status, Status::Fail);
+    assert!(v.reasons[1].detail.contains("did not fit the child pool"));
 }
 
 #[test]

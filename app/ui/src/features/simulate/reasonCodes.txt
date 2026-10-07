@@ -8,6 +8,7 @@ band_set_empty
 band_set_mismatch
 bands
 cancelled
+child_pool_overflow
 config_attribute_missing
 config_path_missing
 config_value_format

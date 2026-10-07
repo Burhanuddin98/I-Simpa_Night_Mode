@@ -20,7 +20,8 @@ import xml.etree.ElementTree as ET
 ROOTS = [os.path.normcase(os.path.abspath(p)) + os.sep for p in (
     os.environ["SPPS_GPU_BED_ROOTS"].split(os.pathsep) if os.environ.get("SPPS_GPU_BED_ROOTS")
     else (r"B:\repos\I-Simpa_Night_Mode\.out\spps-gpu", r"C:\tmp\nm-spps-gpu",
-          r"B:\repos\I-Simpa_Night_Mode\.out\a4", r"C:\tmp\nm-a4"))]
+          r"B:\repos\I-Simpa_Night_Mode\.out\a4", r"C:\tmp\nm-a4",
+          r"B:\repos\I-Simpa_Night_Mode\.out\a6", r"C:\tmp\nm-a6"))]
 INPUTS = ("config.xml", "mesh.cbin", "tetramesh.mbin")
 
 
