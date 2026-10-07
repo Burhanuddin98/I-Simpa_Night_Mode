@@ -1,7 +1,9 @@
 # I-Simpa Night Mode: Windows build for testing (2026-10-07)
 
-**Download:** `I-Simpa-Night-Mode-2026-10-07-2e6345a-win64.zip` on this branch (8.3 MB).
-sha256 `9422ff841b9c2c9d189fb60babca22998230e7d3148d704d67fc95c458a35759`.
+**Download:** `I-Simpa-Night-Mode-2026-10-07-2e6345a-win64.zip` on this branch (8.3 MB), sha256
+`9422ff841b9c2c9d189fb60babca22998230e7d3148d704d67fc95c458a35759`. The same files, unzipped, are in the folder
+`I-Simpa-Night-Mode-2026-10-07-2e6345a/` (`app.exe`, and `solvers/` with `spps-gpu.exe` and the other four), for a
+single file: open it and use "Download raw file". Keep `app.exe` and `solvers\` side by side.
 
 Built from commit `2e6345a` (the `rebuild` branch). This branch holds only the built package, kept apart from the
 code's history; it is a stop-gap until the build is published as a GitHub Release.
