@@ -224,6 +224,8 @@ pub struct TailStats {
     pub frames: u64,
     pub batches: u64,
     pub bytes: u64,
+    /// Times the file at the path turned out to be another stream and reading started again.
+    pub resets: u64,
     /// Why reading stopped early, if it did.
     pub error: Option<String>,
 }
@@ -242,9 +244,25 @@ fn read_more(file: &mut File, at: &mut u64) -> std::io::Result<Vec<u8>> {
     Ok(more)
 }
 
+/// How many bytes of the stream's start identify it (the header and the start of its first frame).
+const PREFIX: usize = 64;
+
+/// Whether the file now at the path is still the stream read so far: not shorter than what was read,
+/// and starting with the same bytes. A stream truncated and rewritten, or replaced by another file
+/// (a reused folder, an old stream the solver then rewrites), is not.
+fn same_stream(file: &mut File, len: u64, at: u64, prefix: &[u8]) -> bool {
+    if len < at {
+        return false;
+    }
+    let mut head = vec![0u8; prefix.len()];
+    file.seek(SeekFrom::Start(0)).is_ok() && file.read_exact(&mut head).is_ok() && head == prefix
+}
+
 /// Tails `path` every `poll` until `stop` is set, sending each band's new particles to `sink` as a
-/// LIVE v1 batch. The file may not exist yet (the solver has not started): it is waited for. The
-/// solver removes it at its end; an open handle keeps reading what was written.
+/// LIVE v1 batch. The file may not exist yet (the solver has not started): it is waited for. The path
+/// is opened afresh at every poll and checked against what was read (`same_stream`); when it is
+/// another stream the reading starts again from its first byte, the count with it. When the path is
+/// gone (the solver removes it at its end) the last handle keeps reading what was written.
 pub fn spawn_tail<S>(path: PathBuf, poll: Duration, stop: Arc<AtomicBool>, mut sink: S) -> std::io::Result<JoinHandle<TailStats>>
 where
     S: FnMut(Vec<u8>) -> bool + Send + 'static,
@@ -255,10 +273,19 @@ where
         let mut file: Option<File> = None;
         let mut at = 0u64;
         let mut so_far = 0u32;
+        let mut prefix: Vec<u8> = Vec::new();
         loop {
             let stopping = stop.load(Ordering::SeqCst);
-            if file.is_none() {
-                file = File::open(&path).ok();
+            if let Ok(mut now) = File::open(&path) {
+                let len = now.metadata().map(|m| m.len()).unwrap_or(0);
+                if file.is_some() && !same_stream(&mut now, len, at, &prefix) {
+                    dec = Decoder::default();
+                    at = 0;
+                    so_far = 0;
+                    prefix.clear();
+                    stats.resets += 1;
+                }
+                file = Some(now);
             }
             if let Some(f) = file.as_mut() {
                 let more = match read_more(f, &mut at) {
@@ -268,6 +295,10 @@ where
                         break;
                     }
                 };
+                if prefix.len() < PREFIX {
+                    let take = (PREFIX - prefix.len()).min(more.len());
+                    prefix.extend_from_slice(&more[..take]);
+                }
                 stats.bytes += more.len() as u64;
                 match dec.feed(&more) {
                     Ok(frames) if !frames.is_empty() => {
@@ -467,6 +498,62 @@ mod tests {
         let got = got.lock().unwrap();
         assert_eq!(got.len(), 2);
         assert_eq!(u32_at(&got[1], 8), 3, "so far counts the run");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A stream replaced while it is tailed (deleted and written again with another header), and one
+    /// truncated and rewritten shorter: each time the tail starts again from the new file's first
+    /// byte and counts afresh; nothing of the old stream is decoded as the new one.
+    #[test]
+    fn a_replaced_or_truncated_stream_is_read_again_from_its_start() {
+        let dir = std::env::temp_dir().join(format!("nm-live-replace-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(STREAM_FILE);
+        // an old stream already there when the tail starts: three frames of band 500
+        let mut old = header(&[500]);
+        for i in 0..3 {
+            old.extend(frame(500, i, 0, 6));
+        }
+        std::fs::write(&path, &old).unwrap();
+        let got: Arc<Mutex<Vec<Vec<u8>>>> = Arc::default();
+        let sink_got = got.clone();
+        let stop = Arc::new(AtomicBool::new(false));
+        let h = spawn_tail(path.clone(), Duration::from_millis(5), stop.clone(), move |b| {
+            sink_got.lock().unwrap().push(b);
+            true
+        })
+        .unwrap();
+        let wait = |n: usize| {
+            let t0 = std::time::Instant::now();
+            while got.lock().unwrap().len() < n && t0.elapsed() < Duration::from_secs(5) {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        };
+        wait(1);
+        // replaced: removed, then a new stream of band 1000 with one short frame (shorter than the old)
+        std::fs::remove_file(&path).unwrap();
+        let mut new = header(&[1000]);
+        new.extend(frame(1000, 0, 2, 1));
+        std::fs::write(&path, &new).unwrap();
+        wait(2);
+        // truncated in place and rewritten: band 2000, one frame
+        let mut third = header(&[2000]);
+        third.extend(frame(2000, 0, 0, 1));
+        {
+            let mut f = std::fs::OpenOptions::new().write(true).truncate(true).open(&path).unwrap();
+            f.write_all(&third).unwrap();
+        }
+        wait(3);
+        stop.store(true, Ordering::SeqCst);
+        let stats = h.join().unwrap();
+        assert_eq!(stats.error, None);
+        assert_eq!(stats.resets, 2, "{stats:?}");
+        let got = got.lock().unwrap();
+        let bands: Vec<i32> = got.iter().map(|b| u32_at(&b[LIVE_HEADER..], 24) as i32).collect();
+        assert_eq!(bands, vec![500, 1000, 2000]);
+        let so_far: Vec<u32> = got.iter().map(|b| u32_at(b, 8)).collect();
+        assert_eq!(so_far, vec![3, 1, 1], "the count starts again with each stream");
+        assert_eq!(u32_at(&got[1][LIVE_HEADER..], 32), 2, "the new stream's own first step");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
