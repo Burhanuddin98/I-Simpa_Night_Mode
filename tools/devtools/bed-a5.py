@@ -152,6 +152,14 @@ try:
                             "solver_title": js("document.querySelector('.ac-solver')?.title ?? null")}
     log(f"acoustics: {json.dumps(receipt['acoustics'])}")
     shot("a5-results-gpu.png")
+    js("window.__m10.dockTab('runs')")
+    time.sleep(1.5)
+    receipt["runs_tab"] = {
+        "solvers": js("[...document.querySelectorAll('.c-solver')].map(e => ({text: e.innerText, device: e.dataset.device, title: e.title}))"),
+        "status_bar": js("document.querySelector('[data-part=\"solvers\"]')?.innerText ?? null"),
+    }
+    log(f"runs tab and status bar: {json.dumps(receipt['runs_tab'])}")
+    shot("a5-runs-tab.png")
 
     # --- bed 3: spps-gpu's refusal of a project with a fitting, shown in the app
     js(f"window.__m10.openPath({json.dumps(fit_copy)})")
