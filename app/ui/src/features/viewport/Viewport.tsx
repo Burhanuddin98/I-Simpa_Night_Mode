@@ -212,15 +212,9 @@ export function Viewport() {
         </div>
       )}
 
-      <div className="vp-chips">
-        {n > 0 && (
-          <div className="vp-chip fail" data-part="check-chip" role="status">
-            <span className="swatch" aria-hidden />
-            <span className="vp-fail">Problem</span> · {n} {n === 1 ? 'face' : 'faces'} highlighted
-          </div>
-        )}
-        {live && step === 'simulate' && (
-          // B3: the running GPU solve's saved particles, drawn by the live layer while the run is live.
+      {live && step === 'simulate' && (
+        // B3: below the view bar, so a long caption never runs under it.
+        <div className="vp-live">
           <div className="vp-chip live" data-part="live-caption" role="status" title="The particles the run saves (particles saved per source), drawn as each is traced; the Results step replays the same ones">
             <span className="live-dot" aria-hidden />
             <span data-part="live-caption-text">{live.caption}</span>
@@ -232,6 +226,15 @@ export function Viewport() {
               ))}
             </span>
             {live.lookNote && <span className="live-note">{live.lookNote}</span>}
+          </div>
+        </div>
+      )}
+
+      <div className="vp-chips">
+        {n > 0 && (
+          <div className="vp-chip fail" data-part="check-chip" role="status">
+            <span className="swatch" aria-hidden />
+            <span className="vp-fail">Problem</span> · {n} {n === 1 ? 'face' : 'faces'} highlighted
           </div>
         )}
         {placing && ui.hasModel && (

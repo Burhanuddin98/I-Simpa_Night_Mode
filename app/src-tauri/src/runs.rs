@@ -1872,7 +1872,7 @@ mod tests {
         };
         let stream = solve.join(live::STREAM_FILE);
         run_thread(job, |_, on| {
-            on(&RunEvent::Started(run_dir.clone()));
+            on(&RunEvent::Started(&run_dir));
             // the solver: a header, then one frame a poll apart, then a torn frame it never finishes
             let mut b: Vec<u8> = Vec::new();
             for v in [live::STREAM_MAGIC, live::STREAM_VERSION, 0.001f32.to_bits(), 100, 2, 1, 1000] {

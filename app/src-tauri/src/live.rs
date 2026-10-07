@@ -87,6 +87,7 @@ impl Decoder {
     }
 
     /// Bytes held back: a torn tail waiting for the rest of its frame.
+    #[cfg(test)]
     pub fn pending(&self) -> usize {
         self.buf.len()
     }

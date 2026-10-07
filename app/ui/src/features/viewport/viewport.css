@@ -151,7 +151,14 @@
 .vp-chip.fail {
   color: var(--fail-text);
 }
-/* B3: the running GPU solve's caption, with the live layer's look (the chips' column takes no pointer; this one does). */
+/* B3: the running GPU solve's caption, with the live layer's look, centred under the view bar. */
+.vp-live {
+  position: absolute;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+}
 .vp-chip.live {
   pointer-events: auto;
   height: 32px;
