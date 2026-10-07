@@ -20,11 +20,14 @@ describe('M10 harness smoke', () => {
     assert.equal(await run.isEnabled(), false, 'Run is disabled');
     // No project yet: the landing page stands in for the empty window, with the shipped examples
     // (src-tauri/src/examples.rs) and New project and Open… (Burhan, 2026-10-06 01:24).
+    // Re-pinned 2026-10-07 (C4): six examples, in examples.rs's order. 218fccb added BRAS CR1 and
+    // CR3 and b01e5dc the industrial hall (upstream tutorial 3), both on 10-06, on purpose; the pin
+    // still holds the whole list and its order, not a subset.
     const landing = await browser.execute(() => ({
       examples: [...document.querySelectorAll('[data-part="landing"] [data-example]')].map((e) => e.getAttribute('data-example')),
       actions: [...document.querySelectorAll('[data-part="landing"] [data-landing-action]')].map((e) => e.getAttribute('data-landing-action')),
     }));
-    assert.deepEqual(landing, { examples: ['elmia', 'bras-cr2', 'bras-cr4'], actions: ['new-project', 'open'] });
+    assert.deepEqual(landing, { examples: ['elmia', 'industrial', 'bras-cr1', 'bras-cr2', 'bras-cr3', 'bras-cr4'], actions: ['new-project', 'open'] });
     const title = await browser.getTitle();
     assert.equal(title, 'I-Simpa Night Mode');
   });
