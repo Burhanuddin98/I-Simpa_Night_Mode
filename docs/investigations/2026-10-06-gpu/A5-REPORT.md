@@ -149,12 +149,9 @@ Project: `tests/fixtures/rooms/tutorial1_box_fitting.simpa` (copied to `.out\a5\
 
 ## Tests
 
-Run with `CARGO_TARGET_DIR=C:	mp
-m-target-a5` and `SIMPA_SOLVERS_DIR=C:	mp
-m-solvers-a5`.
+Run with `CARGO_TARGET_DIR=C:\tmp\nm-target-a5` and `SIMPA_SOLVERS_DIR=C:\tmp\nm-solvers-a5`.
 - **`cargo test -p simpa-core -p simpa -p app --no-fail-fast`, once** (09:29-09:41, log
-  `C:	mp
-m-target-a55-suites.log`): **1,170 passed, 7 failed, 41 ignored**. The 7:
+  `C:\tmp\nm-target-a5\a5-suites.log`): **1,170 passed, 7 failed, 41 ignored**. The 7:
   - mine, fixed in `f30a4d9`: `run_verdict::each_fail_line_is_its_own_reason_code` (counted 11 FAIL rows;
     now 12, with a sample of the new row) and `run_folder_fixtures::every_run_folder_fixture_gives_its_expected_verdict`
     (M6(e) "every row hit through run-folder": no fixture prints `spps_gpu_refused`). The run-folder
@@ -166,7 +163,7 @@ m-target-a55-suites.log`): **1,170 passed, 7 failed, 41 ignored**. The 7:
     `solver_fingerprint::{the_tetgen_160_reference_is_found_and_our_tetgen_is_refused,
     a_relinked_reference_is_still_the_reference_and_one_changed_code_byte_is_not}` need upstream's
     TetGen 1.6.0 beside the solvers folder; with `SIMPA_TETGEN160` set to the main checkout's
-    `target\solversuild\src	etgen\Release	etgen.exe` (read only): parity 7 passed 4 ignored,
+    `target\solvers\build\src\tetgen\Release\tetgen.exe` (read only): parity 7 passed 4 ignored,
     fingerprint 3 passed.
   - known load-flaky, passes alone: `process::winproc::tests::dropping_the_tree_kills_the_child`
     (HANDOFF-2026-10-05 line 35).
