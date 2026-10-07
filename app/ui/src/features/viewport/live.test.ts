@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { PART_MAGIC } from '../../resultsData.ts';
-import { decodeLiveBatch, LIVE_MAGIC, LIVE_SPEED, liveCaption, LiveSet } from './live.ts';
+import { decodeLiveBatch, LIVE_MAGIC, LIVE_SPEED, liveCaption, LiveRun, LiveSet } from './live.ts';
 
 /** A LIVE v1 batch as live.rs encodes it: per particle its first step and record count; record k of particle i at (i, k, 0), energy 1/(k+1). */
 function batch(spec: [number, number][], o: { soFar?: number; total?: number; bandHz?: number; bandIndex?: number; bands?: number; dt?: number } = {}): ArrayBuffer {
@@ -104,4 +104,42 @@ test('the caption says it is the saved sample, how many of how many, and the ban
   s.add(decodeLiveBatch(batch([[0, 1]], { soFar: 400, total: 400, bandHz: 125 })), 0);
   assert.equal(liveCaption(s.summary()), 'live: the saved sample of particles, 400 of 400 so far, band 125 Hz');
   assert.notEqual(s.revision(), new LiveSet().revision());
+});
+
+test('a run is kept while the Simulate step is away, drawn when it is back, and its end clears it on any step', () => {
+  const r = new LiveRun(7);
+  // on the Simulate step: the first batch is drawn
+  assert.equal(r.accept(7, decodeLiveBatch(batch([[0, 3]], { soFar: 1 })), 0), true);
+  assert.equal(r.wantsBuild(true), true);
+  r.built();
+  assert.equal(r.wantsBuild(true), false, 'nothing new');
+  // the user goes to Results: batches are still kept, nothing is rebuilt while hidden
+  assert.equal(r.accept(7, decodeLiveBatch(batch([[0, 2], [0, 2]], { soFar: 3, bandHz: 500 })), 1000), true);
+  assert.equal(r.accept(7, decodeLiveBatch(batch([[0, 4]], { soFar: 4, bandHz: 500 })), 2000), true);
+  assert.equal(r.wantsBuild(false), false, 'no rebuild off the Simulate step');
+  // back on Simulate: one build draws everything that arrived, at the clock's now
+  assert.equal(r.wantsBuild(true), true);
+  const p = r.set.particles();
+  assert.equal(p?.particleCount, 4);
+  assert.equal(r.set.summary()?.soFar, 4);
+  assert.equal(r.set.summary()?.bandHz, 500);
+  assert.equal(p?.firstStep[3], Math.floor(r.set.clock(2000) ?? -1), 'the late one starts at the clock');
+  r.built();
+  // another run's batch and another run's end are not this run's
+  assert.equal(r.accept(8, decodeLiveBatch(batch([[0, 1]])), 2100), false);
+  assert.equal(r.end(8), false);
+  assert.equal(r.ended(), false);
+  // the end clears it whatever is shown, once; nothing is kept or built after it
+  assert.equal(r.end(7), true);
+  assert.equal(r.end(7), false);
+  assert.equal(r.ended(), true);
+  assert.equal(r.accept(7, decodeLiveBatch(batch([[0, 1]], { soFar: 5 })), 2200), false);
+  assert.equal(r.wantsBuild(true), false);
+  assert.equal(r.set.summary()?.soFar, 4);
+  // a look change wants a build even with nothing new (while live)
+  const q = new LiveRun(1);
+  q.accept(1, decodeLiveBatch(batch([[0, 1]])), 0);
+  q.built();
+  q.invalidate();
+  assert.equal(q.wantsBuild(true), true);
 });

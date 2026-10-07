@@ -3,10 +3,10 @@
 // LIVE_REBUILD_MS, and runs the live clock from animation frames. When the run ends the layer clears;
 // the Results step's particles are a separate layer and are never touched.
 import { setLiveSink } from '../../actions';
-import { Store } from '../../store';
+import { stepStore, Store } from '../../store';
 import { registerHook } from '../../testhooks';
 import { liveState, setLiveTime, showLive } from './engine';
-import { decodeLiveBatch, liveCaption, LiveSet, type LiveSummary } from './live';
+import { decodeLiveBatch, liveCaption, LiveRun, type LiveSummary } from './live';
 import type { ParticleLook } from './rays';
 import { resultsViewStore } from './resultsView';
 
@@ -31,13 +31,14 @@ export interface LiveUi {
 /** Non-null while a run of SPPS on the GPU is live. */
 export const liveStore = new Store<LiveUi | null>(null);
 
-let set: LiveSet | null = null;
+let run: LiveRun | null = null;
 let raf = 0;
 let timer: ReturnType<typeof setTimeout> | null = null;
 let builtAt = 0;
-let builtRev = -1;
 
 const now = () => performance.now();
+/** The layer is drawn on the Simulate step only (engine.ts `liveShown`). */
+const shown = () => stepStore.get() === 'simulate';
 
 function patch(p: Partial<LiveUi>): void {
   const cur = liveStore.get();
@@ -47,28 +48,28 @@ function patch(p: Partial<LiveUi>): void {
 function rebuild(): void {
   timer = null;
   const ui = liveStore.get();
-  if (!set || !ui || set.revision() === builtRev) return;
-  builtRev = set.revision();
+  if (!run || !ui || !run.wantsBuild(shown())) return;
+  run.built();
   builtAt = now();
   const want = ui.look;
-  const inForce = showLive(set.particles(), want, resultsViewStore.get().trails);
-  const summary = set.summary();
-  patch({ summary, caption: liveCaption(summary), lookNote: inForce === want ? null : `${want} is not available here: drawn as ${inForce}`, builds: ui.builds + 1, buildMs: now() - builtAt });
+  const inForce = showLive(run.set.particles(), want, resultsViewStore.get().trails);
+  patch({ lookNote: inForce === want ? null : `${want} is not available here: drawn as ${inForce}`, builds: ui.builds + 1, buildMs: now() - builtAt });
   tick();
 }
 
 function schedule(): void {
-  if (timer) return;
+  if (timer || !shown()) return;
   const wait = Math.max(0, LIVE_REBUILD_MS - (now() - builtAt));
   timer = setTimeout(rebuild, wait);
 }
 
+/** The live clock from animation frames, while the layer is shown. */
 function tick(): void {
-  if (raf || !set) return;
+  if (raf || !run || !shown()) return;
   raf = requestAnimationFrame(() => {
     raf = 0;
-    const t = set?.clock(now());
-    if (t === null || t === undefined) return;
+    const t = run?.set.clock(now());
+    if (t === null || t === undefined || !shown()) return;
     setLiveTime(t);
     tick();
   });
@@ -77,51 +78,62 @@ function tick(): void {
 /** A run of SPPS on the GPU has started: the layer waits for its first batch. */
 export function liveBegin(runId: number): void {
   liveEnd();
-  set = new LiveSet();
-  builtRev = -1;
+  run = new LiveRun(runId);
   builtAt = 0;
   liveStore.set({ runId, summary: null, caption: liveCaption(null), look: resultsViewStore.get().look, lookNote: null, errors: 0, builds: 0, buildMs: 0 });
 }
 
-/** One LIVE v1 batch of run `runId`; anything for another run, or after its end, is dropped. */
+/** One LIVE v1 batch of run `runId`: kept on any step (the caption follows it); anything for another run, or after its end, is dropped. */
 export function liveBatch(runId: number, buf: ArrayBuffer): void {
   const ui = liveStore.get();
-  if (!set || !ui || ui.runId !== runId) return;
+  if (!run || !ui) return;
+  let kept: boolean;
   try {
-    set.add(decodeLiveBatch(buf), now());
+    kept = run.accept(runId, decodeLiveBatch(buf), now());
   } catch (e) {
     if (ui.errors === 0) console.warn(`live particles: ${e instanceof Error ? e.message : String(e)}`);
     patch({ errors: ui.errors + 1 });
     return;
   }
+  if (!kept) return;
+  const summary = run.set.summary();
+  patch({ summary, caption: liveCaption(summary) });
   schedule();
 }
 
-/** The run ended (or failed, or never started): the layer clears. */
+/** The layer clears: the run ended (or failed, or never started), on whatever step is shown. */
 export function liveEnd(): void {
   if (timer) clearTimeout(timer);
   timer = null;
   if (raf) cancelAnimationFrame(raf);
   raf = 0;
-  if (set) showLive(null, 'dots', 0);
-  set = null;
+  if (run) showLive(null, 'dots', 0);
+  run = null;
   liveStore.set(null);
 }
 
 /** How the live particles are drawn (the Results card's looks, chosen here for the live layer only). */
 export function setLiveLook(look: ParticleLook): void {
-  if (!liveStore.get()) return;
+  if (!liveStore.get() || !run) return;
   patch({ look });
-  builtRev = -1;
-  if (set) rebuild();
+  run.invalidate();
+  rebuild();
 }
+
+// Back on the Simulate step during a run: what arrived meanwhile is drawn at once, at the clock's now.
+stepStore.subscribe(() => {
+  if (!run || !shown()) return;
+  run.invalidate();
+  rebuild();
+  tick();
+});
 
 setLiveSink({
   begin: liveBegin,
   batch: liveBatch,
   end: (runId) => {
-    if (liveStore.get()?.runId === runId) liveEnd();
+    if (run?.end(runId)) liveEnd();
   },
 });
 
-registerHook('liveView', () => ({ ui: liveStore.get(), view: liveState(), clock: set?.clock(now()) ?? null }));
+registerHook('liveView', () => ({ ui: liveStore.get(), view: liveState(), clock: run?.set.clock(now()) ?? null }));

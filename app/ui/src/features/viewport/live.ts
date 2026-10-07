@@ -187,3 +187,55 @@ export class LiveSet {
     };
   }
 }
+
+/**
+ * One GPU run's live layer, from its start to its end, apart from the view (liveView.ts drives the
+ * view from it). Batches of this run are kept from start to end whether the Simulate step is shown or
+ * not: leaving the step costs no frames, only the table rebuilds, which wait until the step is shown
+ * again and then draw everything that arrived (the clock is wall time, so it shows where the run is
+ * now). Another run's batches, and anything after this run's end, are dropped.
+ */
+export class LiveRun {
+  readonly runId: number;
+  readonly set: LiveSet;
+  private over = false;
+  private builtRev = -1;
+
+  constructor(runId: number, set: LiveSet = new LiveSet()) {
+    this.runId = runId;
+    this.set = set;
+  }
+
+  /** Keeps `b` if it is this run's and the run is live; returns whether it was kept. */
+  accept(runId: number, b: LiveBatch, nowMs: number): boolean {
+    if (runId !== this.runId || this.over) return false;
+    this.set.add(b, nowMs);
+    return true;
+  }
+
+  /** The end of run `runId` (ended, failed or the stream's last batch): true when it ends this run. */
+  end(runId: number): boolean {
+    if (runId !== this.runId || this.over) return false;
+    this.over = true;
+    return true;
+  }
+
+  ended(): boolean {
+    return this.over;
+  }
+
+  /** Whether the view should rebuild its tables now: live, shown, and something arrived since the last build. */
+  wantsBuild(shown: boolean): boolean {
+    return !this.over && shown && this.set.revision() !== this.builtRev;
+  }
+
+  /** The view built the tables from the set as it is now. */
+  built(): void {
+    this.builtRev = this.set.revision();
+  }
+
+  /** The next build is wanted even with nothing new (the look changed). */
+  invalidate(): void {
+    this.builtRev = -1;
+  }
+}
