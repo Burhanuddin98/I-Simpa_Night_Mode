@@ -842,6 +842,24 @@ fn holds(groups: &[GroupId], from: &[GroupId]) -> Option<bool> {
     }
 }
 
+/// `name` collides with no surface group but `except` (C1 audit), compared as the validator's
+/// `group_name_duplicate` compares them: trimmed and without case. A rename to the group's own
+/// name in another case is allowed.
+fn group_name_free(p: &Project, name: &str, except: Option<GroupId>) -> Result<()> {
+    let key = crate::validate::group_name_key(name);
+    if p
+        .surface_groups
+        .iter()
+        .any(|g| Some(g.id) != except && crate::validate::group_name_key(&g.name) == key)
+    {
+        return Err(OpError::NameTaken {
+            kind: "surface group",
+            name: name.to_string(),
+        });
+    }
+    Ok(())
+}
+
 /// A face list an op may take: not empty, every face in the mesh, none twice.
 fn check_face_list(p: &Project, faces: &[u32]) -> Result<()> {
     let n = p.geometry.faces.len();
@@ -1016,16 +1034,14 @@ fn regroup_faces(
     index: usize,
     group: SurfaceGroup,
     faces: Vec<u32>,
+    names: bool,
 ) -> Result<Op> {
     check_face_list(p, &faces)?;
     insertable(&p.surface_groups, "surface group", index, group.id, |g| {
         g.id
     })?;
-    if p.surface_groups.iter().any(|g| g.name == group.name) {
-        return Err(OpError::NameTaken {
-            kind: "surface group",
-            name: group.name,
-        });
+    if names {
+        group_name_free(p, &group.name, None)?;
     }
     integrity::check_group(&group, &|m| p.material(m).is_some())?;
 
@@ -1159,6 +1175,19 @@ impl Op {
     /// Every op keeps [`Project::check_integrity`]: applied to a project that passes it, the
     /// result passes it too.
     pub fn apply(self, p: &mut Project) -> Result<Op> {
+        self.apply_names(p, true)
+    }
+
+    /// Applies an op the history recorded: an inverse on undo, the op again on redo, or the
+    /// rollback of a batch. As [`Op::apply`], but a surface group's name is not checked against
+    /// the others (C1 audit): in a project that already held two groups alike (an imported file),
+    /// undoing the rename that told them apart must give the duplicate back, not fail.
+    pub fn apply_recorded(self, p: &mut Project) -> Result<Op> {
+        self.apply_names(p, false)
+    }
+
+    /// `names`: refuse a surface-group name another group has (`name_taken`).
+    fn apply_names(self, p: &mut Project, names: bool) -> Result<Op> {
         use std::mem::replace;
         let n = p.bands.len();
         match self {
@@ -1172,6 +1201,9 @@ impl Op {
                 let slot = match target {
                     EntityRef::SurfaceGroup(id) => {
                         let i = position(&p.surface_groups, "surface group", id, |g| g.id)?;
+                        if names {
+                            group_name_free(p, &name, Some(id))?;
+                        }
                         &mut p.surface_groups[i].name
                     }
                     EntityRef::Material(id) => {
@@ -1263,7 +1295,7 @@ impl Op {
                 index,
                 group,
                 faces,
-            } => regroup_faces(p, index, group, faces),
+            } => regroup_faces(p, index, group, faces, names),
             Op::MoveFaces { group, faces } => move_faces(p, group, faces),
             Op::MergeSurfaceGroups { into, from } => merge_groups(p, into, from),
             Op::SetGroupMaterial { group, material } => {
@@ -1610,12 +1642,12 @@ impl Op {
             Op::Batch { ops } => {
                 let mut inverses = Vec::with_capacity(ops.len());
                 for (index, op) in ops.into_iter().enumerate() {
-                    match op.apply(p) {
+                    match op.apply_names(p, names) {
                         Ok(inverse) => inverses.push(inverse),
                         Err(error) => {
                             for inverse in inverses.into_iter().rev() {
                                 inverse
-                                    .apply(p)
+                                    .apply_recorded(p)
                                     .expect("the inverse of an op just applied applies");
                             }
                             return Err(OpError::Batch {
@@ -1658,7 +1690,7 @@ impl History {
         let Some(op) = self.undo.pop() else {
             return Ok(false);
         };
-        match op.clone().apply(project) {
+        match op.clone().apply_recorded(project) {
             Ok(redo) => {
                 self.redo.push(redo);
                 Ok(true)
@@ -1675,7 +1707,7 @@ impl History {
         let Some(op) = self.redo.pop() else {
             return Ok(false);
         };
-        match op.clone().apply(project) {
+        match op.clone().apply_recorded(project) {
             Ok(undo) => {
                 self.undo.push(undo);
                 Ok(true)

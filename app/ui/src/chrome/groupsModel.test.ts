@@ -32,6 +32,8 @@ test('F2 renames one picked group; a blank name or another group\'s is refused',
   assert.equal(renameProblem('  ', 'b', groups)?.code, 'GROUP_NAME_EMPTY');
   assert.equal(renameProblem('floor', 'b', groups)?.code, 'GROUP_NAME_TAKEN');
   assert.equal(renameProblem('floor', 'a', groups), null, 'its own name again is no conflict');
+  assert.equal(renameProblem(' FLOOR ', 'b', groups)?.code, 'GROUP_NAME_TAKEN', 'compared trimmed and without case, as the core does');
+  assert.equal(renameProblem('Floor', 'a', groups), null, 'its own name in another case');
   assert.equal(renameProblem('wall north', 'b', groups), null);
 });
 

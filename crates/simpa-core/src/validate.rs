@@ -59,6 +59,7 @@ mod directivity;
 mod export;
 mod geometry;
 mod names;
+pub use names::group_name_key;
 mod project;
 mod structure;
 
@@ -170,6 +171,7 @@ pub mod codes {
     pub const NAME_TOO_LONG: &str = "name_too_long";
     pub const NAME_NOT_FILENAME_SAFE: &str = "name_not_filename_safe";
     pub const NAME_DUPLICATE: &str = "name_duplicate";
+    pub const GROUP_NAME_DUPLICATE: &str = "group_name_duplicate";
     // Surface receivers, cutting planes and fittings.
     pub const SURFACE_RECEIVER_EMPTY: &str = "surface_receiver_empty";
     pub const CUTTING_PLANE_INVALID: &str = "cutting_plane_invalid";
@@ -220,7 +222,7 @@ use Stage::{Export as X, Project as P};
 
 /// Every rule of `docs/solver-contract.md` Part A, in the page's order: 39 project rules and 7
 /// export rules, 42 errors and 4 warnings.
-pub const RULES: [Rule; 46] = [
+pub const RULES: [Rule; 47] = [
     rule(codes::BAND_SET_EMPTY, P, E),
     rule(codes::BAND_DUPLICATE, P, E),
     rule(codes::BAND_FREQUENCY_NOT_INTEGER, P, E),
@@ -254,6 +256,7 @@ pub const RULES: [Rule; 46] = [
     rule(codes::NAME_TOO_LONG, P, E),
     rule(codes::NAME_NOT_FILENAME_SAFE, P, E),
     rule(codes::NAME_DUPLICATE, P, E),
+    rule(codes::GROUP_NAME_DUPLICATE, P, W),
     rule(codes::SURFACE_RECEIVER_EMPTY, P, E),
     rule(codes::CUTTING_PLANE_INVALID, P, E),
     rule(codes::FITTING_PARAMETERS_INVALID, P, E),
@@ -518,14 +521,14 @@ mod tests {
 
     #[test]
     fn rule_table_matches_the_contract_counts() {
-        assert_eq!(RULES.len(), 46);
+        assert_eq!(RULES.len(), 47);
         let project = RULES.iter().filter(|r| r.stage == Stage::Project).count();
         let warnings = RULES
             .iter()
             .filter(|r| r.severity == Severity::Warning)
             .count();
-        assert_eq!((project, 46 - project), (39, 7));
-        assert_eq!((45 - warnings, warnings), (41, 4));
+        assert_eq!((project, 47 - project), (40, 7));
+        assert_eq!((46 - warnings, warnings), (41, 5));
         let mut all: Vec<&str> = RULES.iter().map(|r| r.code).collect();
         all.extend(STRUCTURAL_CODES);
         let n = all.len();

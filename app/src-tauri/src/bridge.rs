@@ -713,7 +713,13 @@ impl Session {
         let project = self.project.as_ref().ok_or_else(no_project)?;
         let name = (1u32..)
             .map(|n| format!("Group {n}"))
-            .find(|n| !project.surface_groups.iter().any(|g| &g.name == n))
+            .find(|n| {
+                let key = validate::group_name_key(n);
+                !project
+                    .surface_groups
+                    .iter()
+                    .any(|g| validate::group_name_key(&g.name) == key)
+            })
             .expect("some n is free");
         let op = project.regrouped(faces, GroupId::random(), &name, MaterialId::random());
         if let Err(mut e) = op.clone().apply(&mut project.clone()) {

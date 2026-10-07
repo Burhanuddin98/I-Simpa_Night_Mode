@@ -54,15 +54,19 @@ export function renameTarget(sel: GroupSelection): string | null {
   return sel.kind === 'group' ? (sel.id as string) : null;
 }
 
+/** The key two group names collide under, as the core's `validate::group_name_key`: trimmed,
+ * without case. */
+export const groupNameKey = (name: string): string => name.trim().toLowerCase();
+
 /**
  * Why `name` cannot be the group `id`'s new name, or null: blank, or another group's name
- * already (the group list is how faces are told apart; two alike are refused here, as New group
- * from selection refuses them in the core). The project is unchanged on a refusal.
+ * already, compared trimmed and without case as the core compares them (it refuses the same
+ * rename, `name_taken`). The project is unchanged on a refusal. The name sent is `name.trim()`.
  */
 export function renameProblem(name: string, id: string, groups: readonly GroupLike[]): { code: string; message: string } | null {
   const t = name.trim();
   if (!t) return { code: 'GROUP_NAME_EMPTY', message: 'A surface group needs a name.' };
-  const other = groups.find((g) => g.id !== id && g.name === t);
+  const other = groups.find((g) => g.id !== id && groupNameKey(g.name) === groupNameKey(t));
   if (other) return { code: 'GROUP_NAME_TAKEN', message: `Another surface group is named '${t}'. Pick another name.` };
   return null;
 }

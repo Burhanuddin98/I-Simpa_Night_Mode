@@ -390,3 +390,51 @@ fn reference_spectra_map_onto_third_octave_and_octave_bands() {
         assert!(r.shape_on(&thirds).is_some() && r.shape_on(&octaves).is_some(), "{}", r.name);
     }
 }
+
+// ---- group names are unique (C1 audit) -------------------------------------------------------
+
+/// A rename or a new group whose name another group has, compared trimmed and without case, is
+/// refused `name_taken`; a group may take its own name in another case. The validator warns
+/// about a project that already holds two alike.
+#[test]
+fn group_names_are_unique_trimmed_and_without_case() {
+    let original = room();
+    let walls = group_named(&original, "Walls");
+    let floor = group_named(&original, "Floor");
+    let rename = |id, name: &str| Op::Rename {
+        target: schema::EntityRef::SurfaceGroup(id),
+        name: name.into(),
+    };
+    for taken in ["Floor", "floor", " FLOOR "] {
+        let err = refused(&original, rename(walls, taken));
+        assert_eq!(err.code(), "name_taken", "{taken:?}: {err}");
+    }
+    let p = apply_exact(&original, rename(floor, "FLOOR"));
+    assert_eq!(p.group(floor).unwrap().name, "FLOOR");
+    apply_exact(&original, rename(walls, "Wall north"));
+    // New group from selection under a taken name.
+    let err = refused(&original, original.regrouped(&[2], NEW, " walls", MaterialId::random()));
+    let err = match err {
+        OpError::Batch { error, .. } => *error,
+        e => e,
+    };
+    assert_eq!(err.code(), "name_taken", "{err}");
+
+    // A project that holds two alike (an imported file) is warned about, at the second.
+    let issues = validate::validate(&original);
+    assert!(!issues.iter().any(|i| i.code == validate::codes::GROUP_NAME_DUPLICATE));
+    let mut dup = original.clone();
+    let i = dup.surface_groups.iter().position(|g| g.id == walls).unwrap();
+    dup.surface_groups[i].name = "floor ".into();
+    let issues = validate::validate(&dup);
+    let hit: Vec<_> = issues
+        .iter()
+        .filter(|i| i.code == validate::codes::GROUP_NAME_DUPLICATE)
+        .collect();
+    assert_eq!(hit.len(), 1, "{issues:?}");
+    assert_eq!(hit[0].severity, validate::Severity::Warning);
+    assert!(hit[0].path.ends_with("/name"), "{}", hit[0].path);
+    // Telling the two apart is one undo step that gives the duplicate back exactly.
+    let fixed = apply_exact(&dup, rename(walls, "Walls"));
+    assert!(validate::validate(&fixed).iter().all(|i| i.code != validate::codes::GROUP_NAME_DUPLICATE));
+}

@@ -59,6 +59,15 @@ pub(super) fn collision_key(name: &str) -> String {
     name.to_lowercase()
 }
 
+/// The key two surface-group names collide under (C1 audit): [`collision_key`] of the trimmed
+/// name, so `Floor`, `floor` and ` floor ` are one name. The core refuses a rename or a new group
+/// that would collide (`Op::Rename`, `Op::RegroupFaces`), and the validator warns about a project
+/// that holds a collision already (`group_name_duplicate`): the app picks and moves faces by the
+/// group's name.
+pub fn group_name_key(name: &str) -> String {
+    collision_key(name.trim())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
