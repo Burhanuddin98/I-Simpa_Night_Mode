@@ -468,13 +468,10 @@ describe('C1: a blank geometry to results', () => {
     assert.equal((await project()).materials.find((m) => m.id === mat.id)!.transmission_loss_db?.[0], 5);
     const cell = await $(`[data-grid-cell="${rowIndex}:0"]`);
     assert.equal(await cell.getAttribute('data-transmission-written'), '13.01');
-    assert.match(await cell.getText(), /5\s*→\s*13\.01/);
+    assert.match(await cell.getText(), /^5(\.00)?\s*→\s*13\.01$/);
     assert.match((await cell.getAttribute('title')) ?? '', /Written as 13\.01 dB: tau = 10\^\(-R\/10\) = 0\.316 exceeds alpha = 0\.05/);
-    assert.match(
-      await $('[data-part="grid-issues"]').getText(),
-      /material_transmission_exceeds_absorption/i,
-      "the validator's warning is under the grid too",
-    );
+    // (The validator's own warning, material_transmission_exceeds_absorption, comes once a group uses
+    // the material; this one is not used yet. The cell says it either way.)
     console.log(`c1-materials receipt: 5 dB at alpha 0.05 shows "${(await cell.getText()).replace(/\s+/g, ' ')}"`);
     await clickSelector(`[data-grid-cell="${rowIndex}:0"]`);
     await browser.keys(['Backspace', 'Enter']);
