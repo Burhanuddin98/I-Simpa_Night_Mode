@@ -9,6 +9,9 @@ import {
   withTransmission,
   effectiveMaterial,
   formatArea,
+  isPlaceholderMaterial,
+  materialDeleteProblem,
+  materialRenameProblem,
   newMaterial,
   nextSort,
   selectedGroupIds,
@@ -122,4 +125,38 @@ test('C1 audit: the transmission the solver gets: as typed, clamped to tau = alp
   assert.match(transmissionNote(5, 0.05)!.title, /Written as 13.01 dB/);
   assert.equal(transmissionNote(20, 0)?.short, 'off');
   assert.equal(transmissionNote(20, 0.05), null);
+});
+
+test('A29: a material a group has is refused for deletion, naming the groups; an unused one deletes', () => {
+  const materials = [mat('a', 'Wood', [0.1]), mat('b', 'Plaster', [0.2]), mat('c', 'Curtain', [0.6]), mat('d', 'Spare', [0.3])];
+  const view = { surface_groups: groups, materials, variants: [variant] };
+  const a = materialDeleteProblem(materials[0], view);
+  assert.equal(a?.code, 'MATERIAL_IN_USE');
+  assert.equal(a?.message, 'Wood is the material of the surface group Floor, so it cannot be deleted. Give it another material first, then delete it.');
+  assert.equal(
+    materialDeleteProblem(materials[1], view)?.message,
+    'Plaster is the material of 2 surface groups (Ceiling, Walls), so it cannot be deleted. Give them another material first, then delete it.',
+  );
+  assert.equal(
+    materialDeleteProblem(materials[2], view)?.message,
+    'Curtain is the material of the variant override on Walls in Treated, so it cannot be deleted. Give it another material first, then delete it.',
+    'a variant override holds it, whichever variant is active',
+  );
+  assert.equal(materialDeleteProblem(materials[3], view), null);
+  const many = Array.from({ length: 5 }, (_, i) => ({ id: `h${i}`, name: `G${i}`, material: 'd' }));
+  assert.match(materialDeleteProblem(materials[3], { ...view, surface_groups: many })?.message ?? '', /5 surface groups \(G0, G1, G2 and 2 more\)/);
+});
+
+test('A29: a rename to blank or to another material’s name is refused; the placeholder keeps its name', () => {
+  const materials = [mat('a', 'Wood', [0.1]), mat('b', 'Plaster', [0.2])];
+  assert.equal(materialRenameProblem(materials[0], '   ', materials)?.code, 'MATERIAL_NAME_EMPTY');
+  assert.equal(materialRenameProblem(materials[0], ' plaster ', materials)?.code, 'MATERIAL_NAME_TAKEN', 'trimmed, without case');
+  assert.equal(materialRenameProblem(materials[0], 'WOOD', materials), null, 'its own name in another case');
+  assert.equal(materialRenameProblem(materials[0], 'Oak', materials), null);
+  const placeholder = { ...mat('p', 'Default', [0, 0]), scattering: [0, 0] };
+  assert.equal(isPlaceholderMaterial(placeholder), true);
+  assert.equal(materialRenameProblem(placeholder, 'Concrete', [...materials, placeholder])?.code, 'MATERIAL_PLACEHOLDER_RENAME');
+  const chosen = { ...placeholder, absorption: [0, 0.05] };
+  assert.equal(isPlaceholderMaterial(chosen), false, 'a Default with a value is a real material');
+  assert.equal(materialRenameProblem(chosen, 'Concrete', [...materials, chosen]), null);
 });

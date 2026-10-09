@@ -18,6 +18,10 @@
 // that transmits already); a band whose loss lets more through than the material absorbs is
 // warned about under the grid, as the config.xml writer clamps it.
 //
+// A29: Delete refuses a material a surface group has (in the base project or a variant), naming the
+// groups; a rename to a blank name, another material's name, or of the placeholder is refused in
+// words. The core refuses the delete too, by the material's id.
+//
 // It writes only through `actions.apply` with `ops`, and `actions.setLaw` and
 // `actions.addFromLibrary`, which do the same.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
@@ -34,7 +38,20 @@ import { boundsOf, clampCell, inRect, planFill, rectOf, type Cell } from './fill
 import { dismiss, errorOf, IssueLines, lineOf, visibleRefusals, type Line } from './inline';
 import { changesLaw, LAWS, lawOf, lawState, lawTitle, lawValue, PER_BAND, SEMI_DIFFUSE_NOTE, usesLaw } from './law';
 import { LibraryMenu } from './LibraryMenu';
-import { bandValue, newMaterial, nextSort, sortRows, transmissionNote, transmissionText, usage, withTransmission, type Quantity, type SortState } from './model';
+import {
+  bandValue,
+  materialDeleteProblem,
+  materialRenameProblem,
+  newMaterial,
+  nextSort,
+  sortRows,
+  transmissionNote,
+  transmissionText,
+  usage,
+  withTransmission,
+  type Quantity,
+  type SortState,
+} from './model';
 import { planPaste } from './paste';
 import { displayValue, formatExact, ROUNDED_MARK, toTsv } from './tsv';
 
@@ -230,7 +247,14 @@ export function MaterialsGrid() {
     attempt();
     const m = rows[row];
     if (!m || text === m.name) return;
-    run(rename('material', m.id, text), fieldKey('material', m.id, 'name'), [`${m.id}/name`]);
+    // A29: a blank name, another material's, or the placeholder renamed is refused here, in words.
+    const problem = materialRenameProblem(m, text, materials);
+    if (problem) {
+      setLocal([{ ...problem, cells: [`${m.id}/name`] }]);
+      return;
+    }
+    if (text.trim() === m.name) return;
+    run(rename('material', m.id, text.trim()), fieldKey('material', m.id, 'name'), [`${m.id}/name`]);
   };
 
   const cellsOf = (cells: readonly Cell[]) =>
@@ -271,7 +295,19 @@ export function MaterialsGrid() {
   const deleteRow = () => {
     attempt();
     const m = rows[cur.row];
-    if (!m) return;
+    if (!m || !view) return;
+    // A29: a material a group has is refused, saying which groups (the core's refusal names it by id).
+    // Named as the grid and the scene list show them (BRAS's `mat_CR4_concrete` reads `Concrete`).
+    const shown = {
+      ...view,
+      surface_groups: view.surface_groups.map((g) => ({ ...g, name: displayName(g.name) })),
+      variants: view.variants.map((v) => ({ ...v, name: displayName(v.name) })),
+    };
+    const problem = materialDeleteProblem({ ...m, name: displayName(m.name) }, shown);
+    if (problem) {
+      setLocal([{ code: problem.code, message: `${problem.message} The project is unchanged.`, cells: [`${m.id}/`] }]);
+      return;
+    }
     run(removeMaterial(m.id), ROWS_KEY, [`${m.id}/`]);
   };
 

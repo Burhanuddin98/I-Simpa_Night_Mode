@@ -186,3 +186,60 @@ export function newMaterial(id: string, name: string, bands: number, index: numb
     solver_id: null,
   };
 }
+
+// ---- rename and delete (parity A29) -----------------------------------------------------------
+
+/** Upstream's placeholder for "no material chosen", as the core's `is_placeholder_material`
+ * reads it: named `Default`, absorption and scattering 0 in every band. */
+export function isPlaceholderMaterial(m: Material): boolean {
+  const zero = (v: F64) => typeof v === 'number' && v === 0;
+  return m.name === 'Default' && m.absorption.every(zero) && m.scattering.every(zero);
+}
+
+const listNames = (names: readonly string[]) =>
+  names.length <= 3 ? names.join(', ') : `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`;
+
+/**
+ * Why the material `m` cannot be deleted, in plain words, or null when it can. A material a
+ * surface group has, in the base project or as a variant's override, is refused: deleting it
+ * would leave those faces with no material, or with one nobody chose; the core refuses it too
+ * (`in_use`), naming the material by its id. This says which groups, and what to do.
+ */
+export function materialDeleteProblem(m: Material, view: ViewLike): { code: string; message: string } | null {
+  const groups = view.surface_groups.filter((g) => g.material === m.id).map((g) => g.name);
+  const overrides = view.variants.flatMap((v) =>
+    v.overrides.filter((o) => o.material === m.id).map((o) => `${view.surface_groups.find((g) => g.id === o.group)?.name ?? 'a group'} in ${v.name}`),
+  );
+  if (groups.length === 0 && overrides.length === 0) return null;
+  const parts: string[] = [];
+  if (groups.length) parts.push(groups.length === 1 ? `the surface group ${groups[0]}` : `${groups.length} surface groups (${listNames(groups)})`);
+  if (overrides.length) parts.push(overrides.length === 1 ? `the variant override on ${overrides[0]}` : `${overrides.length} variant overrides (${listNames(overrides)})`);
+  return {
+    code: 'MATERIAL_IN_USE',
+    message: `${m.name} is the material of ${parts.join(' and ')}, so it cannot be deleted. Give ${groups.length + overrides.length === 1 ? 'it' : 'them'} another material first, then delete it.`,
+  };
+}
+
+/**
+ * Why `name` cannot be the material `m`'s new name, or null. Refused: a blank name; another
+ * material's name, compared trimmed and without case (the Material list and the library tell
+ * materials apart by name, so two alike could be assigned by mistake); and renaming the
+ * placeholder, which would make "no material chosen" look chosen, with absorption 0, and let the
+ * run go. The name sent is `name.trim()`.
+ */
+export function materialRenameProblem(m: Material, name: string, materials: readonly Material[]): { code: string; message: string } | null {
+  const t = name.trim();
+  if (!t) return { code: 'MATERIAL_NAME_EMPTY', message: 'A material needs a name. The project is unchanged.' };
+  const key = t.toLowerCase();
+  if (materials.some((x) => x.id !== m.id && x.name.trim().toLowerCase() === key)) {
+    return { code: 'MATERIAL_NAME_TAKEN', message: `Another material is named '${t}'. Pick another name. The project is unchanged.` };
+  }
+  if (isPlaceholderMaterial(m) && t !== m.name) {
+    return {
+      code: 'MATERIAL_PLACEHOLDER_RENAME',
+      message:
+        "Default is the import's placeholder for no material chosen, with absorption 0 in every band: renamed, it would look chosen and Run would go. Add a material (+ Material or + From library) and assign it instead. The project is unchanged.",
+    };
+  }
+  return null;
+}
