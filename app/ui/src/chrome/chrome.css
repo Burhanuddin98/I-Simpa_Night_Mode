@@ -1478,3 +1478,25 @@ input.marker-colour:focus-visible {
   height: 16px;
   margin: 0;
 }
+
+/* M41: a plane's corners A, B, C, three coordinates a row. */
+.plane-corners {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+}
+.plane-corner {
+  display: grid;
+  grid-template-columns: 16px repeat(3, minmax(0, 1fr));
+  align-items: center;
+  gap: 6px;
+}
+.plane-corner .k {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-3);
+}
+.plane-corner input {
+  width: 100%;
+  min-width: 0;
+}

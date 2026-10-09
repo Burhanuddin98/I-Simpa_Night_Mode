@@ -1043,3 +1043,88 @@ fn a_marker_display_never_reaches_the_solver_input() {
     assert!(checked >= 20, "{checked}");
     println!("{checked} markers coloured and named off, solver input unchanged");
 }
+
+// ---- M41: a cutting plane's corners, any orientation --------------------------------------------
+//
+// The Sources step sends the plane back whole with one coordinate of one corner moved
+// (`replace_surface_receiver`, `withCorner` in planes.ts). config.xml writes the three corners as
+// upstream's GUI writes them (`recepteur_surfacique_coupe@ax`..`@cz`), and SPPS lays its grid along
+// BC and BA whatever their direction (`base_core_configuration.cpp:289-292`), so a tilted plane
+// moves exactly the one attribute; turned back, byte-identical. A plane is no mesh input.
+
+/// The one `<recepteur_surfacique_coupe id="<id>" ...>` line of `xml`.
+fn plane_line(xml: &str, id: i32) -> String {
+    let start = format!("<recepteur_surfacique_coupe id=\"{id}\"");
+    let lines: Vec<&str> = xml
+        .lines()
+        .filter(|l| l.trim_start().starts_with(&start))
+        .collect();
+    assert_eq!(lines.len(), 1, "{start} is written once");
+    lines[0].to_string()
+}
+
+#[test]
+fn a_tilted_cutting_plane_moves_only_its_corner_and_turned_back_is_byte_identical() {
+    let mut checked = 0;
+    for (name, original) in fixtures() {
+        let ids = simpa_core::config_xml::SolverIds::assign(&original).unwrap();
+        let configs = both_configs(&original);
+        let mesh = mesh_input(&original);
+        for r in &original.surface_receivers {
+            let schema::SurfaceReceiverShape::CuttingPlane { a, .. } = &r.shape else {
+                continue;
+            };
+            if !r.enabled {
+                continue;
+            }
+            let id = ids.surface_receiver_id(r.id).unwrap();
+            let az = a.to_array()[2] + 1.25;
+            let mut item = serde_json::to_value(r).unwrap();
+            item["shape"]["a"][2] = Value::from(az);
+            let mut p = original.clone();
+            replace_op("replace_surface_receiver", "receiver", item)
+                .apply(&mut p)
+                .unwrap();
+            let tilted = both_configs(&p);
+            for k in 0..2 {
+                let before = plane_line(&configs[k], id);
+                let after = plane_line(&tilted[k], id);
+                let old_az = format!(" az=\"{}\"", only_attr(&before, "az"));
+                let new_az = format!(" az=\"{}\"", only_attr(&after, "az"));
+                assert_ne!(old_az, new_az, "{name} {}: the corner moved", r.name);
+                assert_eq!(
+                    after,
+                    before.replace(&old_az, &new_az),
+                    "{name} {}: only A's z moves on its line",
+                    r.name
+                );
+                assert_eq!(
+                    only_attr(&after, "az").parse::<f64>().unwrap(),
+                    az,
+                    "{name} {}: written as typed, shortest round trip",
+                    r.name
+                );
+                same_text(
+                    &tilted[k].replace(&after, &before),
+                    &configs[k],
+                    &format!("{name} {}: nothing else moves", r.name),
+                );
+            }
+            assert_eq!(mesh_input(&p), mesh, "{name} {}: TetGen's input", r.name);
+            let back = serde_json::to_value(r).unwrap();
+            replace_op("replace_surface_receiver", "receiver", back)
+                .apply(&mut p)
+                .unwrap();
+            assert_eq!(p, original, "{name} {}: turned back", r.name);
+            assert_eq!(
+                both_configs(&p),
+                configs,
+                "{name} {}: turned back, byte-identical",
+                r.name
+            );
+            println!("{name}: M41 {} (id {id}) tilted, az {az}, and back", r.name);
+            checked += 1;
+        }
+    }
+    assert!(checked >= 2, "{checked}");
+}

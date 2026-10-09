@@ -16,6 +16,9 @@ import {
   rerunText,
   roomBox,
   withLevelHeight,
+  withCorner,
+  planeTilt,
+  parseCoordinate,
 } from './planes.ts';
 
 const CHECK = { bbox_min: [-1, 2, 0.5] as [number, number, number], extents_m: [10, 6, 3] as [number, number, number] };
@@ -125,4 +128,30 @@ test('the surface-receiver ops are the core\'s, as text', () => {
   );
   assert.equal(opText(removeSurfaceReceiver('id1')), '{"op":"remove_surface_receiver","id":"id1"}');
   assert.match(opText(replaceSurfaceReceiver(p)), /^\{"op":"replace_surface_receiver","receiver":\{"id":"id1"/);
+});
+
+test('M41: a corner moved on one axis tilts the plane; its normal and tilt from BC x BA; a level plane reads 0 degrees', () => {
+  const level = { kind: 'cutting_plane' as const, ...earPlane(BOX), resolution_m: 1 };
+  assert.deepEqual(planeTilt(level)?.tiltDeg, 0);
+  assert.equal(levelHeight(level), 2.1);
+  // A raised 2 m above B and C: the plane leans about the BC edge, still a plane with the same cells along BC.
+  const tilted = withCorner(level, 'a', 2, 4.1);
+  assert.deepEqual(tilted.b, level.b);
+  assert.deepEqual(tilted.c, level.c);
+  assert.deepEqual(tilted.a, [-1, 8, 4.1]);
+  assert.equal(levelHeight(tilted), null);
+  const t = planeTilt(tilted)!;
+  assert.ok(Math.abs(t.tiltDeg - (Math.atan2(2, 6) * 180) / Math.PI) < 1e-9, `${t.tiltDeg}`);
+  assert.equal(planeCells(tilted.a, tilted.b, tilted.c, 1)?.u, 10);
+  assert.equal(planeCells(tilted.a, tilted.b, tilted.c, 1)?.v, Math.ceil(Math.fround(Math.hypot(6, 2))));
+  // Upright: A straight above B.
+  const upright = withCorner(withCorner(level, 'a', 1, 2), 'a', 2, 3.1);
+  assert.ok(Math.abs(planeTilt(upright)!.tiltDeg - 90) < 1e-9);
+  // Collinear corners have no plane.
+  assert.equal(planeTilt({ ...level, a: [0, 2, 2.1], b: [1, 2, 2.1], c: [2, 2, 2.1] }), null);
+});
+
+test('M41: a corner coordinate is any finite number; words are refused before the core', () => {
+  assert.deepEqual(parseCoordinate('-3.25'), { ok: true, value: -3.25 });
+  assert.equal(parseCoordinate('two').ok, false);
 });

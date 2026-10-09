@@ -3,7 +3,10 @@
 // plane over the model at 1.6 m above its floor; each level plane's height above the floor and
 // cell size are edited here, committed through the checked apply (the core's
 // `cutting_plane_invalid` refuses inline, the project unchanged), and a plane is removed with its
-// button. A tilted plane (only a `.proj` import makes one) is shown, not edited. Every edit says
+// button. M41: every plane's corners A, B and C are edited too, each coordinate on its own, so a plane
+// takes any orientation (upstream's free corners; the fourth is A + C - B), and its tilt from level is
+// shown; config.xml writes the corners as upstream does (`recepteur_surfacique_coupe@ax`..`@cz`), and
+// SPPS lays its grid along BC and BA whatever their direction. Every edit says
 // what it costs: a new or moved plane has no map until SPPS runs again. M43: each plane has an
 // on/off switch; off, the view hides it and the run leaves it out.
 import { cubeText, REFUSE_GB, resultCube, settingsStore, WARN_GB } from '../features/simulate/runSize';
@@ -13,7 +16,20 @@ import type { SceneState, SurfaceReceiver, UiIssue } from '../bindings/ipc';
 import { fieldKey, issuesByEntity } from '../issues';
 import { removeSurfaceReceiver, replaceSurfaceReceiver } from '../ops';
 import { refusalStore, useStore } from '../store';
-import { heightAboveFloor, parseHeightAboveFloor, parseResolution, planeCells, roomBox, withLevelHeight, type Box3 } from './planes';
+import {
+  CORNERS,
+  heightAboveFloor,
+  parseCoordinate,
+  parseHeightAboveFloor,
+  parseResolution,
+  planeCells,
+  planeTilt,
+  roomBox,
+  withCorner,
+  withLevelHeight,
+  type Box3,
+  type Corner,
+} from './planes';
 import { EnabledRefusals, EnabledSwitch, IssueTag } from './ScenePanel';
 import { CommitInput, Issues } from './SourcesPanel';
 import { exact } from './sceneModel';
@@ -57,6 +73,20 @@ function PlaneRow({ scene, plane, box }: { scene: SceneState; plane: Plane; box:
     setField('height', null);
     return send(withLevelHeight(plane.shape, box.min[2] + p.value));
   };
+  // M41: one coordinate of one corner, the plane's other corners kept.
+  const commitCorner = (corner: Corner, axis: 0 | 1 | 2) => async (text: string) => {
+    const f = `${corner}.${axis}`;
+    const p = parseCoordinate(text);
+    if (!p.ok) {
+      setField(f, local(id, f, p.message));
+      return false;
+    }
+    setField(f, null);
+    const now = current();
+    if (!now) return false;
+    if (Object.is(now.shape[corner][axis], p.value)) return true;
+    return send(withCorner(now.shape, corner, axis, p.value));
+  };
   const commitResolution = async (text: string) => {
     const p = parseResolution(text);
     if (!p.ok) {
@@ -68,6 +98,7 @@ function PlaneRow({ scene, plane, box }: { scene: SceneState; plane: Plane; box:
   };
 
   const h = heightAboveFloor(plane.shape, box);
+  const tilt = planeTilt(plane.shape);
   const grid = planeCells(plane.shape.a, plane.shape.b, plane.shape.c, plane.shape.resolution_m);
   const issues = (issuesByEntity(scene.issues).get(`surface_receiver:${id}`) ?? []);
   const refused = [...Object.values(mine), ...(refusals.get(key) ?? []), ...(refusals.get(fieldKey('surface_receiver', id, '')) ?? [])];
@@ -88,9 +119,9 @@ function PlaneRow({ scene, plane, box }: { scene: SceneState; plane: Plane; box:
       </div>
       <div className="fact-grid plane-grid" data-input>
         {h === null ? (
-          <div className="fact-cell" data-part="plane-tilted">
-            <span className="k">Tilted plane</span>
-            <span className="unit">Its corners come from the imported project; it is not edited here.</span>
+          <div className="fact-cell" data-part="plane-tilted" title="The angle between the plane and the floor; set by its corners below">
+            <span className="k">Tilted</span>
+            <span className="mono">{tilt ? `${tilt.tiltDeg.toFixed(1)}° from level` : '—'}</span>
           </div>
         ) : (
           <label className="fact-cell">
@@ -143,6 +174,30 @@ function PlaneRow({ scene, plane, box }: { scene: SceneState; plane: Plane; box:
             </div>
           );
         })()}
+      </div>
+      <div className="plane-corners" data-part="plane-corners" title="Upstream's corners A, B and C: the grid runs from B along BC and along BA, the fourth corner is A + C - B. Any orientation">
+        {CORNERS.map((corner) => (
+          <div key={corner} className="plane-corner" data-corner={corner}>
+            <span className="k">{corner.toUpperCase()}</span>
+            {([0, 1, 2] as const).map((axis) => {
+              const f = `${corner}.${axis}`;
+              const name = `${corner.toUpperCase()} ${'XYZ'[axis]}`;
+              return (
+                <span key={axis} className={`axis-field axis-${'xyz'[axis]}`}>
+                  <CommitInput
+                    field={`plane.${corner}.${'xyz'[axis]}`}
+                    label={`${plane.name} corner ${name} in metres`}
+                    className="mono"
+                    value={exact(plane.shape[corner][axis])}
+                    invalid={!!mine[f]}
+                    commit={commitCorner(corner, axis)}
+                    onRevert={() => setField(f, null)}
+                  />
+                </span>
+              );
+            })}
+          </div>
+        ))}
       </div>
       <Issues refused={refused} current={[]} />
       <EnabledRefusals kind="surface_receiver" id={id} />

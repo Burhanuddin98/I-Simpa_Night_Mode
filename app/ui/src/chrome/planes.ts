@@ -79,6 +79,35 @@ export function withLevelHeight(shape: Plane, z: number): Plane {
   return { ...shape, a: at(shape.a), b: at(shape.b), c: at(shape.c) };
 }
 
+/** M41: the plane's three corners, upstream's A, B, C, as the core stores them. */
+export const CORNERS = ['a', 'b', 'c'] as const;
+export type Corner = (typeof CORNERS)[number];
+
+/** M41: the plane with one coordinate of one corner moved, the others kept: any orientation, as upstream's
+ * free corners (`e_scene_recepteurss_recepteurcoupe_proprietes.h`). The fourth corner is A + C - B. */
+export function withCorner(shape: Plane, corner: Corner, axis: 0 | 1 | 2, value: number): Plane {
+  const p = [...shape[corner]] as Vec3;
+  p[axis] = value;
+  return { ...shape, [corner]: p };
+}
+
+/**
+ * M41: the unit normal of the plane through A, B, C (BC x BA, the solver's grid axes), and the angle it
+ * makes with the vertical, degrees: 0 for a level plane, 90 for an upright one. Null for collinear or
+ * non-finite corners (which the core refuses as `cutting_plane_invalid`).
+ */
+export function planeTilt(shape: Plane): { normal: XYZ; tiltDeg: number } | null {
+  if (![...shape.a, ...shape.b, ...shape.c].every(finite)) return null;
+  const [a, b, c] = [shape.a, shape.b, shape.c] as unknown as XYZ[];
+  const bc = [c[0] - b[0], c[1] - b[1], c[2] - b[2]];
+  const ba = [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const n: XYZ = [bc[1] * ba[2] - bc[2] * ba[1], bc[2] * ba[0] - bc[0] * ba[2], bc[0] * ba[1] - bc[1] * ba[0]];
+  const len = Math.hypot(...n);
+  if (!(len > 1e-12 * Math.hypot(...bc) * Math.hypot(...ba))) return null;
+  const unit = n.map((x) => x / len) as XYZ;
+  return { normal: unit, tiltDeg: (Math.acos(Math.min(1, Math.abs(unit[2]))) * 180) / Math.PI };
+}
+
 export type Field = { ok: true; value: number } | { ok: false; message: string };
 
 const notANumber = (text: string): Field => ({ ok: false, message: `"${text}" is not a number: write digits with a decimal point, like 1.6` });
@@ -90,6 +119,13 @@ export function parseHeightAboveFloor(text: string, box: Box3): Field {
   const top = box.max[2] - box.min[2];
   if (!(p.value > 0)) return { ok: false, message: `The plane must lie above the floor: ${p.value} m is not` };
   if (!(p.value < top)) return { ok: false, message: `The plane must lie below the ceiling, ${top} m above the floor: ${p.value} m is not` };
+  return { ok: true, value: p.value };
+}
+
+/** M41: a corner coordinate, any finite number of metres; the core checks the corners make a plane. */
+export function parseCoordinate(text: string): Field {
+  const p = parseStrictDecimal(text);
+  if (!p.ok) return notANumber(text);
   return { ok: true, value: p.value };
 }
 
