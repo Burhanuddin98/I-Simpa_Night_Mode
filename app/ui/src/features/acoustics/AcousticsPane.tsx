@@ -63,6 +63,7 @@ import {
   sourceLabel,
   sourceNote,
   sources,
+  spectrumSeries,
   type SourceSel,
   tcrLevels,
   type Str,
@@ -149,6 +150,7 @@ function SettingValueView({ n, word, unit }: { n: AdviceCard['from']; word: stri
 const CARDS: readonly { label: string; card: string }[] = [
   { label: 'Reverberation time', card: 'Reverberation time against DIN 18041' },
   { label: 'Receivers', card: 'Receivers' },
+  { label: 'Spectrum', card: 'Spectrum' },
   { label: 'Decay', card: 'Decay' },
   { label: 'Sabine / Eyring', card: 'Sabine and Eyring' },
   { label: 'Absorption', card: 'Absorption by surface group' },
@@ -261,6 +263,39 @@ function axes(xLabel: string, yLabel: string, xValues?: (u: uPlot, splits: numbe
   ];
 }
 
+/** R9: the spectrum's bars, the first series colour on the dark panel; their whiskers in the panel's ink. */
+const SPECTRUM_COLOUR = '#e0202e';
+
+/** A draw hook: each drawn value's range (lo to hi) as a whisker with caps, as the tables print it
+ * beside the value; nothing where the value is a gap. */
+function rangeWhiskers(series: readonly Series[], colour: (param: string) => string): (u: uPlot) => void {
+  return (u: uPlot) => {
+    const ctx = u.ctx;
+    const cap = 4 * devicePixelRatio;
+    series.forEach((s) => {
+      ctx.save();
+      ctx.strokeStyle = colour(s.param);
+      ctx.lineWidth = 1.5 * devicePixelRatio;
+      s.lo.forEach((lo, i) => {
+        const hi = s.hi[i];
+        if (lo === null || hi === null || s.values[i] === null) return;
+        const px = u.valToPos(i, 'x', true);
+        const y0 = u.valToPos(lo, 'y', true);
+        const y1 = u.valToPos(hi, 'y', true);
+        ctx.beginPath();
+        ctx.moveTo(px, y0);
+        ctx.lineTo(px, y1);
+        ctx.moveTo(px - cap, y0);
+        ctx.lineTo(px + cap, y0);
+        ctx.moveTo(px - cap, y1);
+        ctx.lineTo(px + cap, y1);
+        ctx.stroke();
+      });
+      ctx.restore();
+    });
+  };
+}
+
 /** RT per band against the DIN target: the shown reverberation times, each with its range as a
  * whisker (`rtSeries`: the tables' filter, so a value the tables do not show is a gap), the target
  * line, and a shaded fifth either side of it. */
@@ -272,32 +307,7 @@ function RtChart({ report, series, target }: { report: NonNullable<ReportView['r
     const data: uPlot.AlignedData = [x, ...series.map((s) => s.values), flat(1), flat(0.8), flat(1.2)];
     const n = series.length;
     const top = Math.max(0, ...series.flatMap((s) => s.hi.filter((v): v is number => v !== null)));
-    // Each drawn value's range (lo to hi), as the tables print it beside the value.
-    const whiskers = (u: uPlot) => {
-      const ctx = u.ctx;
-      const cap = 4 * devicePixelRatio;
-      for (const s of series) {
-        ctx.save();
-        ctx.strokeStyle = SERIES_COLOURS[s.param] ?? '#a1a1aa';
-        ctx.lineWidth = 1.5 * devicePixelRatio;
-        s.lo.forEach((lo, i) => {
-          const hi = s.hi[i];
-          if (lo === null || hi === null || s.values[i] === null) return;
-          const px = u.valToPos(i, 'x', true);
-          const y0 = u.valToPos(lo, 'y', true);
-          const y1 = u.valToPos(hi, 'y', true);
-          ctx.beginPath();
-          ctx.moveTo(px, y0);
-          ctx.lineTo(px, y1);
-          ctx.moveTo(px - cap, y0);
-          ctx.lineTo(px + cap, y0);
-          ctx.moveTo(px - cap, y1);
-          ctx.lineTo(px + cap, y1);
-          ctx.stroke();
-        });
-        ctx.restore();
-      }
-    };
+    const whiskers = rangeWhiskers(series, (p) => SERIES_COLOURS[p] ?? '#a1a1aa');
     const opts: Omit<uPlot.Options, 'width' | 'height'> = {
       legend: { show: false },
       cursor: { show: false },
@@ -316,6 +326,41 @@ function RtChart({ report, series, target }: { report: NonNullable<ReportView['r
     return { opts, data };
   }, [report, series, target]);
   return <Chart opts={opts} data={data} part="rt-chart" />;
+}
+
+/** R9: a receiver's spectrum, SPL per band as bars (`spectrumSeries`: the receivers table's cells,
+ * so a level the table does not show is a gap), each with its range as a whisker. */
+function SpectrumChart({ report, series }: { report: NonNullable<ReportView['report']>; series: Series[] }) {
+  const { opts, data } = useMemo(() => {
+    const x = report.bands_hz.map((_, i) => i);
+    const data: uPlot.AlignedData = [x, ...series.map((s) => s.values)];
+    const vals = series.flatMap((s) => [...s.lo, ...s.hi]).filter((v): v is number => v !== null);
+    const lo = vals.length ? Math.min(...vals) : 0;
+    const hi = vals.length ? Math.max(...vals) : 1;
+    // Bars stand on a floor 10 dB under the lowest level shown, so the differences between bands read.
+    const floor = Math.floor((lo - 10) / 5) * 5;
+    const whiskers = rangeWhiskers(series, () => css('--text', '#ececee'));
+    const opts: Omit<uPlot.Options, 'width' | 'height'> = {
+      legend: { show: false },
+      cursor: { show: false },
+      scales: { x: { time: false, range: [-0.5, x.length - 0.5] }, y: { range: [floor, Math.ceil((hi + 3) / 5) * 5] } },
+      axes: axes('Band', 'Level (dB)', (_u, splits) => splits.map((v) => (Number.isInteger(v) && report.bands_hz[v] !== undefined ? bandText(report.bands_hz[v]) : ''))),
+      series: [
+        {},
+        ...series.map((s) => ({
+          label: s.label,
+          stroke: SPECTRUM_COLOUR,
+          fill: 'rgba(224,32,46,0.35)',
+          width: 1.5,
+          points: { show: false },
+          paths: uPlot.paths.bars!({ size: [0.6, 48] }),
+        })),
+      ],
+      hooks: { draw: [whiskers] },
+    };
+    return { opts, data };
+  }, [report, series]);
+  return <Chart opts={opts} data={data} part="spectrum-chart" />;
 }
 
 function DecayChart({ curve }: { curve: { t: number[]; db: number[] } }) {
@@ -343,6 +388,8 @@ interface HookView {
   source: string | null;
   din: string;
   series: Series[];
+  /** R9: the spectrum chart's series (SPL per band), as drawn. */
+  spectrum: Series[];
 }
 let paneView: HookView | null = null;
 
@@ -419,6 +466,7 @@ export function AcousticsPane() {
   const srcNames = useMemo(() => (report ? sources(report, (projectSources ?? []).map((s) => s.name)) : []), [report, projectSources]);
   const src: SourceSel = !srcNames.length ? null : source === undefined || (source !== null && !srcNames.includes(source)) ? srcNames[0] : source;
   const series = useMemo(() => (report ? rtSeries(report, r, src) : []), [report, r, src]);
+  const spectrum = useMemo(() => (report ? spectrumSeries(report, r, src) : []), [report, r, src]);
   const target = report ? dinTarget(report, group) : null;
   const curve = useMemo(() => (report ? decay(report, r, b, src) : null), [report, r, b, src]);
 
@@ -437,7 +485,7 @@ export function AcousticsPane() {
               : 'refused';
 
   // The test hook (gate (f)): what is shown and the arrays the RT chart was given.
-  paneView = { state, run: selected, receiver: r, band: String(b), source: src, din: group, series };
+  paneView = { state, run: selected, receiver: r, band: String(b), source: src, din: group, series, spectrum };
   useEffect(
     () => () => {
       paneView = null;
@@ -655,6 +703,43 @@ export function AcousticsPane() {
               ))}
             </tbody>
           </table>
+        </section>
+
+        <section className="ac-card ac-spectrum" aria-label="Spectrum">
+          <div className="ac-card-head">
+            <span className="ac-card-title">Spectrum</span>
+            <label className="ac-control">
+              Receiver
+              <select data-control="spectrum-receiver" value={String(r)} onChange={(e) => setReceiver(Number(e.target.value))}>
+                {names.map((n, i) => (
+                  <option key={i} value={String(i)}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {spectrum.length && spectrum.some((s) => s.values.some((v) => v !== null)) ? (
+            <>
+              {/* Only a shown parameter is named (gate (b)): the key exists only with the chart. */}
+              <div className="ac-legend">
+                {spectrum.map((s) => (
+                  <span key={s.param} className="ac-key" data-param={s.param}>
+                    <span className="ac-swatch" style={{ background: SPECTRUM_COLOUR }} />
+                    <span data-label="param" data-param={s.param}>
+                      {s.label}
+                    </span>
+                  </span>
+                ))}
+                <span className="ac-key">per band, as the Receivers table shows it; whiskers: each value's range</span>
+              </div>
+              <SpectrumChart report={report} series={spectrum} />
+            </>
+          ) : (
+            <div className="ac-none" data-part="spectrum-none">
+              No sound level is shown for this run, so no spectrum is drawn.
+            </div>
+          )}
         </section>
 
         {levels.length ? (

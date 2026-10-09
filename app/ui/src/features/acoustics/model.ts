@@ -334,8 +334,26 @@ export interface Series {
  * parameters only, a value only with its range and an `ok`/`wide` status), so the chart draws
  * no value the table does not show, and draws the range the table shows beside it. */
 export function rtSeries(report: Report, r: number, src: SourceSel = null): Series[] {
+  return bandSeries(report, r, src, (s) => !!s.rt);
+}
+
+/** The parameters the spectrum chart draws per band: the sound pressure level. */
+export const SPECTRUM_PARAMS: readonly string[] = ['spl_db'];
+
+/**
+ * R9: receiver `r`'s spectrum, the level per band (upstream's "Spectrum" of a receiver), as the
+ * receivers table shows it band by band: the same cells (PASS parameters only, a value only with
+ * its range and an ok/wide status), so the chart draws no level the table does not show, and a
+ * refused or withheld band is a gap. Empty when SPL is not shown for the run (no bed PASS).
+ */
+export function spectrumSeries(report: Report, r: number, src: SourceSel = null): Series[] {
+  return bandSeries(report, r, src, (s) => SPECTRUM_PARAMS.includes(s.name));
+}
+
+/** Receiver `r`'s shown parameters that `pick` takes, per band, through `cell`. */
+function bandSeries(report: Report, r: number, src: SourceSel, pick: (s: ParamSpec) => boolean): Series[] {
   return shownParams(report)
-    .filter((s) => s.rt)
+    .filter(pick)
     .map((s) => {
       const base = report.bands_hz.map((_, b) => paramPath(report, s, r, b, src));
       const cells = report.bands_hz.map((_, b) => cell(report, s, r, b, src));

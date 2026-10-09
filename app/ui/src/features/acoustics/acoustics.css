@@ -93,6 +93,13 @@
 .ac-decay {
   width: 340px;
 }
+/* R9: a receiver's spectrum, SPL per band. */
+.ac-spectrum {
+  width: 380px;
+}
+.ac-spectrum .ac-chart {
+  flex: 1 1 auto;
+}
 .ac-card-head {
   display: flex;
   align-items: center;

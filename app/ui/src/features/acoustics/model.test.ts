@@ -21,6 +21,7 @@ import {
   paramMarks,
   receiverRows,
   rtSeries,
+  spectrumSeries,
   runForVariant,
   sourceLabel,
   sourceNote,
@@ -242,6 +243,28 @@ test('Acoustics: the RT chart goes through the tables filter: only what a cell s
   assert.equal(by('t30_s').hiPaths[0], 'spps.point_receivers.0.bands.0.parameters.t30_s.hi');
   // Only PASS parameters are drawn (gate (b)), as before.
   assert.deepEqual(rtSeries(report(), 0).map((x) => x.param), ['t20_s']);
+});
+
+test('Acoustics R9: the spectrum is the receivers table’s SPL, band by band, gaps where a cell shows none', () => {
+  const r = report();
+  const s = spectrumSeries(r, 0);
+  assert.deepEqual(s.map((x) => x.param), ['spl_db']);
+  const spl = PARAM_SPECS.find((p) => p.name === 'spl_db')!;
+  // Each drawn level is the value its cell shows, read at the cell's path, with the cell's range.
+  r.bands_hz.forEach((_, b) => {
+    const c = cell(r, spl, 0, b);
+    assert.ok(c && c.value && c.lo && c.hi);
+    assert.equal(s[0].values[b], 60.04);
+    assert.equal(s[0].paths[b], `spps.point_receivers.0.bands.${b}.parameters.spl_db.value`);
+    assert.equal(s[0].lo[b], 60.04 - 0.01);
+  });
+  // A level the table would not show (no range) is a gap, never drawn.
+  const b1 = (r as unknown as { spps: { point_receivers: { bands: { parameters: Record<string, unknown> }[] }[] } }).spps.point_receivers[0].bands[1].parameters;
+  b1.spl_db = { value: 61, mc_sd: 0.01, status: 'ok' };
+  assert.equal(cell(r, spl, 0, 1), null);
+  assert.deepEqual(spectrumSeries(r, 0)[0].values, [60.04, null]);
+  // SPL without a bed PASS: no spectrum at all (withheld stays withheld).
+  assert.deepEqual(spectrumSeries(report(['spl_db']), 0), []);
 });
 
 test('Acoustics: the marks beside the table: EDT row 37, T30 decision 46, STI MQ3, each only with its parameter', () => {
