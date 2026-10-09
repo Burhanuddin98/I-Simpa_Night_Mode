@@ -228,14 +228,35 @@ function AdviceCardView({ cards, solver, conflicts }: { cards: AdviceCard[]; sol
 }
 
 /** A uPlot chart over `data`, redrawn when `data` changes; sized to its box. */
-function Chart({ opts, data, part }: { opts: Omit<uPlot.Options, 'width' | 'height'>; data: uPlot.AlignedData; part: string }) {
+/**
+ * R62: every chart zooms under the hand: drag across it to zoom to that span (sideways the bands
+ * or times, up and down the values, both for a box), double-click to go back to the whole chart.
+ * No crosshair and no readout: a value is read from the table beside the chart, never from the
+ * cursor. `hidden` are the series (uPlot indices) the legend has switched off; switching one keeps
+ * the zoom.
+ */
+const ZOOM_CURSOR: uPlot.Cursor = { x: false, y: false, points: { show: false }, drag: { x: true, y: true, uni: 24, setScale: true } };
+const ZOOM_HINT = 'Drag to zoom (sideways, up and down, or a box); double-click for the whole chart';
+
+/** A uPlot chart over `data`, redrawn when `data` changes; sized to its box. */
+function Chart({ opts, data, part, hidden = [] }: { opts: Omit<uPlot.Options, 'width' | 'height'>; data: uPlot.AlignedData; part: string; hidden?: readonly number[] }) {
   const box = useRef<HTMLDivElement>(null);
   const plot = useRef<uPlot | null>(null);
+  const hiddenNow = useRef(hidden);
+  hiddenNow.current = hidden;
+  const show = (u: uPlot, off: readonly number[]) => {
+    u.series.forEach((s, i) => {
+      if (i === 0) return;
+      const want = !off.includes(i);
+      if (s.show !== want) u.setSeries(i, { show: want });
+    });
+  };
   useEffect(() => {
     const el = box.current;
     if (!el) return;
     const size = () => ({ width: Math.max(160, el.clientWidth), height: Math.max(100, el.clientHeight) });
-    plot.current = new uPlot({ ...opts, ...size() }, data, el);
+    plot.current = new uPlot({ cursor: ZOOM_CURSOR, ...opts, ...size() }, data, el);
+    show(plot.current, hiddenNow.current);
     const ro = new ResizeObserver(() => plot.current?.setSize(size()));
     ro.observe(el);
     return () => {
@@ -244,7 +265,19 @@ function Chart({ opts, data, part }: { opts: Omit<uPlot.Options, 'width' | 'heig
       plot.current = null;
     };
   }, [opts, data]);
-  return <div className="ac-chart" data-part={part} ref={box} />;
+  useEffect(() => {
+    if (plot.current) show(plot.current, hidden);
+  }, [hidden]);
+  return <div className="ac-chart" data-part={part} ref={box} title={ZOOM_HINT} />;
+}
+
+/** R62: a legend key that switches its series on and off (`aria-pressed`: drawn). */
+function SeriesKey({ on, onToggle, children, param }: { on: boolean; onToggle: () => void; children: React.ReactNode; param?: string }) {
+  return (
+    <button type="button" className="ac-key ac-key-toggle" aria-pressed={on} data-param={param} data-series-key={param ?? 'target'} title={on ? 'Hide this from the chart' : 'Show this on the chart'} onClick={onToggle}>
+      {children}
+    </button>
+  );
 }
 
 const css = (name: string, fallback: string) => {
@@ -273,7 +306,9 @@ function rangeWhiskers(series: readonly Series[], colour: (param: string) => str
   return (u: uPlot) => {
     const ctx = u.ctx;
     const cap = 4 * devicePixelRatio;
-    series.forEach((s) => {
+    series.forEach((s, k) => {
+      // R62: a series switched off in the legend takes its whiskers with it.
+      if (u.series[k + 1]?.show === false) return;
       ctx.save();
       ctx.strokeStyle = colour(s.param);
       ctx.lineWidth = 1.5 * devicePixelRatio;
@@ -300,7 +335,7 @@ function rangeWhiskers(series: readonly Series[], colour: (param: string) => str
 /** RT per band against the DIN target: the shown reverberation times, each with its range as a
  * whisker (`rtSeries`: the tables' filter, so a value the tables do not show is a gap), the target
  * line, and a shaded fifth either side of it. */
-function RtChart({ report, series, target }: { report: NonNullable<ReportView['report']>; series: Series[]; target: number | null }) {
+function RtChart({ report, series, target, off }: { report: NonNullable<ReportView['report']>; series: Series[]; target: number | null; off: ReadonlySet<string> }) {
   const { opts, data } = useMemo(() => {
     const x = report.bands_hz.map((_, i) => i);
     const t = target ?? null;
@@ -311,7 +346,6 @@ function RtChart({ report, series, target }: { report: NonNullable<ReportView['r
     const whiskers = rangeWhiskers(series, (p) => SERIES_COLOURS[p] ?? '#a1a1aa');
     const opts: Omit<uPlot.Options, 'width' | 'height'> = {
       legend: { show: false },
-      cursor: { show: false },
       scales: { x: { time: false, range: [-0.5, x.length - 0.5] }, y: { range: (_u, _lo, hi) => [0, Math.max(hi ?? 1, top, (t ?? 0) * 1.3) * 1.1 || 1] } },
       axes: axes('Band', 'Time (s)', (_u, splits) => splits.map((v) => (Number.isInteger(v) && report.bands_hz[v] !== undefined ? bandText(report.bands_hz[v]) : ''))),
       series: [
@@ -326,8 +360,17 @@ function RtChart({ report, series, target }: { report: NonNullable<ReportView['r
     };
     return { opts, data };
   }, [report, series, target]);
-  return <Chart opts={opts} data={data} part="rt-chart" />;
+  // R62: the legend's switched-off keys as uPlot series: a parameter's own, the target's three.
+  const n = series.length;
+  const hidden = useMemo(
+    () => [...series.flatMap((s, i) => (off.has(s.param) ? [i + 1] : [])), ...(off.has(TARGET_KEY) ? [n + 1, n + 2, n + 3] : [])],
+    [series, off, n],
+  );
+  return <Chart opts={opts} data={data} part="rt-chart" hidden={hidden} />;
 }
+
+/** R62: the RT legend's key for the DIN target and its shading. */
+const TARGET_KEY = 'din-target';
 
 /** R9: a receiver's spectrum, SPL per band as bars (`spectrumSeries`: the receivers table's cells,
  * so a level the table does not show is a gap), each with its range as a whisker. */
@@ -343,7 +386,6 @@ function SpectrumChart({ report, series }: { report: NonNullable<ReportView['rep
     const whiskers = rangeWhiskers(series, () => css('--text', '#ececee'));
     const opts: Omit<uPlot.Options, 'width' | 'height'> = {
       legend: { show: false },
-      cursor: { show: false },
       scales: { x: { time: false, range: [-0.5, x.length - 0.5] }, y: { range: [floor, Math.ceil((hi + 3) / 5) * 5] } },
       axes: axes('Band', 'Level (dB)', (_u, splits) => splits.map((v) => (Number.isInteger(v) && report.bands_hz[v] !== undefined ? bandText(report.bands_hz[v]) : ''))),
       series: [
@@ -369,7 +411,6 @@ function DecayChart({ curve }: { curve: { t: number[]; db: number[] } }) {
     const data: uPlot.AlignedData = [curve.t, curve.db];
     const opts: Omit<uPlot.Options, 'width' | 'height'> = {
       legend: { show: false },
-      cursor: { show: false },
       scales: { x: { time: false } },
       axes: axes('Time (s)', 'Level (dB)'),
       series: [{}, { label: 'Decay', stroke: '#e0202e', width: 2, points: { show: false } }],
@@ -438,6 +479,14 @@ export function AcousticsPane() {
   const [group, setGroup] = useState('A3');
   const [error, setError] = useState<{ run: string; code: string } | null>(null);
   const [responseOpen, setResponseOpen] = useState(false);
+  // R62: the RT legend's keys switched off (parameters, and the DIN target).
+  const [rtOff, setRtOff] = useState<ReadonlySet<string>>(new Set());
+  const toggleRt = (key: string) =>
+    setRtOff((o) => {
+      const next = new Set(o);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
   const closeResponse = useCallback(() => setResponseOpen(false), []);
   // C5's listening window: it closes with the run it plays, and off the Results step.
   const [auralOpen, setAuralOpen] = useState(false);
@@ -587,17 +636,17 @@ export function AcousticsPane() {
           </div>
           <div className="ac-legend">
             {series.map((s) => (
-              <span key={s.param} className="ac-key" data-param={s.param}>
+              <SeriesKey key={s.param} param={s.param} on={!rtOff.has(s.param)} onToggle={() => toggleRt(s.param)}>
                 <span className="ac-swatch" style={{ background: SERIES_COLOURS[s.param] }} />
                 <span data-label="param" data-param={s.param}>
                   {s.label}
                 </span>
-              </span>
+              </SeriesKey>
             ))}
-            <span className="ac-key">
+            <SeriesKey on={!rtOff.has(TARGET_KEY)} onToggle={() => toggleRt(TARGET_KEY)}>
               <span className="ac-swatch dash" />
               target, shaded a fifth either side
-            </span>
+            </SeriesKey>
             <span className="ac-key">whiskers: each value's range</span>
           </div>
           <div className="ac-din" data-part="din-target">
@@ -621,7 +670,7 @@ export function AcousticsPane() {
             )}
           </div>
           {d?.note ? <S s={d.note} className="ac-note block" /> : null}
-          {series.length ? <RtChart report={report} series={series} target={target} /> : <div className="ac-none">No reverberation time is shown for this run.</div>}
+          {series.length ? <RtChart report={report} series={series} target={target} off={rtOff} /> : <div className="ac-none">No reverberation time is shown for this run.</div>}
           {series.length ? (
             <table className="ac-table" data-part="rt-table">
               <thead>

@@ -149,6 +149,33 @@
   align-items: center;
   gap: 5px;
 }
+/* R62: a legend key that switches its series; off, it is dimmed and struck through. */
+.ac-key-toggle {
+  border: 0;
+  background: none;
+  padding: 1px 3px;
+  border-radius: 4px;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.ac-key-toggle:hover {
+  color: var(--text);
+  background: var(--raised);
+}
+.ac-key-toggle[aria-pressed='false'] {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+.ac-key-toggle:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 0;
+}
+/* R62: the span dragged to zoom, in the Dockyard red, readable on the dark panel. */
+.ac-chart .u-select {
+  background: rgba(224, 32, 46, 0.18);
+  border: 1px solid rgba(224, 32, 46, 0.6);
+}
 .ac-swatch {
   width: 12px;
   height: 3px;
