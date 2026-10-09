@@ -1,4 +1,5 @@
 import { strict as assert } from 'node:assert';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import type { RunRow, RunsView, SceneState } from '../../bindings/ipc.ts';
 import { ACOUSTIC_NUMBER_RE, type ProjectSettings } from './model.ts';
@@ -6,10 +7,13 @@ import {
   clockText,
   durationWords,
   forecastRunTime,
-  keepPeak,
   liveFinishMs,
+  logProgress,
   measuredRun,
   MIN_MEASURED_S,
+  type ProgressPoint,
+  RATE_WINDOW_MIN_MS,
+  RATE_WINDOW_SHARE,
   remainingText,
   runTimeText,
   solverSentence,
@@ -160,33 +164,114 @@ test('the finish as a clock time, to the minute, with the weekday on another day
   assert.equal(clockText(now + 20 * 3600_000 + 10 * 60_000, now), 'Sat 00:10');
 });
 
+/** The log as the run's stream builds it, from (ms after the solve's start, share) lines. */
+function logOf(solveAt: number, lines: [number, number][]): readonly ProgressPoint[] | undefined {
+  let log: readonly ProgressPoint[] | undefined;
+  for (const [ms, p] of lines) log = logProgress(log, solveAt, p, solveAt + ms);
+  return log;
+}
+
 test('while SPPS solves: the finish from the progress so far', () => {
   const solveAt = 1_000_000;
-  const at = (progress: number, ms: number) => ({ progress, at: solveAt + ms });
-  // A quarter done one minute into the solve: four minutes in all.
-  assert.equal(liveFinishMs({ stage: 'solve', solveAt, progressPeak: at(25, 60_000) }), solveAt + 240_000);
-  assert.equal(liveFinishMs({ stage: 'solve', solveAt, progressPeak: at(100, 60_000) }), solveAt + 60_000);
-  assert.equal(liveFinishMs({ stage: 'solve', solveAt, progressPeak: at(0.5, 1_000) }), null, 'under 1 %: too early to say');
-  assert.equal(liveFinishMs({ stage: 'mesh', solveAt, progressPeak: at(25, 60_000) }), null);
-  assert.equal(liveFinishMs({ stage: 'solve', solveAt, progressPeak: undefined }), null);
-  assert.equal(liveFinishMs({ stage: 'solve', solveAt: undefined, progressPeak: at(25, 0) }), null);
+  const live = (lines: [number, number][], stage = 'solve') => liveFinishMs({ stage, solveAt, progressLog: logOf(solveAt, lines) });
+  // A quarter done one minute into the solve, at a steady rate: four minutes in all.
+  assert.equal(live([[20_000, 25 / 3], [40_000, 50 / 3], [60_000, 25]]), solveAt + 240_000);
+  // Shorter than the window: measured from the solve's start at 0 %.
+  assert.equal(live([[5_000, 25]]), solveAt + 20_000);
+  assert.equal(live([[60_000, 100]]), solveAt + 60_000);
+  assert.equal(live([[1_000, 0.5]]), null, 'under 1 %: too early to say');
+  assert.equal(live([[60_000, 25]], 'mesh'), null);
+  assert.equal(live([]), null);
+  assert.equal(liveFinishMs({ stage: 'solve', solveAt: undefined, progressLog: logOf(solveAt, [[60_000, 25]]) }), null);
+});
+
+test('a slowing share moves the finish out: the rate is the last tenth of the solve, at least 20 s', () => {
+  assert.equal(RATE_WINDOW_SHARE, 0.1);
+  assert.equal(RATE_WINDOW_MIN_MS, 20_000);
+  const solveAt = 0;
+  // 0.5 % a second for 180 s (90 %), then 0.1 % a second for 20 s: 92 % at 200 s, 80 s left at the new rate.
+  const lines: [number, number][] = [];
+  for (let s = 1; s <= 180; s++) lines.push([s * 1000, s * 0.5]);
+  for (let s = 181; s <= 200; s++) lines.push([s * 1000, 90 + (s - 180) * 0.1]);
+  const log = logOf(solveAt, lines)!;
+  assert.equal(Math.round(liveFinishMs({ stage: 'solve', solveAt, progressLog: log })!), 280_000);
+  // The whole-run rate would have said 17 s left.
+  assert.equal(Math.round((200_000 * 100) / 92 - 200_000), 17_391);
+  // Only what the window can reach is kept: the point at its start (180 s) and the 20 after it.
+  assert.equal(log.length, 21);
+  assert.deepEqual(log[0], { progress: 90, at: 180_000 });
 });
 
 test('the live finish keeps the highest share seen: a share that falls never throws the clock late', () => {
   const solveAt = 1_000_000;
-  let peak = keepPeak(undefined, 50, solveAt + 60_000);
-  assert.deepEqual(peak, { progress: 50, at: solveAt + 60_000 });
-  const before = liveFinishMs({ stage: 'solve', solveAt, progressPeak: peak });
+  let log = logOf(solveAt, [[30_000, 25], [60_000, 50]]);
+  const before = liveFinishMs({ stage: 'solve', solveAt, progressLog: log });
   assert.equal(before, solveAt + 120_000);
-  // From 50 down to 5 (a per-band share, or a solver starting over): the peak holds, the finish does not move.
-  peak = keepPeak(peak, 5, solveAt + 61_000);
-  assert.deepEqual(peak, { progress: 50, at: solveAt + 60_000 });
-  assert.equal(liveFinishMs({ stage: 'solve', solveAt, progressPeak: peak }), before);
-  // The same share again keeps its first time; a higher one moves on; no number keeps what it had.
-  assert.equal(keepPeak(peak, 50, solveAt + 62_000), peak);
-  assert.deepEqual(keepPeak(peak, 60, solveAt + 70_000), { progress: 60, at: solveAt + 70_000 });
-  assert.equal(keepPeak(peak, null, solveAt + 70_000), peak);
-  assert.equal(keepPeak(peak, Number.NaN, solveAt + 70_000), peak);
+  // From 50 down to 5 (a per-band share, or a solver starting over): the log holds, the finish does not move.
+  const after = logProgress(log, solveAt, 5, solveAt + 61_000);
+  assert.equal(after, log);
+  assert.equal(liveFinishMs({ stage: 'solve', solveAt, progressLog: after }), before);
+  // The same share again keeps its first time; a higher one is appended; no number keeps what it had.
+  assert.equal(logProgress(log, solveAt, 50, solveAt + 62_000), log);
+  log = logProgress(log, solveAt, 60, solveAt + 70_000);
+  assert.deepEqual(log?.at(-1), { progress: 60, at: solveAt + 70_000 });
+  assert.equal(logProgress(log, solveAt, null, solveAt + 71_000), log);
+  assert.equal(logProgress(log, solveAt, Number.NaN, solveAt + 71_000), log);
+});
+
+// Backlog row 18's done-when, replayed: the two runs' PROGRESS lines as the GUI got them (c36-timelines.json, from
+// .out/v1q-p0a/c36-*/bed-run.json), fed in at the times they were sampled, and the time left the running block would
+// have said at each sample of the second half, against the time the run then really had left.
+interface Timeline {
+  endMs: number;
+  samplesMs: number[];
+  lines: [number, number][];
+}
+const TIMELINES = JSON.parse(readFileSync(new URL('./c36-timelines.json', import.meta.url), 'utf8')) as { runs: Record<'box' | 'hall', Timeline> };
+
+/** The worst relative error of the time left over the second half's samples, and where. */
+function replay(tl: Timeline, finish: (log: readonly ProgressPoint[] | undefined) => number | null) {
+  let log: readonly ProgressPoint[] | undefined;
+  let next = 0;
+  let worst = { error: 0, atS: 0, leftS: 0, saidS: 0 };
+  for (const now of tl.samplesMs) {
+    while (next < tl.lines.length && tl.lines[next][0] <= now) {
+      log = logProgress(log, 0, tl.lines[next][1], tl.lines[next][0]);
+      next++;
+    }
+    if (now < tl.endMs / 2) continue;
+    const f = finish(log);
+    const left = tl.endMs - now;
+    const error = f === null ? Number.POSITIVE_INFINITY : (f - now - left) / left;
+    if (Math.abs(error) > Math.abs(worst.error)) worst = { error, atS: now / 1000, leftS: left / 1000, saidS: f === null ? NaN : (f - now) / 1000 };
+  }
+  return worst;
+}
+
+const pct = (x: number) => Math.round(x * 1000) / 10;
+// %, signed. The box's is luck: its share stops at 59.25 % at 33 s (upstream's float sum, runTime.ts), so its second
+// half is one projection held from that line, which happens to land near its end. The hall's is the slowing near
+// its end that no rate sees before it comes: 13.4 s said with 32.1 s left, 283.6 s into the solve.
+const [BOX_WORST, HALL_WORST, BOX_WHOLE_WORST, HALL_WHOLE_WORST] = [1.7, -58.3, -117.4, -277.9];
+
+test('backlog 18, replayed: the time left on the box and the hall, every sample of the second half', () => {
+  const recent = (log: readonly ProgressPoint[] | undefined) => liveFinishMs({ stage: 'solve', solveAt: 0, progressLog: log });
+  // What 4d0b970 shipped, the share over the whole time, for comparison.
+  const whole = (log: readonly ProgressPoint[] | undefined) => {
+    const last = log?.at(-1);
+    return last && last.progress >= 1 ? (last.at * 100) / last.progress : null;
+  };
+  const box = replay(TIMELINES.runs.box, recent);
+  const hall = replay(TIMELINES.runs.hall, recent);
+  const hallWhole = replay(TIMELINES.runs.hall, whole);
+  const boxWhole = replay(TIMELINES.runs.box, whole);
+  // The measured worst errors, held so a change that makes them worse fails here.
+  assert.equal(pct(box.error), BOX_WORST, JSON.stringify(box));
+  assert.equal(pct(hall.error), HALL_WORST, JSON.stringify(hall));
+  assert.equal(pct(boxWhole.error), BOX_WHOLE_WORST, JSON.stringify(boxWhole));
+  assert.equal(pct(hallWhole.error), HALL_WHOLE_WORST, JSON.stringify(hallWhole));
+  // Row 18 wants every sample within 30 %: the hall is not, so the row stays open.
+  assert.ok(Math.abs(hall.error) > 0.3, 'if this passes now, close backlog row 18 with these numbers');
 });
 
 test('C36: the time left in words and the finish clock, from the progress so far', () => {

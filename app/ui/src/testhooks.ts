@@ -115,7 +115,7 @@ function foundationHooks(): Record<string, Hook> {
     // start, the last progress line and its time, the projected finish, and the page's clock, all ms.
     runTiming: () => {
       const a = runStore.get();
-      return a ? { run: a.run ?? null, stage: a.stage ?? null, progress: a.progress, solveAt: a.solveAt ?? null, progressAt: a.progressAt ?? null, peak: a.progressPeak ?? null, finishMs: liveFinishMs(a), now: Date.now() } : null;
+      return a ? { run: a.run ?? null, stage: a.stage ?? null, progress: a.progress, solveAt: a.solveAt ?? null, progressAt: a.progressAt ?? null, peak: a.progressLog?.at(-1) ?? null, finishMs: liveFinishMs(a), now: Date.now() } : null;
     },
     // The validator's issues on the open project, each with its UI code and the core's rule
     // (M11 m11-r22-default reads `material_placeholder` here).

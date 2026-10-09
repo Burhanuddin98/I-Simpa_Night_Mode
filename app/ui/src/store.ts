@@ -138,9 +138,9 @@ export interface ActiveRun {
   solveAt?: number;
   /** When the last PROGRESS line arrived, on this page's clock. */
   progressAt?: number;
-  /** The highest share a PROGRESS line has given and when it arrived: the live finish's projection (runTime.ts
-   * `keepPeak`, `liveFinishMs`). The bar shows `progress`, the share as last printed. */
-  progressPeak?: ProgressPoint;
+  /** The PROGRESS lines the live finish projects from, each a share above every one before it, the last the highest
+   * yet (runTime.ts `logProgress`, `liveFinishMs`). The bar shows `progress`, the share as last printed. */
+  progressLog?: readonly ProgressPoint[];
   status: 'starting' | 'running' | 'cancelling';
 }
 export const runStore = new Store<ActiveRun | null>(null);

@@ -188,10 +188,23 @@ export interface ProgressPoint {
   at: number;
 }
 
+/** The live finish's rate is measured over the last tenth of the solve so far, and never over less than 20 s
+ * (`liveFinishMs`; backlog row 18's replay picked it, runTime.test.ts). */
+export const RATE_WINDOW_SHARE = 0.1;
+export const RATE_WINDOW_MIN_MS = 20_000;
+
+/** Where the rate's window starts for a last line at `lastAt`: it only moves forward as lines come. */
+function windowStart(lastAt: number, solveAt: number): number {
+  return lastAt - Math.max(RATE_WINDOW_SHARE * (lastAt - solveAt), RATE_WINDOW_MIN_MS);
+}
+
 /**
- * The peak the live finish projects from, after a PROGRESS line of `progress` arriving at `at`: that line when its
- * share is above every one before it, else the peak already kept. A share that falls (a solver printing per band,
- * or starting over) would otherwise throw the finish out by the whole run: from 100 to 5 % it would read hours late.
+ * The lines the live finish projects from, after a PROGRESS line of `progress` arriving at `at`: that line appended
+ * when its share is above every one before it, else the log unchanged, so the log only rises and its last point is
+ * the highest share yet and when it came. A share that falls (a solver printing per band, or starting over) would
+ * otherwise throw the finish out by the whole run: from 100 to 5 % it would read hours late. Only the points the
+ * rate's window can still reach are kept (the newest at or before its start, and every one after), so a run of
+ * hours holds a tenth of its lines, not all of them.
  *
  * What upstream prints (I-Simpa-upstream, src/spps/sppsNantes.cpp:202, 363-380, and
  * src/lib_interface/input_output/progressionInfo.h): one progress tree for the whole run. Its root counts the bands
@@ -201,18 +214,53 @@ export interface ProgressPoint {
  * CPU solver's line neither resets nor goes per band, and with bands in parallel it is the mean of their shares.
  * The guard costs nothing there; it holds against anything else that prints PROGRESS lines.
  */
-export function keepPeak(peak: ProgressPoint | undefined, progress: number | null | undefined, at: number): ProgressPoint | undefined {
-  if (typeof progress !== 'number' || !Number.isFinite(progress)) return peak;
-  return peak === undefined || progress > peak.progress ? { progress, at } : peak;
+export function logProgress(
+  log: readonly ProgressPoint[] | undefined,
+  solveAt: number | undefined,
+  progress: number | null | undefined,
+  at: number,
+): readonly ProgressPoint[] | undefined {
+  if (typeof progress !== 'number' || !Number.isFinite(progress)) return log;
+  const last = log?.[log.length - 1];
+  if (last !== undefined && !(progress > last.progress)) return log;
+  const next = [...(log ?? []), { progress, at }];
+  if (solveAt === undefined) return next;
+  const start = windowStart(at, solveAt);
+  let i = 0;
+  while (i + 1 < next.length && next[i + 1].at <= start) i++;
+  return i > 0 ? next.slice(i) : next;
 }
 
-/** While SPPS solves: when it will be done, from its progress so far (the time from the solve's start to the
- * highest share yet, over that share, `keepPeak`). Null before the solve, before a progress line, or below 1 % done. */
-export function liveFinishMs(run: Pick<ActiveRun, 'stage' | 'solveAt' | 'progressPeak'>): number | null {
-  const pk = run.progressPeak;
-  if (run.stage !== 'solve' || pk === undefined || !(pk.progress >= 1 && pk.progress <= 100)) return null;
-  if (run.solveAt === undefined || !(pk.at >= run.solveAt)) return null;
-  return run.solveAt + ((pk.at - run.solveAt) * 100) / pk.progress;
+/**
+ * While SPPS solves: when it will be done, from its progress so far. The share left over the rate of the last tenth
+ * of the solve, at least its last 20 s (`RATE_WINDOW_SHARE`, `RATE_WINDOW_MIN_MS`), measured from the newest line at
+ * or before the window's start, or from the solve's start at 0 % while the solve is shorter than the window. Null
+ * before the solve, before a progress line, or below 1 % done.
+ *
+ * Why a recent rate and not the share over the whole time (until backlog row 18's replay): on the hall the share
+ * slows near the end (0.34 % a second until 255 s, 0.29 to 286 s, 0.12 after: with its 6 bands on 6 threads that
+ * reads as one band done at 255 s and three more at 286 s, the share being their mean), and the whole-run rate then
+ * put the finish up to 0.45 s in the past with 0.25 s to go, while a recent rate follows the slowing. Neither sees
+ * the slowing before it comes: 32 s from the hall's end the recent rate said 13 s left and the whole-run rate 12,
+ * and row 18 stays open for it (runTime.test.ts has the numbers).
+ *
+ * Upstream's share can also stop short: the box at 3,000,000 particles and 27 bands printed 59.25 % at 33 s and
+ * nothing more until it ended at 57 s, in both runs at that count (solver.stdout.txt). 16/27 is 59.26 %, where the
+ * `float` the root of progressionInfo.h sums into reaches 16 and its spacing doubles, which is most likely why. The
+ * projection then stays where the last line put it.
+ */
+export function liveFinishMs(run: Pick<ActiveRun, 'stage' | 'solveAt' | 'progressLog'>): number | null {
+  const log = run.progressLog ?? [];
+  const last = log[log.length - 1];
+  const s0 = run.solveAt;
+  if (run.stage !== 'solve' || last === undefined || s0 === undefined) return null;
+  if (!(last.progress >= 1 && last.progress <= 100) || !(last.at >= s0)) return null;
+  const start = windowStart(last.at, s0);
+  let ref: ProgressPoint = { progress: 0, at: s0 };
+  for (const pt of log) if (pt !== last && pt.at <= start) ref = pt;
+  const rate = (last.progress - ref.progress) / (last.at - ref.at);
+  if (!(rate > 0) || !Number.isFinite(rate)) return s0 + ((last.at - s0) * 100) / last.progress;
+  return last.at + (100 - last.progress) / rate;
 }
 
 /** The sentence under the solver choice: which solver will run and what it is for. */
