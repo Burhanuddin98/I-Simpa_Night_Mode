@@ -22,8 +22,10 @@
 //
 // G18: "+ Group" in the Surfaces head (`[data-action="add-group"]`) adds an empty group with the
 // placeholder material; each group row's remove button (`[data-part="group-remove"]`, or Del on a
-// selected group) deletes it when it is empty, and otherwise says why not and what to do.
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+// selected group) deletes it when it is empty, and otherwise says why not and what to do, under
+// that group's own row (`[data-part="group-issues"][data-group]`), scrolled into view: under the
+// last row it read as a refusal of whichever group happened to be last.
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import * as actions from '../actions';
 import type { Source, UiIssue } from '../bindings/ipc';
 import { issuesByEntity, projectIssues } from '../issues';
@@ -33,7 +35,7 @@ import { FoldButton, useFold } from './fold';
 import { usePanelWidth } from './panelWidth';
 import { Search, Trash2 } from './icons';
 import { coord, displayName, effectiveMaterial, matchesFilter, receiverFolder, sentence, uniqueIssues, worstSeverity } from './sceneModel';
-import { deleteGroup, groupProblemStore, onEntityKey, removeEntity, selectGroup, selectPoint } from './sceneUi';
+import { deleteGroup, type GroupProblem, groupProblemStore, onEntityKey, removeEntity, selectGroup, selectPoint } from './sceneUi';
 
 // ---- the source switch (M26) -------------------------------------------------------------------
 
@@ -201,6 +203,18 @@ function GroupRemoveButton({ id, name, faces }: { id: string; name: string; face
   );
 }
 
+/** A group edit's own problem (`groupProblemStore`), said in full; `group` when it sits under that group's row. */
+function GroupProblemLine({ problem, group }: { problem: GroupProblem; group?: string }) {
+  return (
+    <div className="issues toggle-issues" data-part="group-issues" data-group={group}>
+      <div className="issue" data-issue-code={problem.code} role="alert">
+        <span className="code">FAIL {problem.code}</span>
+        <span className="msg">{problem.message} The project is unchanged.</span>
+      </div>
+    </div>
+  );
+}
+
 function Head({ title, shown, total, children }: { title: string; shown: number; total: number; children?: ReactNode }) {
   return (
     <div className="scene-head label">
@@ -220,7 +234,8 @@ export function ScenePanel() {
   const [query, setQuery] = useState('');
   const renaming = useStore(groupRenameStore);
   const groupProblem = useStore(groupProblemStore);
-  const setGroupProblem = (p: { code: string; message: string } | null) => groupProblemStore.set(p);
+  const setGroupProblem = (p: GroupProblem | null) => groupProblemStore.set(p);
+  const listRef = useRef<HTMLDivElement>(null);
   const view = scene?.view ?? null;
   const byEntity = issuesByEntity(scene?.issues ?? []);
   const issuesOf = (kind: string, id: string) => byEntity.get(`${kind}:${id}`) ?? [];
@@ -242,6 +257,20 @@ export function ScenePanel() {
   );
   const folded = useFold('scene');
   const sized = usePanelWidth('nm-scene-width', 248, 'right');
+  // A problem that concerns one group shows under that group's row, when the row is listed; else under the Surfaces.
+  const problemRow =
+    groupProblem?.group !== undefined && renaming !== groupProblem.group && shownSurfaces.some(({ g }) => g.id === groupProblem.group)
+      ? groupProblem.group
+      : null;
+  // ...and is scrolled to, the row and its sentence both: the group may be far out of view (Edit > Delete group).
+  useEffect(() => {
+    if (problemRow === null) return;
+    const list = listRef.current;
+    const line = list?.querySelector(`[data-part="group-issues"][data-group="${CSS.escape(problemRow)}"]`);
+    const row = list?.querySelector(`[data-entity="surface_group:${CSS.escape(problemRow)}"]`);
+    line?.scrollIntoView({ block: 'nearest' });
+    row?.scrollIntoView({ block: 'nearest' });
+  }, [groupProblem, problemRow]);
 
   return (
     <aside className="scene" aria-label="Scene" data-folded={folded} style={sized.style} onScroll={sized.onScroll}>
@@ -260,7 +289,7 @@ export function ScenePanel() {
           spellCheck={false}
         />
       </label>
-      <div className="scene-list" data-part="scene-list" onKeyDown={onEntityKey}>
+      <div className="scene-list" data-part="scene-list" onKeyDown={onEntityKey} ref={listRef}>
         {!view ? (
           <div className="scene-empty empty">No project. File, then Open…</div>
         ) : (
@@ -306,7 +335,8 @@ export function ScenePanel() {
                 );
               }
               return (
-                <div key={g.id} className="scene-line">
+                <Fragment key={g.id}>
+                <div className="scene-line">
                 <button
                   className="scene-row group-row"
                   data-entity={`surface_group:${g.id}`}
@@ -352,17 +382,14 @@ export function ScenePanel() {
                 </button>
                 <GroupRemoveButton id={g.id} name={displayName(g.name)} faces={faces} />
                 </div>
+                {problemRow === g.id && groupProblem && <GroupProblemLine problem={groupProblem} group={g.id} />}
+                </Fragment>
               );
             })}
             {!surfaces.length && <div className="scene-empty empty">No surfaces</div>}
-            {(groupProblem || groupRefusals.length > 0) && (
+            {groupProblem && problemRow === null && <GroupProblemLine problem={groupProblem} />}
+            {groupRefusals.length > 0 && (
               <div className="issues toggle-issues" data-part="group-issues">
-                {groupProblem && (
-                  <div className="issue" data-issue-code={groupProblem.code} role="alert">
-                    <span className="code">FAIL {groupProblem.code}</span>
-                    <span className="msg">{groupProblem.message} The project is unchanged.</span>
-                  </div>
-                )}
                 {groupRefusals.map((i) => (
                   <div key={`${i.code}|${i.path}`} className="issue" data-issue-code={i.code} role="alert">
                     <span className="code">FAIL {i.code}</span>

@@ -54,9 +54,15 @@ export async function removeEntity(kind: 'source' | 'receiver', id: string): Pro
 }
 
 /** The latest group edit's own problem, `{code, message}`: a rename the UI refused, a delete of a
- * group that holds faces, a command the core rejected. Shown under the Surfaces in the scene list;
- * the next group edit clears it. */
-export const groupProblemStore = new Store<{ code: string; message: string } | null>(null);
+ * group that holds faces, a command the core rejected. One that concerns a single group carries its
+ * id, `group`, and shows under that group's row, scrolled into view; any other shows under the
+ * Surfaces in the scene list. The next group edit clears it. */
+export interface GroupProblem {
+  code: string;
+  message: string;
+  group?: string;
+}
+export const groupProblemStore = new Store<GroupProblem | null>(null);
 
 /**
  * Deletes the surface group `id` (parity G18, A29), only when it is empty, as upstream does: one
@@ -74,7 +80,7 @@ export async function deleteGroup(id: string): Promise<void> {
   const shown = { ...view, surface_groups: view.surface_groups.map((g) => ({ ...g, name: displayName(g.name) })) };
   const problem = groupDeleteProblem(id, scene.groups.find((g) => g.id === id)?.faces ?? 0, shown);
   if (problem) {
-    groupProblemStore.set(problem);
+    groupProblemStore.set({ ...problem, group: id });
     log('FAIL', `Delete group refused: ${problem.message}`);
     return;
   }
@@ -86,7 +92,7 @@ export async function deleteGroup(id: string): Promise<void> {
     log('OK', `Deleted group ${name}`);
   } catch (e) {
     const err = actions.asCmdError(e);
-    groupProblemStore.set({ code: err.code, message: err.code === 'OP_IN_USE' ? inUseSentence(name, err.message) : err.message });
+    groupProblemStore.set({ code: err.code, message: err.code === 'OP_IN_USE' ? inUseSentence(name, err.message) : err.message, group: id });
   }
 }
 
