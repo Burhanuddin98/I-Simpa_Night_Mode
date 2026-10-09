@@ -94,7 +94,7 @@ import { firstFace, modelGeometry, pickingBvh } from './pick';
 import { ARC_MS, arcPose, easeInOut, type Pose } from './arc';
 import { groupNamesOf, indexOf, isolateRefusal, leftOut, roofFaces, shownPerVertex } from './hide';
 import { boxSamples, combineFaces, inRect, pickMode, rectOf, type PickMode, type Rect } from './faceSelect';
-import { insideBox, NO_REVEAL, revealRadius, rimOpacity, speedOfSound, SPREAD_MAX, wavefrontInRoom, wavefrontRadius } from './spread';
+import { insideBox, NO_REVEAL, REACH_NONE, reachAlong, reachKeep, revealRadius, rimOpacity, speedOfSound, SPREAD_MAX, wavefrontInRoom, wavefrontRadius } from './spread';
 import { settingsStore } from '../simulate/runSize';
 import { facePlan, faceShowOf, type FacePlan, type FaceShow } from './faces';
 import { ResultsLayer, type MapMeta, type ParticleMeta } from './resultsLayer';
@@ -663,7 +663,9 @@ class ViewportEngine {
   private readonly wavefront = new Group();
   private readonly waveLo = uniform(new Vector3());
   private readonly waveHi = uniform(new Vector3());
-  private waveState: { shown: boolean; radius: number | null; c: number | null; sources: number } = { shown: false, radius: null, c: null, sources: 0 };
+  private waveState: { shown: boolean; radius: number | null; c: number | null; sources: number; clip: string; reach: [number, number][] } = { shown: false, radius: null, c: null, sources: 0, clip: 'line of sight', reach: [] };
+  /** Item 10 fix: each sphere's radius uniform and the source and model its line-of-sight reach was cast for. */
+  private readonly waveSlots: { radius: ReturnType<typeof uniform>; reach: Float32BufferAttribute; key: string; range: [number, number] }[] = [];
 
   constructor() {
     this.persp.up.set(0, 0, 1);
@@ -787,13 +789,20 @@ class ViewportEngine {
       this.results.group,
       this.live.group,
     );
-    // Item 10: a sphere a source, scaled to the wavefront's radius each frame; a faint rim, clipped to the room's box.
-    const waveMat = inSrgb(new MeshBasicNodeMaterial({ color: LINE, transparent: true, depthWrite: false, side: DoubleSide, blending: AdditiveBlending }));
-    waveMat.opacityNode = rimOpacity(0.55);
-    waveMat.maskNode = insideBox(this.waveLo, this.waveHi);
+    // Item 10: a sphere a source, scaled to the wavefront's radius each frame; a faint rim, clipped to the room's box
+    // and to the source's line of sight (spread.ts reachAlong): the front stops at the first face each way, so it
+    // never shows outside the walls.
     const waveGeom = new SphereGeometry(1, 96, 48);
     for (let i = 0; i < SPREAD_MAX; i++) {
-      const m = new Mesh(waveGeom, waveMat);
+      const g = waveGeom.clone();
+      const reach = new Float32BufferAttribute(new Float32Array(g.getAttribute('position').count).fill(REACH_NONE), 1);
+      g.setAttribute('nmReach', reach);
+      const radius = uniform(0);
+      const waveMat = inSrgb(new MeshBasicNodeMaterial({ color: LINE, transparent: true, depthWrite: false, side: DoubleSide, blending: AdditiveBlending }));
+      waveMat.opacityNode = rimOpacity(0.55);
+      waveMat.maskNode = insideBox(this.waveLo, this.waveHi).and(reachKeep(radius));
+      this.waveSlots.push({ radius, reach, key: '', range: [REACH_NONE, REACH_NONE] });
+      const m = new Mesh(g, waveMat);
       m.visible = false;
       m.frustumCulled = false;
       m.renderOrder = 8.5;
@@ -1207,6 +1216,8 @@ class ViewportEngine {
       if (vis && r !== null) {
         m.position.set(s[0], s[1], s[2]);
         m.scale.setScalar(r);
+        this.castReach(i, s, (m as Mesh).geometry);
+        this.waveSlots[i].radius.value = r;
         shown = true;
       }
     });
@@ -1214,7 +1225,38 @@ class ViewportEngine {
       (this.waveLo.value as Vector3).set(b.min[0], b.min[1], b.min[2]);
       (this.waveHi.value as Vector3).set(b.max[0], b.max[1], b.max[2]);
     }
-    this.waveState = { shown, radius: shown ? r : null, c, sources: sources.length };
+    this.waveState = { shown, radius: shown ? r : null, c, sources: sources.length, clip: 'line of sight', reach: this.waveSlots.slice(0, sources.length).map((w) => w.range) };
+  }
+
+  /**
+   * Item 10 fix: sphere `i`'s reach about source `s` (spread.ts reachAlong): along each vertex's direction, the
+   * distance to the first face of the model, either side, Roof off and Isolate ignored (a hidden wall still
+   * stops sound). Cast once a source position and geometry revision.
+   */
+  private castReach(i: number, s: Vec, g: BufferGeometry): void {
+    const slot = this.waveSlots[i];
+    const bvh = this.bvh;
+    const key = `${this.mesh?.geometryRev ?? 'none'}|${s.join(',')}`;
+    if (!slot || slot.key === key) return;
+    slot.key = key;
+    const dirs = g.getAttribute('position').array as ArrayLike<number>;
+    const origin = new Vector3(s[0], s[1], s[2]);
+    const ray = new Ray(origin.clone(), new Vector3());
+    const reach = reachAlong(dirs, (dx, dy, dz) => {
+      if (!bvh) return null;
+      ray.origin.copy(origin);
+      ray.direction.set(dx, dy, dz).normalize();
+      return firstFace(bvh, ray, DoubleSide, null)?.distance ?? null;
+    });
+    (slot.reach.array as Float32Array).set(reach);
+    slot.reach.needsUpdate = true;
+    let lo = REACH_NONE;
+    let hi = 0;
+    for (const d of reach) {
+      lo = Math.min(lo, d);
+      hi = Math.max(hi, d);
+    }
+    slot.range = [lo, hi];
   }
 
   /** The room dimmed while the light plays (or is held for a still, or the live solve plays), eased over about a third of a second. */

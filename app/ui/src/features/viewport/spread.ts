@@ -6,15 +6,17 @@
 //   - While particle playback plays, a wavefront: a sphere of radius c·t about each source, t the
 //     playback's time since the emission and c the project's speed of sound from its temperature (the
 //     solver's own rule, `343.2·√(T/293.15)`, `Celerite_du_son.cpp:46`), so it runs through the direct sound's
-//     particles. Drawn as a faint rim, clipped to
-//     the room's box, labelled with nothing.
+//     particles. Drawn as a faint rim, clipped to the room's box and, since the sphere showed outside CR4's
+//     walls, to the source's line of sight: a point of the sphere is drawn only while its radius has not
+//     passed the first face along its direction from the source (`reachAlong`), so the front stops at the
+//     walls and never reaches round an obstacle, as the direct sound does. Labelled with nothing.
 // Neither moves under prefers-reduced-motion or WebDriver (the gates compare frames): the map shows at
 // once and no wavefront is drawn. Pure functions tested by spread.test.ts under `node --test`; the
 // shader nodes at the end are the GPU side (resultsLayer.ts, engine.ts).
 import { T } from './tsl.ts';
 import { easeOut } from './build.ts';
 
-const { abs, Break, dot, float, Fn, If, Loop, min, normalView, positionViewDirection, positionWorld, pow, sqrt } = T;
+const { abs, attribute, Break, dot, float, Fn, If, Loop, min, normalView, positionViewDirection, positionWorld, pow, sqrt } = T;
 
 /** The reveal's length, ms. */
 export const REVEAL_MS = 1400;
@@ -94,4 +96,26 @@ export function rimOpacity(peak: number): any {
 export function insideBox(lo: any, hi: any): any {
   const p = positionWorld;
   return p.x.greaterThanEqual(lo.x).and(p.y.greaterThanEqual(lo.y)).and(p.z.greaterThanEqual(lo.z)).and(p.x.lessThanEqual(hi.x)).and(p.y.lessThanEqual(hi.y)).and(p.z.lessThanEqual(hi.z));
+}
+
+/** A direction that meets no face: the wavefront's reach that way is unbounded. */
+export const REACH_NONE = 1e9;
+
+/**
+ * The direct wavefront's reach along each of `dirs` (x, y, z flat, each of length one): how far from the
+ * source the first face lies that way, as `cast` finds it (null when no face is met: REACH_NONE). The
+ * sphere is drawn only where its radius has not passed it (`reachKeep`), so it stays inside the room.
+ */
+export function reachAlong(dirs: ArrayLike<number>, cast: (dx: number, dy: number, dz: number) => number | null): Float32Array {
+  const out = new Float32Array(Math.floor(dirs.length / 3));
+  for (let i = 0; i < out.length; i++) {
+    const d = cast(dirs[3 * i], dirs[3 * i + 1], dirs[3 * i + 2]);
+    out[i] = d === null || !(d >= 0) ? REACH_NONE : d;
+  }
+  return out;
+}
+
+/** The line-of-sight mask: the vertex attribute `nmReach` (reachAlong, interpolated) not passed by `radius`. */
+export function reachKeep(radius: any): any {
+  return attribute('nmReach', 'float').greaterThanEqual(radius);
 }

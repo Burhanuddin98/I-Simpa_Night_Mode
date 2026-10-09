@@ -1,7 +1,7 @@
 // spread.ts under `node --test` (Burhan's 10-05 UI list, item 10: results spreading from the source).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { NO_REVEAL, REVEAL_MS, revealRadius, revealReach, speedOfSound, wavefrontInRoom, wavefrontRadius } from './spread.ts';
+import { NO_REVEAL, REACH_NONE, reachAlong, REVEAL_MS, revealRadius, revealReach, speedOfSound, wavefrontInRoom, wavefrontRadius } from './spread.ts';
 
 test('the speed of sound is the solver’s, from the project’s temperature', () => {
   assert.equal(speedOfSound(20), 343.2);
@@ -48,4 +48,13 @@ test('the wavefront is drawn until it encloses the whole room box', () => {
   const hi = [10, 10, 10];
   assert.ok(wavefrontInRoom([0, 0, 0], 17, lo, hi));
   assert.ok(!wavefrontInRoom([0, 0, 0], 17.4, lo, hi), 'past the far corner, 17.32 m away');
+});
+
+test('the wavefront reaches as far as the first face along each direction, unbounded where none is met', () => {
+  // A source at x = 1 in a slab between the walls x = 0 and x = 4: 3 m along +x, 1 m along -x, none along y.
+  const cast = (dx: number) => (dx > 0 ? (4 - 1) / dx : dx < 0 ? (0 - 1) / dx : null);
+  const reach = reachAlong([1, 0, 0, -1, 0, 0, 0, 1, 0, Math.SQRT1_2, Math.SQRT1_2, 0], cast);
+  assert.deepEqual(Array.from(reach.slice(0, 3)), [3, 1, REACH_NONE]);
+  assert.ok(Math.abs(reach[3] - 3 * Math.SQRT2) < 1e-5);
+  assert.equal(reachAlong([1, 0, 0], () => -2)[0], REACH_NONE, 'a negative distance is no face');
 });
