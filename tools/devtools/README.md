@@ -14,7 +14,12 @@
   (`WEBVIEW2_USER_DATA_FOLDER`, beside the target dir) so nothing it stores reaches another app.exe; the pointer
   and keys are CDP input events, no OS mouse. Screenshots at three heights and `bed-dock.json` in `<out>`.
 - `shot-rw.ps1`: the response window's screenshots (default, wheel zoom, span 100 + bin 5).
-- `package-zeph.ps1 -Sha <sha>`: app.exe + verified solvers into OneDrive for Zeph.
+- `payload.ps1`: what ships beside app.exe, in one place (`Copy-NightModePayload`): the verified solvers with the
+  C runtime beside them (decision 85), manual, tutorials, examples, the licences; then every exe's imports checked.
+- `package-zeph.ps1 -Sha <sha>`: the payload + a README into OneDrive for Zeph.
+- `..\installer\build-installer.ps1`: the same payload as one per-user NSIS installer (M13) under `.out\m13\`;
+  `..\installer\bed-m13.py` proves it on the machine: install, open by association, Help, About, an SPPS run,
+  uninstall, in scratch folders and a scratch Start menu name.
 - `du.py <root> <depth> <minGB>`: folder sizes, junctions skipped.
 
 The app is built with `npx --no-install tauri build --no-bundle` in `app/` (CARGO_TARGET_DIR set); a plain

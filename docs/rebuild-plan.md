@@ -160,7 +160,7 @@ M5-M8 instead of after them.
 - The full bed runs nightly on Grace, not in CI.
 - GUI gates use the app's own self-test hooks instead of a WebdriverIO stack.
 - One installer build, not two.
-- The C runtime choice moves to M13.
+- The C runtime choice moves to M13. Decided 2026-10-09: app-local runtime DLLs beside the solvers (decision 85).
 
 ## Taken from Night Mode
 

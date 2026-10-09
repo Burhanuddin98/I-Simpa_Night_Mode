@@ -24,6 +24,14 @@ SPPS on the GPU (spps-gpu.exe)
   Licence: GPL-3.0-only
   This repository's port of SPPS (solvers/spps-gpu). It includes TinyXML-2 10.0.0 (zlib licence, solvers/spps-gpu/third_party/tinyxml2/LICENSE.txt, printed below); see solvers/spps-gpu/THIRD-PARTY.md.
 
+Microsoft Visual C++ runtime (solvers\msvcp140.dll, vcruntime140.dll, vcruntime140_1.dll, vcomp140.dll)
+  Licence: Microsoft Software License Terms for Visual Studio 2022, Distributable Code
+  Copyright (c) Microsoft Corporation. Redistributed unmodified beside the solvers that link it, from Visual Studio's VC\Redist folder, whose redist.txt lists these files as distributable (decision 85; tools/devtools/payload.ps1).
+
+The installer and uninstaller (NSIS 3.11)
+  Licence: zlib/libpng (NSIS); its LZMA compression module under the Common Public License 1.0 with NSIS's linking exception
+  Nullsoft Scriptable Install System (https://nsis.sourceforge.io/), as its COPYING states; the installer's script is tools/installer/night-mode.nsi.
+
 Fonts: Inter and JetBrains Mono, bundled in the interface
   Licence: OFL-1.1
   The SIL Open Font License texts ship beside them (app/ui/public/licenses/OFL-Inter.txt, OFL-JetBrainsMono.txt) and are printed below.
