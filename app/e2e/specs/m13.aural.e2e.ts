@@ -2,9 +2,11 @@
 // listening window on BRAS CR4's results. The shipped CR4 example, copied into this spec's work
 // folder with its plane and maps off (the echograms are the same; the maps are not listened to),
 // run on the GPU from the Simulate step's Run button. Each id with its control:
-//   c5-words   the Decay card's "Listen" opens a floating window titled as a synthesised impulse
-//              response, saying it is synthesised from the SPPS energy echogram and not a measured
-//              or wave-based impulse response; its button closes it. Control: no window before.
+//   c5-words   the Decay card's "Listen" opens a floating window titled as sound through the room,
+//              saying the response is synthesised from the SPPS energy echogram and not a measured
+//              or wave-based impulse response, in mono; the clip, the Dry / Room switch and Play come
+//              before the impulse response (decision 84); its button closes it. Control: no window
+//              before.
 //   c5-ir      Play synthesises the receiver's response: 48 kHz, as many samples as the run's
 //              duration at 48 kHz, its comment naming the seed. Control: another receiver gives
 //              another response of the same length.
@@ -12,7 +14,10 @@
 //              stops (the button reads Play, nothing plays).
 //   c5-save    Save writes a WAV whose header says RIFF/WAVE, IEEE float, mono, 48 kHz, and whose
 //              data is the run's duration at 48 kHz, read here from the file itself.
-//   c5-aural   Auralize with the first bundled clip produces audio longer than the clip, which plays
+//   c5-dryroom the first clip (the claps) through the room and dry: the same energy, the louder
+//              peak at -1 dBFS, the dry one the clip's length; the switch, while it plays, changes
+//              to Dry at the same moment of the clip. Control: the room version is longer (its tail).
+//   c5-aural   Room with the first bundled clip produces audio longer than the clip, which plays
 //              and saves at 48 kHz; a 44.1 kHz WAV of this spec's own ("Open your own WAV…")
 //              does too.
 //
@@ -34,13 +39,25 @@ interface Row {
   status: string;
   gpu_device?: string | null;
 }
+interface Sound {
+  key: string;
+  rate: number;
+  samples: number;
+  seconds: number;
+  energy: number;
+  peakDbfs: number;
+  comment: string | null;
+}
 interface AuralView {
   receiver: string;
   source: string | null;
   dry: string;
-  ir: { key: string; rate: number; samples: number; seconds: number; comment: string | null } | null;
-  aural: { key: string; rate: number; samples: number; seconds: number } | null;
-  playing: 'ir' | 'aural' | null;
+  hear: 'dry' | 'room';
+  ir: Sound | null;
+  dryClip: Sound | null;
+  room: Sound | null;
+  playing: 'ir' | 'dry' | 'room' | null;
+  at: number | null;
   meterPeak: number;
   clipped: boolean;
   busy: string | null;
@@ -152,13 +169,19 @@ describe('C5: listening to CR4: the synthesised impulse response and a dry clip 
         title: el?.querySelector('[data-part="aural-title"]')?.textContent ?? '',
         note: el?.querySelector('[data-part="aural-note"]')?.textContent ?? '',
         text: el?.innerText ?? '',
+        // Decision 84: the sound through the room leads, the impulse response follows.
+        order: [...(el?.querySelectorAll('[data-part="aural-conv"], [data-part="aural-hear"], [data-action="aural-play-conv"], [data-part="aural-ir"]') ?? [])].map((n) => (n as HTMLElement).dataset.part ?? (n as HTMLElement).dataset.action ?? ''),
       };
     }, WIN, PANEL);
     assert.equal(w.inPanel, false);
-    assert.match(w.title, /impulse response \(synthesised\)/i);
+    assert.match(w.title, /sound through the room/i);
     assert.match(w.note, /synthesised from the SPPS energy echogram/i);
     assert.match(w.note, /not a measured or wave-based impulse response/i);
-    assert.match(w.text, /Auralize/);
+    assert.match(w.note, /mono/);
+    assert.deepEqual(w.order, ['aural-conv', 'aural-hear', 'aural-play-conv', 'aural-ir'], 'the clip, the switch and Play before the impulse response');
+    assert.match(w.text, /Dry\s*Room/);
+    assert.match(w.text, /impulse response \(synthesised\)/i);
+    assert.match(w.text, /Dry and Room carry the same energy/);
     assert.match(w.text, /Open your own WAV/);
     assert.match(w.text, /anechoic, but synthetic/, 'the generated clips said to be what they are');
     assert.match(w.text, /dry recording, close-miked: not anechoic/, 'the recorded clip said to be what it is');
@@ -225,32 +248,68 @@ describe('C5: listening to CR4: the synthesised impulse response and a dry clip 
     console.log(`c5-save receipt: ${file}: format ${h.format}, ${h.channels} channel, ${h.rate} Hz, ${h.bits} bits, ${h.frames} frames = ${duration} s x ${RATE}; ${h.bytes} bytes; control ${other} differs`);
   });
 
+  it('c5-dryroom: the claps dry and through the room carry the same energy; the switch keeps the moment', async () => {
+    assert.equal(await $(`${WIN} select[data-part="aural-dry"]`).getValue(), 'clip:clap-pattern');
+    const start = await view();
+    assert.equal(start?.hear, 'room', 'Room is the default');
+    await clickSelector(`${WIN} [data-action="aural-play-conv"]`);
+    const v = await waitView((x) => x.room !== null && x.dryClip !== null && x.playing === 'room' && (x.at ?? 0) > 1.0, 'the claps through the room, 1 s in', 120_000);
+    const dry = v.dryClip!;
+    const room = v.room!;
+    assert.equal(dry.rate, RATE);
+    assert.equal(dry.samples, 12 * RATE, 'the dry clip is the 12 s clip as shipped');
+    assert.ok(room.samples > dry.samples, `room ${room.samples} > dry ${dry.samples} samples: the room's tail`);
+    const rel = Math.abs(room.energy / dry.energy - 1);
+    assert.ok(rel < 1e-4, `the same energy: dry ${dry.energy}, room ${room.energy} (${rel})`);
+    const top = Math.max(dry.peakDbfs, room.peakDbfs);
+    assert.ok(Math.abs(top + 1) < 0.01, `the louder peak at -1 dBFS: dry ${dry.peakDbfs}, room ${room.peakDbfs}`);
+    assert.match(dry.comment ?? '', /not through the room/);
+    assert.match(room.comment ?? '', /convolved with the shipped clip clap-pattern/);
+    const before = v.at ?? 0;
+    await clickSelector(`${WIN} [data-action="aural-hear-dry"]`);
+    const d = await waitView((x) => x.playing === 'dry', 'Dry playing', 10_000);
+    assert.ok((d.at ?? 0) >= before - 0.05 && (d.at ?? 0) < before + 1.0, `Dry takes over at ${d.at} s, Room was at ${before} s`);
+    assert.equal(await $(`${WIN} [data-hear="dry"]`).getAttribute('aria-checked'), 'true');
+    await clickSelector(`${WIN} [data-action="aural-play-conv"]`);
+    await waitView((x) => x.playing === null, 'stopped', 10_000);
+    const fd = path.join(WORK(), 'clap-dry.wav');
+    const fr = path.join(WORK(), 'clap-room.wav');
+    await hook('auralSave', 'dry', fd);
+    await m10.idle();
+    await hook('auralSave', 'room', fr);
+    await m10.idle();
+    assert.equal(wavHeader(fd).frames, dry.samples);
+    assert.equal(wavHeader(fr).frames, room.samples);
+    console.log(`c5-dryroom receipt: dry ${dry.samples} samples, peak ${dry.peakDbfs.toFixed(2)} dBFS, energy ${dry.energy.toFixed(3)}; room ${room.samples} samples, peak ${room.peakDbfs.toFixed(2)} dBFS, energy ${room.energy.toFixed(3)}; switched Room ${before.toFixed(2)} s -> Dry ${d.at?.toFixed(2)} s; saved ${fd}, ${fr}`);
+  });
+
   it('c5-aural: a bundled clip and an own 44.1 kHz WAV through the room play and save at 48 kHz', async () => {
     const dry = await $(`${WIN} select[data-part="aural-dry"]`).getValue();
     assert.equal(dry, 'clip:clap-pattern', 'the first clip offered is the claps');
+    await clickSelector(`${WIN} [data-action="aural-hear-room"]`);
     await clickSelector(`${WIN} [data-action="aural-play-conv"]`);
-    const v = await waitView((x) => x.aural !== null && x.playing === 'aural', 'the auralization playing');
-    assert.equal(v.aural?.rate, RATE);
-    assert.ok((v.aural?.seconds ?? 0) > 5, `${v.aural?.seconds} s: the clip and the room's tail`);
+    const v = await waitView((x) => x.room !== null && x.playing === 'room', 'the clip through the room playing');
+    assert.equal(v.room?.rate, RATE);
+    assert.ok((v.room?.seconds ?? 0) > 12, `${v.room?.seconds} s: the 12 s clip and the room's tail`);
     await clickSelector(`${WIN} [data-action="aural-play-conv"]`);
     await waitView((x) => x.playing === null, 'stopped', 10_000);
     const file = path.join(WORK(), 'aural-clap.wav');
-    await hook('auralSave', 'aural', file);
+    await hook('auralSave', 'room', file);
     await m10.idle();
     const h = wavHeader(file);
     assert.equal(h.rate, RATE);
-    assert.equal(h.frames, v.aural?.samples);
+    assert.equal(h.frames, v.room?.samples);
     // An own WAV at 44.1 kHz.
     const own = path.join(WORK(), 'own-44k1.wav');
     ownWav(own);
     await hook('auralOpen', own);
     await waitView((x) => x.dry === `file:${own}`, 'the own WAV chosen', 10_000);
     await clickSelector(`${WIN} [data-action="aural-play-conv"]`);
-    const o = await waitView((x) => x.aural !== null && x.playing === 'aural', 'the own WAV playing');
-    assert.equal(o.aural?.rate, RATE);
-    assert.ok((o.aural?.samples ?? 0) >= Math.round(0.6 * RATE), `${o.aural?.samples} samples`);
+    const o = await waitView((x) => x.room !== null && x.playing === 'room', 'the own WAV playing');
+    assert.equal(o.room?.rate, RATE);
+    assert.ok((o.room?.samples ?? 0) >= Math.round(0.6 * RATE), `${o.room?.samples} samples`);
     await clickSelector(`${WIN} [data-action="aural-play-conv"]`);
     await waitView((x) => x.playing === null, 'stopped', 10_000);
-    console.log(`c5-aural receipt: clap clip -> ${v.aural?.samples} samples (${v.aural?.seconds.toFixed(2)} s) at ${v.aural?.rate} Hz, saved ${file} (${h.frames} frames, ${h.rate} Hz); own 44.1 kHz WAV -> ${o.aural?.samples} samples at ${o.aural?.rate} Hz`);
+    console.log(`c5-aural receipt: clap clip -> ${v.room?.samples} samples (${v.room?.seconds.toFixed(2)} s) at ${v.room?.rate} Hz, saved ${file} (${h.frames} frames, ${h.rate} Hz); own 44.1 kHz WAV -> ${o.room?.samples} samples at ${o.room?.rate} Hz`);
   });
 });

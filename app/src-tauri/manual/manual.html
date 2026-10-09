@@ -272,9 +272,14 @@ hand; <span class="ui">Image…</span> saves the chart as a PNG. <span class="ui
 table as tab-separated text, for a spreadsheet.</p>
 <h3>Response and Listen (SPPS)</h3>
 <p><span class="ui">Open response</span> shows the energy response per band at a receiver, as a map or a
-table, with time bins, span and zoom. <span class="ui">Listen</span> synthesises an impulse response from
-the echogram (not a measured or wave-based one), plays it, convolves a dry clip or your own WAV with it,
-and saves either as WAV.</p>
+table, with time bins, span and zoom. <span class="ui">Listen</span> plays a dry clip through the room at
+the chosen receiver, in mono: claps and rim clicks with silences between them (the default, so the room's
+tail is heard on its own), a plucked-string melody, a drum groove, a recorded speech clip, or your own WAV.
+<span class="ui">Dry</span> and <span class="ui">Room</span> switch between the clip without and with the
+room at the same moment of the clip; both carry the same energy, so what changes is the room, not the level.
+The room is an impulse response synthesised from the echogram (not a measured or wave-based one); it is
+below, to play on its own. Each can be saved as WAV. The claps, melody and groove are made by the app's own
+code, anechoic but synthetic; the speech is close-miked, not anechoic.</p>
 <h3>Maps (SPPS)</h3>
 <p>The <span class="ui">Map</span> card over the 3D view draws the sound map of a surface receiver or a
 sound-level plane, for one band or all bands together. Options: <span class="ui">Difference from

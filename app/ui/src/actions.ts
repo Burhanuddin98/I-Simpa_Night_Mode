@@ -909,7 +909,7 @@ export const runParameterMap = (runName: string, path: string, parameter: MapPar
 export const runParticles = (runName: string, bandHz: number) => backend.runParticles(runName, bandHz);
 /** C5: the listening window's read (features/acoustics/AuralWindow.tsx), passed through as the
  * backend returns it; the window reads a refusal itself. */
-export const runAuralize = (runName: string, receiver: string, source: string | null, dry: { clip?: string; path?: string }) =>
+export const runAuralize = (runName: string, receiver: string, source: string | null, dry: { clip?: string; path?: string; room?: boolean }) =>
   backend.runAuralize(runName, receiver, source, dry);
 
 /** C5: asks the open dialog for a WAV to auralize (null: cancelled). */

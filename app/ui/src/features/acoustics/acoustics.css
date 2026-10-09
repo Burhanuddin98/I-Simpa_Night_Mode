@@ -830,3 +830,21 @@
 .aw-clips-note {
   color: var(--text-3);
 }
+/* Decision 84: the sound through the room leads, so its section has no rule above it; Dry / Room is
+   the theme's segmented switch, as small as the window's buttons. */
+.aw-lead {
+  border-top: none;
+  padding-top: 2px;
+}
+.aw-hear {
+  display: inline-flex;
+  padding: 2px;
+}
+.aw-hear button {
+  height: 22px;
+  padding: 0 14px;
+  font-size: 12px;
+}
+.aw-play {
+  min-width: 92px;
+}

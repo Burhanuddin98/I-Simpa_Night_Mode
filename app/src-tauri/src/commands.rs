@@ -865,7 +865,8 @@ pub async fn run_echogram(
 /// C5: a receiver's impulse response synthesised from the run's SPPS energy echogram, or an
 /// recording convolved with it (`clip`, a bundled dry one by id, or `path`, a dry or anechoic WAV the open
 /// dialog returned), as WAV bytes (`aural::auralize_bytes`): an ArrayBuffer in JS. The sources
-/// summed unless `source` names one.
+/// summed unless `source` names one. A clip or a path comes through the room unless `room` is
+/// false: then the clip alone, at the level it shares with its room version (decision 84).
 #[tauri::command(rename_all = "snake_case")]
 pub async fn run_auralize(
     state: State<'_, AppState>,
@@ -874,6 +875,7 @@ pub async fn run_auralize(
     source: Option<String>,
     clip: Option<String>,
     path: Option<String>,
+    room: Option<bool>,
 ) -> CmdResult<Response> {
     let session = state.session.clone();
     guard::blocking("run_auralize", move || {
@@ -891,6 +893,7 @@ pub async fn run_auralize(
             &receiver,
             source.as_deref(),
             dry,
+            room.unwrap_or(true),
         )
         .map(Response::new)
     })

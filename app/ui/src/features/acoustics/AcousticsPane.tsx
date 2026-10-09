@@ -747,7 +747,7 @@ export function useAcousticsDock(): void {
   useEffect(() => registerHook('chartImage', ((part: string, path: string) => saveChart(part, path)) as never), []);
   useEffect(() => registerHook('responseView', () => responseHookView()), []);
   useEffect(() => registerHook('auralView', () => auralHookView()), []);
-  useEffect(() => registerHook('auralSave', ((what: 'ir' | 'aural', path: string) => auralHookSave(what, path)) as never), []);
+  useEffect(() => registerHook('auralSave', ((what: 'ir' | 'dry' | 'room', path: string) => auralHookSave(what, path)) as never), []);
   useEffect(() => registerHook('auralOpen', ((path: string) => auralHookOpen(path)) as never), []);
   useVariantRunFollow();
 }
@@ -1188,7 +1188,7 @@ export function AcousticsPane() {
               </button>
             ) : null}
             {report.solver !== 'tcr' ? (
-              <button type="button" className="small-button ac-listen" data-action="open-aural" aria-pressed={auralOpen} title="Hear the receiver's impulse response, synthesised from the echogram, and a dry recording through it" onClick={() => setAuralOpen((o) => !o)}>
+              <button type="button" className="small-button ac-listen" data-action="open-aural" aria-pressed={auralOpen} title="Hear a dry clip through the room at this receiver, with and without the room, and the impulse response synthesised from the echogram" onClick={() => setAuralOpen((o) => !o)}>
                 Listen
               </button>
             ) : null}

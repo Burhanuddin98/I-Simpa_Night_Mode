@@ -222,10 +222,11 @@ export const backend = {
   /** One band's saved particles as PART bytes (`decodeParticles`). */
   runParticles: (run: string, bandHz: number) => invoke<ArrayBuffer>('run_particles', { run, band_hz: bandHz }),
   runEchogram: (run: string, receiver: string) => invoke<EchogramView>('run_echogram', { run, receiver }),
-  /** C5: a receiver's synthesised impulse response, or a clip or WAV file convolved with it, as
-   * WAV bytes (`readWav`, features/acoustics/aural.ts). */
-  runAuralize: (run: string, receiver: string, source: string | null, dry: { clip?: string; path?: string }) =>
-    invoke<ArrayBuffer>('run_auralize', { run, receiver, source, clip: dry.clip ?? null, path: dry.path ?? null }),
+  /** C5: a receiver's synthesised impulse response, or a clip or WAV file convolved with it (or,
+   * `room` false, the clip alone at the level it shares with that), as WAV bytes (`readWav`,
+   * features/acoustics/aural.ts). */
+  runAuralize: (run: string, receiver: string, source: string | null, dry: { clip?: string; path?: string; room?: boolean }) =>
+    invoke<ArrayBuffer>('run_auralize', { run, receiver, source, clip: dry.clip ?? null, path: dry.path ?? null, room: dry.room ?? true }),
   /** W9: writes `bytes` to `path` (the save dialog's) as a `kind` file; the core checks both. */
   /** R3: `run` names the run the export is made from; the core notes the file beside it. */
   exportWrite: (kind: 'csv' | 'json' | 'png' | 'wav', path: string, bytes: Uint8Array, run: string | null = null) =>

@@ -8,7 +8,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { AURAL_NOTE, CLIPS, CLIPS_NOTE, clipText, dbText, meter, peakDbfs, readWav, wavName } from './aural.ts';
+import { AURAL_NOTE, CLIPS, CLIPS_NOTE, clipText, dbText, energy, LEVEL_NOTE, meter, peakDbfs, readWav, wavName } from './aural.ts';
 
 const TAURI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', 'src-tauri');
 const SHIPPED = path.join(TAURI, 'examples', 'clips');
@@ -128,5 +128,11 @@ test('aural: the meter shows a clip and silence, and the words say what this is'
     else assert.match(clipText(c), /synthesised, anechoic/);
   }
   assert.equal(wavName('CR4', 2, 'MP1', null, 'ir', null), 'CR4 - run 2 - MP1 - sources summed - impulse response.wav');
-  assert.equal(wavName(null, null, 'a/b', 'LS1', 'aural', 'harp'), 'Untitled - a_b - LS1 - auralization harp.wav');
+  assert.equal(wavName(null, null, 'a/b', 'LS1', 'room', 'clap-pattern'), 'Untitled - a_b - LS1 - clap-pattern - room.wav');
+  assert.equal(wavName('CR4', 1, 'MP1', null, 'dry', 'clap-pattern'), 'CR4 - run 1 - MP1 - sources summed - clap-pattern - dry.wav');
+  assert.match(AURAL_NOTE, /mono/);
+  assert.match(LEVEL_NOTE, /same energy/);
+  assert.match(LEVEL_NOTE, /−1 dBFS/);
+  assert.equal(energy([3, -4]), 25);
+  assert.equal(energy([]), 0);
 });

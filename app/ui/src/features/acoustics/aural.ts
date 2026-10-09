@@ -1,16 +1,25 @@
-// The listening window's model (C5, decision 75; docs/investigations/2026-10-07-auralization/):
-// the words it shows, the shipped clips (dry, not anechoic), and the WAV the core returns read back into
-// samples for Web Audio. A pure module, tested by aural.test.ts under `node --test`.
+// The listening window's model (C5, decisions 75 and 84; docs/investigations/2026-10-07-auralization/):
+// the words it shows, the shipped clips (generated and anechoic, or recorded and close-miked), and the
+// WAV the core returns read back into samples for Web Audio. A pure module, tested by aural.test.ts
+// under `node --test`.
 //
-// What is heard, honestly: the impulse response is synthesised from the SPPS energy echogram
+// What is heard, honestly: a dry clip through the room, mono; the room is the receiver's impulse
+// response, synthesised from the SPPS energy echogram
 // (`simpa_core::auralize`): the room's decay and spectrum per band with a random fine structure.
 // It is not a measured or wave-based impulse response, and the window says so (the response
 // window's wording is the precedent, response.ts).
 
 /** The window's title and its one line on what is heard. */
-export const AURAL_TITLE = 'Listen: impulse response (synthesised)';
+export const AURAL_TITLE = 'Listen: sound through the room';
 export const AURAL_NOTE =
-  'Synthesised from the SPPS energy echogram: the room’s decay and spectrum per band, with a random fine structure. Not a measured or wave-based impulse response.';
+  'A dry clip convolved with the receiver’s impulse response, in mono. The response is synthesised from the SPPS energy echogram: the room’s decay and spectrum per band, with a random fine structure. Not a measured or wave-based impulse response.';
+
+/** How Dry and Room are put on one loudness reference (`src-tauri/src/aural.rs`, `matched_gains`). */
+export const LEVEL_NOTE =
+  'Dry and Room carry the same energy: the room version is scaled to the dry clip’s total energy, and both by one gain that puts the louder peak of the two at −1 dBFS. The switch changes what the room adds, not the level.';
+
+/** What the Dry / Room switch picks. */
+export type Hear = 'dry' | 'room';
 
 /** A shipped clip, `id` as `src-tauri/src/aural.rs` names it (aural.test.ts holds the two lists to each
  * other and to the files and their provenance). Decision 84: `generated` clips are made by the
@@ -30,7 +39,7 @@ export const CLIPS_NOTE =
 
 /** The percussive clip first: its silences let the room's tail be heard on its own. */
 export const CLIPS: readonly Clip[] = [
-  { id: 'clap-pattern', title: 'Claps and rim clicks, with gaps', made: 'generated', licence: 'GPL-3.0' },
+  { id: 'clap-pattern', title: 'Claps and rim clicks', made: 'generated', licence: 'GPL-3.0' },
   { id: 'pluck-melody', title: 'Plucked-string melody', made: 'generated', licence: 'GPL-3.0' },
   { id: 'drum-groove', title: 'Drum groove', made: 'generated', licence: 'GPL-3.0' },
   { id: 'speech-lv-hislastbow', title: 'Speech (English, male reader)', made: 'recorded', licence: 'public domain, LibriVox' },
@@ -115,8 +124,15 @@ export function dbText(db: number): string {
   return db === -Infinity ? 'silent' : `${db.toFixed(1).replace('-', '−')} dBFS`;
 }
 
-/** The name a saved WAV is offered under. */
-export function wavName(project: string | null, run: number | null, receiver: string, source: string | null, what: 'ir' | 'aural', clip: string | null): string {
-  const parts = [project ?? 'Untitled', run !== null ? `run ${run}` : null, receiver, source ?? 'sources summed', what === 'ir' ? 'impulse response' : `auralization${clip ? ` ${clip}` : ''}`];
+/** The total energy of `x` (the sum of its squares), as the window checks Dry against Room. */
+export function energy(x: ArrayLike<number>): number {
+  let e = 0;
+  for (let i = 0; i < x.length; i++) e += x[i] * x[i];
+  return e;
+}
+
+/** The name a saved WAV is offered under: the impulse response, or a clip dry or through the room. */
+export function wavName(project: string | null, run: number | null, receiver: string, source: string | null, what: 'ir' | Hear, clip: string | null): string {
+  const parts = [project ?? 'Untitled', run !== null ? `run ${run}` : null, receiver, source ?? 'sources summed', what === 'ir' ? 'impulse response' : `${clip ?? 'clip'} - ${what}`];
   return `${parts.filter((p) => p !== null).join(' - ').replace(/[\\/:*?"<>|]/g, '_')}.wav`;
 }
