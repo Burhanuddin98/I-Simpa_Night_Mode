@@ -9,8 +9,8 @@
 //   no unit dialog, since a `.proj` carries its own units) or a room model. New and Open go
 //   through the save prompt (A9, actions.confirmDiscard).
 // - While a run is active, New and Open are disabled, saying why (PQ4).
-// - File › Close project (Ctrl+W) (Burhan, 2026-10-10 01:27): back to the landing page, after the
-//   save prompt; disabled during a run, as New is.
+// - File › Close project (Ctrl+W) and the Home button before the project tab (Burhan, 2026-10-10
+//   01:27): back to the landing page, after the save prompt; disabled during a run, as New is.
 // - Simulate › Run and Simulate › Cancel run (PQ2), the same actions as the Run button, F5 and
 //   the Simulate step's Cancel.
 // - Edit › New group from selection (scope row 15 (1), G19), the viewport's context menu entry.
@@ -28,7 +28,7 @@ import { aboutOpenStore, boxRoomRequestStore, groupRenameStore, reportStore, run
 import { ADD_GROUP_LABEL, DELETE_GROUP_LABEL, MERGE_LABEL, mergePlan, RENAME_GROUP_LABEL, renameTarget } from './groupsModel';
 import { clipboardStore, copySelected, deleteGroup, pasteCopied } from './sceneUi';
 import { ABOUT_LABEL, HELP_LINKS, HELP_MANUAL, TUTORIALS } from './helpModel';
-import { Search } from './icons';
+import { Home, Search } from './icons';
 import { recentStore, reopenLastStore, setReopenLast } from './recent';
 import { recentMenuLabel } from './recentModel';
 import { RunButton } from './RunButton';
@@ -47,12 +47,13 @@ export const RUN_ACTIVE_TITLE = 'A run is active: cancel it first';
 const OPEN_TITLE =
   'Open a Night Mode project (.simpa), an I-Simpa project (.proj, no unit to choose: it carries its own) or a room model (PLY, OBJ, STL)';
 
-/** Close project (Burhan, 2026-10-10 01:27): the save prompt first. */
+/** Close project and Home (Burhan, 2026-10-10 01:27): the same action, the save prompt first. */
 export const CLOSE_LABEL = 'Close project';
 export const CLOSE_TITLE = 'Close this project and go back to the landing page; unsaved changes are asked about first';
+export const HOME_TITLE = 'Home: close this project and go back to the landing page, as File › Close project (Ctrl+W)';
 const NO_PROJECT_TITLE = 'No project is open: this is the landing page';
 
-/** Why Close project waits, or null when it may go. */
+/** Why Close project and Home wait, or null when they may go. */
 export function closeWhyNot(open: boolean, running: boolean): string | null {
   if (!open) return NO_PROJECT_TITLE;
   return running ? RUN_ACTIVE_TITLE : null;
@@ -360,6 +361,16 @@ export function MenuBar() {
         );
       })}
       <div className="menu-sep" />
+      <button
+        className="home"
+        data-part="home"
+        aria-label="Home"
+        disabled={closeWhy !== null}
+        title={closeWhy ?? HOME_TITLE}
+        onClick={() => actions.fire(actions.closeProject())}
+      >
+        <Home />
+      </button>
       <div className="project-tab" data-part="project-tab" title={info?.path ?? undefined}>
         {info ? <span className="name">{info.name}</span> : <span className="none">No project</span>}
         {info?.dirty && <span className="dirty-dot" role="img" aria-label="Unsaved changes" title="Unsaved changes" />}

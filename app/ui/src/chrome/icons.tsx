@@ -14,6 +14,13 @@ export const Trash2 = ({ size = 13 }: { size?: number }) => (
   </svg>
 );
 
+/** The menu bar's Home (Close project): a house in the same line weight. */
+export const Home = ({ size = 15 }: { size?: number }) => (
+  <svg width={size} height={size} {...common}>
+    <path d="M3.5 9.5L10 3.8l6.5 5.7M5.5 8v8h3.3v-4.6h2.4V16h3.3V8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 export const Play = () => (
   <svg width="11" height="11" viewBox="0 0 20 20" aria-hidden>
     <path d="M5 3l12 7-12 7z" fill="currentColor" />
