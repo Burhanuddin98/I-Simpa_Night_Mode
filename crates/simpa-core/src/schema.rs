@@ -74,8 +74,8 @@ mod real;
 pub use bands::{BandKind, BandSet, Spectrum, SpectrumShape};
 pub use generate::generate;
 pub use ids::{
-    FittingZoneId, GroupId, MaterialId, PointReceiverId, ProjectId, SourceId, SurfaceReceiverId,
-    VariantId,
+    FittingZoneId, GroupId, MaterialId, PointReceiverId, ProjectId, SourceId, SpectrumId,
+    SurfaceReceiverId, VariantId,
 };
 pub use integrity::IntegrityError;
 pub use json::{

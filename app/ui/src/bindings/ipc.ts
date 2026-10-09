@@ -3180,6 +3180,10 @@ export interface ProjectView {
   name: string;
   point_receivers: PointReceiver[];
   sources: Source[];
+  /**
+   * Parity M17: the project's spectrum library.
+   */
+  spectra: UserSpectrum[];
   surface_groups: SurfaceGroup[];
   surface_receivers: SurfaceReceiver[];
   variants: Variant[];
@@ -3314,6 +3318,16 @@ export interface Spectrum {
    * The energetic sum over the project's bands, in dB.
    */
   global_db: number | string;
+  /**
+   * Parity M48: the entry of the project's spectrum library ([`super::UserSpectrum`]) this
+   * spectrum stays linked to, as upstream's `idspectre` keeps a source on its user spectrum
+   * (`generic_element/e_property_freq.cpp:151-175`): the shape is then that entry's levels,
+   * exactly (`Project::check_integrity`), and editing the entry moves every spectrum linked to
+   * it (`Op::ReplaceSpectrum`). It reaches no solver: config.xml writes the band levels.
+   * Optional in the file and not written when `None`, so a project saved before it existed
+   * loads and saves unchanged.
+   */
+  library?: string | null;
   shape: SpectrumShape;
 }
 /**
@@ -3405,7 +3419,36 @@ export interface Spectrum1 {
    * The energetic sum over the project's bands, in dB.
    */
   global_db: number | string;
+  /**
+   * Parity M48: the entry of the project's spectrum library ([`super::UserSpectrum`]) this
+   * spectrum stays linked to, as upstream's `idspectre` keeps a source on its user spectrum
+   * (`generic_element/e_property_freq.cpp:151-175`): the shape is then that entry's levels,
+   * exactly (`Project::check_integrity`), and editing the entry moves every spectrum linked to
+   * it (`Op::ReplaceSpectrum`). It reaches no solver: config.xml writes the band levels.
+   * Optional in the file and not written when `None`, so a project saved before it existed
+   * loads and saves unchanged.
+   */
+  library?: string | null;
   shape: SpectrumShape;
+}
+/**
+ * Parity M17: a spectrum of the project's library, upstream's user spectrum
+ * (`generic_element/e_gammefrequence_user.h`): a name and a level per band of the project, in dB.
+ * Only the differences between bands matter to a spectrum that takes it: a source keeps its own
+ * global level and takes these levels as its shape ([`SpectrumShape::Custom`]).
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "UserSpectrum".
+ */
+export interface UserSpectrum {
+  id: string;
+  /**
+   * One level per band, in project band order.
+   *
+   * Items: A float. Finite values are numbers; non-finite values are strings.
+   */
+  levels_db: (number | string)[];
+  name: string;
 }
 /**
  * A named set of faces sharing one material: the unit materials are assigned to.
@@ -5823,6 +5866,10 @@ export interface ProjectView1 {
   name: string;
   point_receivers: PointReceiver[];
   sources: Source[];
+  /**
+   * Parity M17: the project's spectrum library.
+   */
+  spectra: UserSpectrum[];
   surface_groups: SurfaceGroup[];
   surface_receivers: SurfaceReceiver[];
   variants: Variant[];

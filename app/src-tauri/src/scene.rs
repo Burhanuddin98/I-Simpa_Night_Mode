@@ -14,7 +14,7 @@ use simpa_core::geometry::check::{CheckReport, ReasonCode, Verdict};
 use simpa_core::geometry::import::ImportReport;
 use simpa_core::schema::{
     BandSet, EntityRef, GroupId, Material, PointReceiver, Project, SolverKind, Source,
-    SurfaceGroup, SurfaceReceiver, Variant, VariantId,
+    SurfaceGroup, SurfaceReceiver, UserSpectrum, Variant, VariantId,
 };
 use simpa_core::validate::{Issue, Severity, codes};
 
@@ -63,6 +63,8 @@ pub struct ProjectView {
     pub bands: BandSet,
     pub surface_groups: Vec<SurfaceGroup>,
     pub materials: Vec<Material>,
+    /// Parity M17: the project's spectrum library.
+    pub spectra: Vec<UserSpectrum>,
     pub sources: Vec<Source>,
     pub point_receivers: Vec<PointReceiver>,
     pub surface_receivers: Vec<SurfaceReceiver>,
@@ -722,6 +724,7 @@ pub fn view(project: &Project) -> ProjectView {
         bands: project.bands.clone(),
         surface_groups: project.surface_groups.clone(),
         materials: project.materials.clone(),
+        spectra: project.spectra.clone(),
         sources: project.sources.clone(),
         point_receivers: project.point_receivers.clone(),
         surface_receivers: project.surface_receivers.clone(),

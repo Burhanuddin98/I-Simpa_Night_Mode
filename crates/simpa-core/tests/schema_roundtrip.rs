@@ -366,6 +366,7 @@ fn spectrum(rng: &mut Rng, n: usize) -> Spectrum {
     Spectrum {
         global_db: rng.f64(0.0, 120.0),
         shape,
+        library: None,
     }
 }
 
@@ -1699,6 +1700,7 @@ fn cube_project() -> Project {
         },
         surface_groups: groups,
         materials,
+        spectra: Vec::new(),
         sources: vec![Source {
             id: SourceId::from_u128(id(0x300)),
             name: "Source 1".into(),
@@ -2148,8 +2150,22 @@ fn json_schema_describes_every_top_level_key() {
     let schema = serde_json::to_value(json_schema()).unwrap();
     let tree = parse_json(&to_json(&generate(3))).unwrap();
     let keys: HashSet<&String> = tree.as_object().unwrap().keys().collect();
-    let properties: HashSet<&String> = schema["properties"].as_object().unwrap().keys().collect();
+    // The optional keys a project without them does not write (parity M17's spectrum library).
+    let optional: HashSet<&str> = HashSet::from(["spectra"]);
+    let properties: HashSet<&String> = schema["properties"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .filter(|k| !optional.contains(k.as_str()))
+        .collect();
     assert_eq!(keys, properties);
+    assert!(
+        schema["properties"]
+            .as_object()
+            .unwrap()
+            .contains_key("spectra"),
+        "the library is described"
+    );
     let required: HashSet<&str> = schema["required"]
         .as_array()
         .unwrap()

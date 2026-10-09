@@ -98,3 +98,7 @@ uuid_id!(
     /// Identifies a [`Variant`](super::Variant).
     VariantId
 );
+uuid_id!(
+    /// Identifies a [`UserSpectrum`](super::UserSpectrum) of the project's spectrum library.
+    SpectrumId
+);

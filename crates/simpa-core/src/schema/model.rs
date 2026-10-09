@@ -7,10 +7,10 @@ use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::de::{self, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use super::bands::{BandSet, Spectrum};
+use super::bands::{BandSet, Spectrum, SpectrumShape};
 use super::ids::{
-    FittingZoneId, GroupId, MaterialId, PointReceiverId, ProjectId, SourceId, SurfaceReceiverId,
-    VariantId,
+    FittingZoneId, GroupId, MaterialId, PointReceiverId, ProjectId, SourceId, SpectrumId,
+    SurfaceReceiverId, VariantId,
 };
 use super::real::{F64, Vec3};
 
@@ -72,6 +72,13 @@ pub struct Project {
     pub surface_groups: Vec<SurfaceGroup>,
     /// The project's material library. Entries need not be in use.
     pub materials: Vec<Material>,
+    /// Parity M17: the project's own spectrum library, upstream's user spectra
+    /// (`tree_scene/e_scene_bdd_spectrums_user.h`), which a source's power or a receiver's
+    /// background noise can take and stay linked to ([`Spectrum::library`]). Entries need not be
+    /// in use. Optional in the file and not written while empty, so a project saved before it
+    /// existed loads and saves unchanged.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub spectra: Vec<UserSpectrum>,
     pub sources: Vec<Source>,
     pub point_receivers: Vec<PointReceiver>,
     pub surface_receivers: Vec<SurfaceReceiver>,
@@ -101,6 +108,7 @@ impl Project {
             geometry: Geometry::default(),
             surface_groups: Vec::new(),
             materials: Vec::new(),
+            spectra: Vec::new(),
             sources: Vec::new(),
             point_receivers: Vec::new(),
             surface_receivers: Vec::new(),
@@ -119,6 +127,27 @@ impl Project {
 
     pub fn material(&self, id: MaterialId) -> Option<&Material> {
         self.materials.iter().find(|m| m.id == id)
+    }
+
+    /// The spectrum library's entry with this id.
+    pub fn spectrum(&self, id: SpectrumId) -> Option<&UserSpectrum> {
+        self.spectra.iter().find(|s| s.id == id)
+    }
+
+    /// The names of what is linked to library entry `id`: sources' power and receivers'
+    /// background noise, in project order.
+    pub fn spectrum_users(&self, id: SpectrumId) -> Vec<String> {
+        let sources = self
+            .sources
+            .iter()
+            .filter(|s| s.power.library == Some(id))
+            .map(|s| format!("source '{}'", s.name));
+        let receivers = self
+            .point_receivers
+            .iter()
+            .filter(|r| r.background_noise.as_ref().and_then(|n| n.library) == Some(id))
+            .map(|r| format!("receiver '{}' background noise", r.name));
+        sources.chain(receivers).collect()
     }
 
     pub fn source(&self, id: SourceId) -> Option<&Source> {
@@ -558,6 +587,28 @@ impl<'de> Deserialize<'de> for Directivity {
             DirectivityIn::PlaneXz {} => Directivity::PlaneXz,
             DirectivityIn::Balloon { file, direction } => Directivity::Balloon { file, direction },
         })
+    }
+}
+
+/// Parity M17: a spectrum of the project's library, upstream's user spectrum
+/// (`generic_element/e_gammefrequence_user.h`): a name and a level per band of the project, in dB.
+/// Only the differences between bands matter to a spectrum that takes it: a source keeps its own
+/// global level and takes these levels as its shape ([`SpectrumShape::Custom`]).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct UserSpectrum {
+    pub id: SpectrumId,
+    pub name: String,
+    /// One level per band, in project band order.
+    pub levels_db: Vec<F64>,
+}
+
+impl UserSpectrum {
+    /// The shape a spectrum linked to this entry has: its levels, as relative levels.
+    pub fn shape(&self) -> SpectrumShape {
+        SpectrumShape::Custom {
+            relative_db: self.levels_db.clone(),
+        }
     }
 }
 

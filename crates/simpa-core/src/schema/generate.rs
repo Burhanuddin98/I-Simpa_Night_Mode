@@ -339,6 +339,7 @@ pub fn generate(seed: u64) -> Project {
         geometry,
         surface_groups,
         materials,
+        spectra: Vec::new(),
         sources,
         point_receivers,
         surface_receivers,

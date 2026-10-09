@@ -7,14 +7,34 @@
 // imported project brings, is kept and shown, not offered. Every change is one `replace_source`
 // through the checked apply, one undo step; what the validator refuses (a zero direction, say)
 // is shown under the field with the validator's words, and the project is unchanged.
+//
+// Parity M17 and M48: the spectrum list holds the project's own library after upstream's
+// reference spectra. "Save to library" makes an entry of the source's band levels and links the
+// source to it, in one step; a linked source shows its entry (`[data-part="spectrum-entry"]`):
+// the entry's name and levels are edited there (`replace_spectrum`), and every source linked to
+// it follows, as upstream's sources follow their user spectrum. Unlink keeps the levels; Delete
+// removes an entry no other source uses.
 import { useEffect, useState } from 'react';
 import * as actions from '../actions';
-import type { SceneState, Source, UiIssue } from '../bindings/ipc';
+import type { SceneState, Source, UiIssue, UserSpectrum } from '../bindings/ipc';
 import { fieldKey, issuesForField } from '../issues';
 import { NOT_A_NUMBER, parseStrictDecimal } from '../numbers';
-import { replaceSource } from '../ops';
-import { refusalStore, sceneStore, spectrumLibraryStore, useStore } from '../store';
-import { bandLevels, DIRECTIVITIES, shapeFor, spectrumKey, spectrumOptions, withBandLevel, withDirectivity } from './emission';
+import { addSpectrum, batch, nextName, removeSpectrum, replaceSource, replaceSpectrum } from '../ops';
+import { log, refusalStore, sceneStore, spectrumLibraryStore, useStore } from '../store';
+import {
+  bandLevels,
+  DIRECTIVITIES,
+  entryFrom,
+  entryUsers,
+  entryWithLevel,
+  linkedTo,
+  powerFor,
+  powerKey,
+  powerOptions,
+  unlinked,
+  withBandLevel,
+  withDirectivity,
+} from './emission';
 import { bandLabel } from '../features/materials/bands';
 import { AXES, exact } from './sceneModel';
 import { CommitInput, Issues } from './SourcesPanel';
@@ -33,6 +53,13 @@ function notANumber(text: string, id: string, field: string): UiIssue {
 
 /** The source as it is now (a commit reads the latest state, not the render's). */
 const now = (id: string) => sceneStore.get()?.view.sources.find((s) => s.id === id);
+/** The project's spectrum library as it is now. */
+const entries = () => sceneStore.get()?.view.spectra ?? [];
+
+/** A refusal made here, in words, filed under `field` of source `id`. */
+function said(id: string, field: string, code: string, message: string): UiIssue {
+  return { code, rule: '', severity: 'error', path: `source:${id}:${field}`, entity: { kind: 'source', id }, field, message };
+}
 
 export function EmissionEditor({ scene, source }: { scene: SceneState; source: Source }) {
   const refusals = useStore(refusalStore);
@@ -86,9 +113,75 @@ export function EmissionEditor({ scene, source }: { scene: SceneState; source: S
     });
   };
   const chooseSpectrum = (value: string) => {
-    const shape = shapeFor(value, library);
-    if (!shape) return;
-    actions.fire(replace('power', (s) => ({ ...s, power: { ...s.power, shape } })));
+    actions.fire(
+      replace('power', (s) => {
+        const power = powerFor(value, s.power, library, entries());
+        return power ? { ...s, power } : null;
+      }),
+    );
+  };
+  /** M17: the source's band levels as a new library entry, the source linked to it: one step. */
+  const saveToLibrary = () => {
+    const s = now(id);
+    if (!s) return;
+    const list = entries();
+    const made = entryFrom(crypto.randomUUID(), nextName('Spectrum ', list.map((e) => e.name)), s.power, freqs);
+    if (!made) return;
+    const entry: UserSpectrum = { id: made.id, name: made.name, levels_db: [...made.levels_db] };
+    const ops = [addSpectrum(list.length, entry), replaceSource({ ...s, power: linkedTo(s.power, entry) })];
+    actions.fire(
+      actions.apply(batch(ops), keyOf('power')).then((out) => {
+        if (out.applied) log('OK', `Saved the spectrum of ${s.name} to the library as ${entry.name}; ${s.name} is linked to it`);
+      }),
+    );
+  };
+  /** M17/M48: the linked entry replaced (its name or a band), every linked source following. */
+  const replaceEntry = async (change: (e: UserSpectrum) => UserSpectrum | null): Promise<boolean> => {
+    const libId = now(id)?.power.library;
+    const e = entries().find((x) => x.id === libId);
+    if (!e) return false;
+    const next = change(e);
+    if (!next) return true;
+    const out = await actions.apply(replaceSpectrum(next), keyOf('power'));
+    return out.applied;
+  };
+  const commitEntryName = async (text: string) => {
+    const name = text.trim();
+    if (!name) {
+      setLocalIssue('spectrum.name', said(id, 'spectrum.name', 'NAME_EMPTY', 'A library spectrum needs a name.'));
+      return false;
+    }
+    setLocalIssue('spectrum.name', null);
+    return replaceEntry((e) => (e.name === name ? null : { ...e, name }));
+  };
+  const commitEntryBand = (band: number) => async (text: string) => {
+    const v = number(`entry.band.${band}`, text);
+    if (v === null) return false;
+    return replaceEntry((e) => {
+      const next = entryWithLevel(e, band, v);
+      return next ? { ...e, levels_db: [...next.levels_db] } : null;
+    });
+  };
+  const unlink = () => actions.fire(replace('power', (s) => (s.power.library ? { ...s, power: unlinked(s.power) } : null)));
+  /** M17: the linked entry deleted, this source unlinked first, in one step; refused, in words,
+   * while another source or a receiver uses it (the core refuses it too, `in_use`). */
+  const deleteEntry = () => {
+    const s = now(id);
+    const view = sceneStore.get()?.view;
+    const e = entries().find((x) => x.id === s?.power.library);
+    if (!s || !view || !e) return;
+    const others = entryUsers(e.id, view).filter((n) => n !== s.name);
+    if (others.length > 0) {
+      const them = others.length === 1 ? 'it' : 'them';
+      setLocalIssue('spectrum.delete', said(id, 'spectrum.delete', 'SPECTRUM_IN_USE', `${e.name} is used by ${others.join(', ')} too: unlink ${them} first.`));
+      return;
+    }
+    setLocalIssue('spectrum.delete', null);
+    actions.fire(
+      actions.apply(batch([replaceSource({ ...s, power: unlinked(s.power) }), removeSpectrum(e.id)]), keyOf('power')).then((out) => {
+        if (out.applied) log('OK', `Deleted ${e.name} from the library; ${s.name} keeps its levels`);
+      }),
+    );
   };
   const chooseDirectivity = (kind: string) => {
     actions.fire(
@@ -112,14 +205,20 @@ export function EmissionEditor({ scene, source }: { scene: SceneState; source: S
   };
 
   const levels = bandLevels(source.power, freqs);
-  const key = spectrumKey(source.power.shape, library);
-  const options = spectrumOptions(library, key);
+  const user = scene.view.spectra;
+  const key = powerKey(source.power, library);
+  const options = powerOptions(library, user, key);
+  const entry = source.power.library ? user.find((e) => e.id === source.power.library) : undefined;
+  const users = entry ? entryUsers(entry.id, scene.view) : [];
   const powerRefused = refusals.get(keyOf('power')) ?? [];
   const dirRefused = refusals.get(keyOf('directivity')) ?? [];
   const powerIssues = issuesForField(scene.issues, 'source', id, 'power');
   const dirIssues = issuesForField(scene.issues, 'source', id, 'directivity');
   const localPower = Object.entries(local)
     .filter(([k]) => k.startsWith('power.'))
+    .map(([, v]) => v);
+  const localEntry = Object.entries(local)
+    .filter(([k]) => k.startsWith('spectrum.') || k.startsWith('entry.'))
     .map(([, v]) => v);
   const localDir = Object.entries(local)
     .filter(([k]) => k.startsWith('direction.'))
@@ -152,13 +251,92 @@ export function EmissionEditor({ scene, source }: { scene: SceneState; source: S
           value={options.some((o) => o.value === key) ? key : 'custom'}
           onChange={(e) => chooseSpectrum(e.target.value)}
         >
-          {options.map((o) => (
-            <option key={o.value} value={o.value} disabled={o.value === 'custom'}>
-              {o.label}
+          <optgroup label="I-Simpa">
+            {options
+              .filter((o) => o.group === 'reference')
+              .map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+          </optgroup>
+          {user.length > 0 && (
+            <optgroup label="Project library">
+              {options
+                .filter((o) => o.group === 'library')
+                .map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+            </optgroup>
+          )}
+          {key === 'custom' && (
+            <option value="custom" disabled>
+              Typed per band
             </option>
-          ))}
+          )}
         </select>
       </label>
+      {entry ? (
+        <div className="spectrum-entry" data-part="spectrum-entry" data-entry-id={entry.id}>
+          <label className="field-row">
+            <span className="label">Library</span>
+            <CommitInput
+              field="spectrum.name"
+              label="Library spectrum name"
+              value={entry.name}
+              invalid={!!local['spectrum.name']}
+              commit={commitEntryName}
+              onRevert={() => setLocalIssue('spectrum.name', null)}
+            />
+          </label>
+          <div className="entry-users" data-part="spectrum-users">
+            Linked: {users.join(', ')}. A level changed here changes {users.length === 1 ? 'it' : 'every one'}.
+          </div>
+          <div
+            className="band-levels"
+            data-part="entry-levels"
+            title="The library spectrum's level in each band, dB. A linked source keeps its own sound power and takes the shape of these levels."
+          >
+            {entry.levels_db.map((l, i) => (
+              <label key={freqs[i] ?? i} className="band-level">
+                <span className="k">{bandLabel(freqs[i])}</span>
+                <CommitInput
+                  field={`entry.band.${i}`}
+                  label={`Library spectrum level at ${freqs[i]} Hz, dB`}
+                  className="mono"
+                  value={String(Math.round(Number(l) * 10) / 10)}
+                  invalid={!!local[`entry.band.${i}`]}
+                  commit={commitEntryBand(i)}
+                  onRevert={() => setLocalIssue(`entry.band.${i}`, null)}
+                />
+              </label>
+            ))}
+          </div>
+          <div className="entry-actions">
+            <button type="button" className="small-button" data-action="spectrum-unlink" onClick={unlink} title="Keep these levels as the source's own, typed per band">
+              Unlink
+            </button>
+            <button type="button" className="small-button" data-action="spectrum-delete" onClick={deleteEntry} title="Delete this spectrum from the project's library">
+              Delete from library
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="entry-actions">
+          <button
+            type="button"
+            className="small-button"
+            data-action="spectrum-save"
+            onClick={saveToLibrary}
+            disabled={!levels}
+            title="Keep this spectrum in the project's library, for other sources to use; this source stays linked to it"
+          >
+            Save to library
+          </button>
+        </div>
+      )}
       {levels && (
         <div className="band-levels" data-part="band-levels" title="Each band's sound power level, dB re 1 pW. Typing one keeps the others and makes the spectrum 'Typed per band'.">
           {levels.map((l, i) => (
@@ -177,7 +355,7 @@ export function EmissionEditor({ scene, source }: { scene: SceneState; source: S
           ))}
         </div>
       )}
-      <Issues refused={[...localPower, ...powerRefused]} current={powerIssues} />
+      <Issues refused={[...localPower, ...localEntry, ...powerRefused]} current={powerIssues} />
 
       <label className="field-row">
         <span className="label">Directivity</span>

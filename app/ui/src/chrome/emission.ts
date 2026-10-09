@@ -97,6 +97,99 @@ export function shapeFor(value: string, library: readonly LibrarySpectrumLike[])
   return null;
 }
 
+// ---- Parity M17 and M48: the project's spectrum library ---------------------------------------
+//
+// Upstream keeps user spectra in the project (`tree_scene/e_scene_bdd_spectrums_user.h`) and a
+// source names one by `idspectre`, staying linked to it: editing the user spectrum changes every
+// source that uses it (`generic_element/e_property_freq.cpp:151-175`). Here an entry is a name and
+// a level per band; a source linked to it (`power.library`) has the entry's levels as its shape and
+// its own global level, and the core moves every linked shape when the entry is replaced
+// (`replace_spectrum`).
+
+/** An entry of the project's spectrum library, as the schema stores it (`UserSpectrum`). */
+export interface UserSpectrumLike {
+  id: string;
+  name: string;
+  levels_db: readonly F64[];
+}
+
+type Power = Source['power'];
+
+/** The select's value for a power: `lib:<id>` while it is linked to a library entry, else
+ * {@link spectrumKey} of its shape. */
+export function powerKey(power: Power, reference: readonly LibrarySpectrumLike[]): string {
+  return power.library ? `lib:${power.library}` : spectrumKey(power.shape, reference);
+}
+
+/** The select's options: upstream's reference list, then the project's library (`lib:<id>`),
+ * then "Typed per band" (shown only while it is). */
+export function powerOptions(
+  reference: readonly LibrarySpectrumLike[],
+  user: readonly UserSpectrumLike[],
+  current: string,
+): { value: string; label: string; group: 'reference' | 'library' | 'typed' }[] {
+  const out: { value: string; label: string; group: 'reference' | 'library' | 'typed' }[] = spectrumOptions(reference, 'none').map((o) => ({
+    ...o,
+    group: 'reference',
+  }));
+  for (const u of user) out.push({ value: `lib:${u.id}`, label: u.name, group: 'library' });
+  if (current === 'custom') out.push({ value: 'custom', label: 'Typed per band', group: 'typed' });
+  return out;
+}
+
+/** `power` without a library link: the shape and global level kept. */
+export function unlinked(power: Power): Power {
+  return { global_db: power.global_db, shape: power.shape };
+}
+
+/** `power` linked to `entry`: the entry's levels as its shape, its own global level kept. */
+export function linkedTo(power: Power, entry: UserSpectrumLike): Power {
+  return { global_db: power.global_db, shape: { kind: 'custom', relative_db: [...entry.levels_db] }, library: entry.id };
+}
+
+/** The power a choice in the select gives, or null when it is no change or not a choice: a library
+ * entry links it; a reference spectrum sets its shape and drops any link. */
+export function powerFor(
+  value: string,
+  power: Power,
+  reference: readonly LibrarySpectrumLike[],
+  user: readonly UserSpectrumLike[],
+): Power | null {
+  if (value === powerKey(power, reference)) return null;
+  if (value.startsWith('lib:')) {
+    const entry = user.find((u) => u.id === value.slice(4));
+    return entry ? linkedTo(power, entry) : null;
+  }
+  const shape = shapeFor(value, reference);
+  return shape ? { global_db: power.global_db, shape } : null;
+}
+
+/** A new library entry holding `power`'s band levels on the bands, named `name`; null when the
+ * shape does not fit the bands. */
+export function entryFrom(id: string, name: string, power: Power, frequenciesHz: readonly number[]): UserSpectrumLike | null {
+  const levels = bandLevels(power, frequenciesHz);
+  return levels ? { id, name, levels_db: levels } : null;
+}
+
+/** `entry` with band `band` at `level` dB, every other band kept; null when nothing changes. */
+export function entryWithLevel(entry: UserSpectrumLike, band: number, level: number): UserSpectrumLike | null {
+  if (band < 0 || band >= entry.levels_db.length || Object.is(num(entry.levels_db[band]), level)) return null;
+  const levels_db = [...entry.levels_db];
+  levels_db[band] = level;
+  return { ...entry, levels_db };
+}
+
+/** What is linked to entry `id`, named as the Console and the editor name them. */
+export function entryUsers(
+  id: string,
+  view: { sources: readonly Pick<Source, 'name' | 'power'>[]; point_receivers: readonly { name: string; background_noise: Power | null }[] },
+): string[] {
+  return [
+    ...view.sources.filter((s) => s.power.library === id).map((s) => s.name),
+    ...view.point_receivers.filter((r) => r.background_noise?.library === id).map((r) => `${r.name} (background noise)`),
+  ];
+}
+
 /** The directivities a source can be given here: the solvers' codes 0 to 4. A measured balloon
  * (code 5) comes with an imported project and is kept as it is; it is not offered. */
 export const DIRECTIVITIES: readonly { kind: Exclude<Directivity['kind'], 'balloon'>; label: string; title: string }[] = [

@@ -88,6 +88,19 @@ export type Op =
     }
   | {
       index: number;
+      op: 'add_spectrum';
+      spectrum: UserSpectrum;
+    }
+  | {
+      id: string;
+      op: 'remove_spectrum';
+    }
+  | {
+      op: 'replace_spectrum';
+      spectrum: UserSpectrum;
+    }
+  | {
+      index: number;
       op: 'add_source';
       source: Source;
     }
@@ -609,6 +622,11 @@ export interface BandData {
   fitting_zones: [string, FittingBands][];
   materials: [string, MaterialBands][];
   source_shapes: [string, (number | string)[] | null][];
+  /**
+   * Parity M17: each library spectrum's levels, in library order. Not written while the
+   * library is empty.
+   */
+  spectra?: [string, (number | string)[]][];
   spps_bands_computed: boolean[];
   tcr_bands_computed: boolean[];
 }
@@ -720,6 +738,25 @@ export interface Material {
   transmission_loss_db: ((number | string) | null)[] | null;
 }
 /**
+ * Parity M17: a spectrum of the project's library, upstream's user spectrum
+ * (`generic_element/e_gammefrequence_user.h`): a name and a level per band of the project, in dB.
+ * Only the differences between bands matter to a spectrum that takes it: a source keeps its own
+ * global level and takes these levels as its shape ([`SpectrumShape::Custom`]).
+ *
+ * This interface was referenced by `SchemaBindings`'s JSON-Schema
+ * via the `definition` "UserSpectrum".
+ */
+export interface UserSpectrum {
+  id: string;
+  /**
+   * One level per band, in project band order.
+   *
+   * Items: A float. Finite values are numbers; non-finite values are strings.
+   */
+  levels_db: (number | string)[];
+  name: string;
+}
+/**
  * A point sound source: `sources/source`.
  *
  * This interface was referenced by `SchemaBindings`'s JSON-Schema
@@ -806,6 +843,16 @@ export interface Spectrum {
    * The energetic sum over the project's bands, in dB.
    */
   global_db: number | string;
+  /**
+   * Parity M48: the entry of the project's spectrum library ([`super::UserSpectrum`]) this
+   * spectrum stays linked to, as upstream's `idspectre` keeps a source on its user spectrum
+   * (`generic_element/e_property_freq.cpp:151-175`): the shape is then that entry's levels,
+   * exactly (`Project::check_integrity`), and editing the entry moves every spectrum linked to
+   * it (`Op::ReplaceSpectrum`). It reaches no solver: config.xml writes the band levels.
+   * Optional in the file and not written when `None`, so a project saved before it existed
+   * loads and saves unchanged.
+   */
+  library?: string | null;
   shape: SpectrumShape;
 }
 /**
@@ -876,6 +923,16 @@ export interface Spectrum1 {
    * The energetic sum over the project's bands, in dB.
    */
   global_db: number | string;
+  /**
+   * Parity M48: the entry of the project's spectrum library ([`super::UserSpectrum`]) this
+   * spectrum stays linked to, as upstream's `idspectre` keeps a source on its user spectrum
+   * (`generic_element/e_property_freq.cpp:151-175`): the shape is then that entry's levels,
+   * exactly (`Project::check_integrity`), and editing the entry moves every spectrum linked to
+   * it (`Op::ReplaceSpectrum`). It reaches no solver: config.xml writes the band levels.
+   * Optional in the file and not written when `None`, so a project saved before it existed
+   * loads and saves unchanged.
+   */
+  library?: string | null;
   shape: SpectrumShape;
 }
 /**
@@ -1215,6 +1272,14 @@ export interface Project {
   point_receivers: PointReceiver[];
   solvers: SolverSettings;
   sources: Source[];
+  /**
+   * Parity M17: the project's own spectrum library, upstream's user spectra
+   * (`tree_scene/e_scene_bdd_spectrums_user.h`), which a source's power or a receiver's
+   * background noise can take and stay linked to ([`Spectrum::library`]). Entries need not be
+   * in use. Optional in the file and not written while empty, so a project saved before it
+   * existed loads and saves unchanged.
+   */
+  spectra?: UserSpectrum[];
   surface_groups: SurfaceGroup[];
   surface_receivers: SurfaceReceiver[];
   variants: Variant[];

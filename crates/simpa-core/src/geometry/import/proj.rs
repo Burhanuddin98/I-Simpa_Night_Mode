@@ -992,6 +992,7 @@ fn import(bytes: &[u8], projet_config: Option<&[u8]>) -> Result<ProjImport> {
         geometry,
         surface_groups,
         materials,
+        spectra: Vec::new(),
         sources,
         point_receivers,
         surface_receivers,

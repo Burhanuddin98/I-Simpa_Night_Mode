@@ -4076,6 +4076,13 @@
           },
           "type": "array"
         },
+        "spectra": {
+          "description": "Parity M17: the project's spectrum library.",
+          "items": {
+            "$ref": "#/$defs/UserSpectrum"
+          },
+          "type": "array"
+        },
         "surface_groups": {
           "items": {
             "$ref": "#/$defs/SurfaceGroup"
@@ -4101,6 +4108,7 @@
         "bands",
         "surface_groups",
         "materials",
+        "spectra",
         "sources",
         "point_receivers",
         "surface_receivers",
@@ -6478,6 +6486,14 @@
             }
           ]
         },
+        "library": {
+          "description": "Parity M48: the entry of the project's spectrum library ([`super::UserSpectrum`]) this\nspectrum stays linked to, as upstream's `idspectre` keeps a source on its user spectrum\n(`generic_element/e_property_freq.cpp:151-175`): the shape is then that entry's levels,\nexactly (`Project::check_integrity`), and editing the entry moves every spectrum linked to\nit (`Op::ReplaceSpectrum`). It reaches no solver: config.xml writes the band levels.\nOptional in the file and not written when `None`, so a project saved before it existed\nloads and saves unchanged.",
+          "format": "uuid",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "shape": {
           "$ref": "#/$defs/SpectrumShape"
         }
@@ -7579,6 +7595,41 @@
         "path",
         "field",
         "message"
+      ],
+      "type": "object"
+    },
+    "UserSpectrum": {
+      "additionalProperties": false,
+      "description": "Parity M17: a spectrum of the project's library, upstream's user spectrum\n(`generic_element/e_gammefrequence_user.h`): a name and a level per band of the project, in dB.\nOnly the differences between bands matter to a spectrum that takes it: a source keeps its own\nglobal level and takes these levels as its shape ([`SpectrumShape::Custom`]).",
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "levels_db": {
+          "description": "One level per band, in project band order.",
+          "items": {
+            "description": "A float. Finite values are numbers; non-finite values are strings.",
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                "type": "string"
+              }
+            ]
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "levels_db"
       ],
       "type": "object"
     },

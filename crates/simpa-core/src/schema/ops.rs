@@ -8,14 +8,15 @@ use uuid::Uuid;
 
 use super::bands::{BandSet, SpectrumShape};
 use super::ids::{
-    FittingZoneId, GroupId, MaterialId, PointReceiverId, SourceId, SurfaceReceiverId, VariantId,
+    FittingZoneId, GroupId, MaterialId, PointReceiverId, SourceId, SpectrumId, SurfaceReceiverId,
+    VariantId,
 };
 use super::integrity::{self, IntegrityError};
 use super::json::{LoadError, from_json_exact};
 use super::model::{
     Camera, DiffusionLaw, Environment, FittingShape, FittingZone, Geometry, Material, Nullable,
     PointReceiver, Project, ReflectionLaws, SolverSettings, Source, SurfaceGroup, SurfaceReceiver,
-    SurfaceReceiverShape, Variant, required,
+    SurfaceReceiverShape, UserSpectrum, Variant, required,
 };
 use super::real::{F64, Vec3};
 
@@ -96,6 +97,10 @@ pub struct BandData {
     pub fitting_zones: Vec<(FittingZoneId, FittingBands)>,
     pub spps_bands_computed: Vec<bool>,
     pub tcr_bands_computed: Vec<bool>,
+    /// Parity M17: each library spectrum's levels, in library order. Not written while the
+    /// library is empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub spectra: Vec<(SpectrumId, Vec<F64>)>,
 }
 
 /// One edit. [`Op::apply`] returns its exact inverse.
@@ -199,6 +204,21 @@ pub enum Op {
         quantity: MaterialQuantity,
         band: usize,
         value: F64,
+    },
+    /// Parity M17: adds an entry to the project's spectrum library.
+    AddSpectrum {
+        index: usize,
+        spectrum: UserSpectrum,
+    },
+    /// Refused while a source or a receiver is linked to it.
+    RemoveSpectrum {
+        id: SpectrumId,
+    },
+    /// Replaces a library entry whole (its name, its levels). Every spectrum linked to it takes
+    /// the new levels as its shape in the same edit (parity M48), as upstream's sources follow
+    /// their user spectrum (`e_property_freq.cpp:151-175`); each keeps its own global level.
+    ReplaceSpectrum {
+        spectrum: UserSpectrum,
     },
     AddSource {
         index: usize,
@@ -614,7 +634,16 @@ fn check_band_data(p: &Project, data: &BandData, n: usize) -> Result<()> {
         )?;
     }
     count("SPPS bands_computed".into(), data.spps_bands_computed.len())?;
-    count("TCR bands_computed".into(), data.tcr_bands_computed.len())
+    count("TCR bands_computed".into(), data.tcr_bands_computed.len())?;
+    same_ids(
+        "library spectra",
+        p.spectra.iter().map(|s| s.id),
+        &data.spectra,
+    )?;
+    for (id, levels) in &data.spectra {
+        count(format!("library spectrum {id}"), levels.len())?;
+    }
+    Ok(())
 }
 
 /// Swaps the project's per-band arrays with `data` (already checked) and returns the old ones.
@@ -653,6 +682,9 @@ fn swap_band_data(p: &mut Project, mut data: BandData) -> BandData {
         &mut p.solvers.tcr.bands_computed,
         &mut data.tcr_bands_computed,
     );
+    for (s, (_, levels)) in p.spectra.iter_mut().zip(&mut data.spectra) {
+        swap(&mut s.levels_db, levels);
+    }
     data
 }
 
@@ -701,6 +733,11 @@ impl Project {
                 .collect(),
             spps_bands_computed: self.solvers.spps.bands_computed.clone(),
             tcr_bands_computed: self.solvers.tcr.bands_computed.clone(),
+            spectra: self
+                .spectra
+                .iter()
+                .map(|s| (s.id, s.levels_db.clone()))
+                .collect(),
         }
     }
 
@@ -749,6 +786,9 @@ impl Project {
         }
         data.spps_bands_computed = map(&pick, &data.spps_bands_computed);
         data.tcr_bands_computed = map(&pick, &data.tcr_bands_computed);
+        for (_, levels) in &mut data.spectra {
+            *levels = map(&pick, levels);
+        }
         Some(Op::SetBands { bands, data })
     }
 
@@ -1277,6 +1317,20 @@ impl Op {
                 integrity::check_bands(&bands)?;
                 check_band_data(p, &data, bands.len())?;
                 let data = swap_band_data(p, data);
+                // A linked spectrum must still have its entry's levels (parity M48).
+                let linked = p
+                    .sources
+                    .iter()
+                    .try_for_each(|s| integrity::check_source_link(s, &p.spectra))
+                    .and_then(|()| {
+                        p.point_receivers
+                            .iter()
+                            .try_for_each(|r| integrity::check_receiver_link(r, &p.spectra))
+                    });
+                if let Err(e) = linked {
+                    swap_band_data(p, data);
+                    return Err(e.into());
+                }
                 Ok(Op::SetBands {
                     bands: replace(&mut p.bands, bands),
                     data,
@@ -1421,9 +1475,51 @@ impl Op {
                     value: replace(slot, value),
                 })
             }
+            Op::AddSpectrum { index, spectrum } => {
+                insertable(&p.spectra, "library spectrum", index, spectrum.id, |s| s.id)?;
+                integrity::check_user_spectrum(&spectrum, n)?;
+                let id = spectrum.id;
+                p.spectra.insert(index, spectrum);
+                Ok(Op::RemoveSpectrum { id })
+            }
+            Op::RemoveSpectrum { id } => {
+                let index = position(&p.spectra, "library spectrum", id, |s| s.id)?;
+                if let Some(by) = p.spectrum_users(id).into_iter().next() {
+                    return Err(OpError::InUse {
+                        kind: "library spectrum",
+                        id: id.0,
+                        by,
+                    });
+                }
+                Ok(Op::AddSpectrum {
+                    index,
+                    spectrum: p.spectra.remove(index),
+                })
+            }
+            Op::ReplaceSpectrum { spectrum } => {
+                let i = position(&p.spectra, "library spectrum", spectrum.id, |s| s.id)?;
+                integrity::check_user_spectrum(&spectrum, n)?;
+                let id = spectrum.id;
+                let shape = spectrum.shape();
+                for s in p.sources.iter_mut().filter(|s| s.power.library == Some(id)) {
+                    s.power.shape = shape.clone();
+                }
+                for noise in p
+                    .point_receivers
+                    .iter_mut()
+                    .filter_map(|r| r.background_noise.as_mut())
+                    .filter(|n| n.library == Some(id))
+                {
+                    noise.shape = shape.clone();
+                }
+                Ok(Op::ReplaceSpectrum {
+                    spectrum: replace(&mut p.spectra[i], spectrum),
+                })
+            }
             Op::AddSource { index, source } => {
                 insertable(&p.sources, "source", index, source.id, |s| s.id)?;
                 integrity::check_source(&source, n)?;
+                integrity::check_source_link(&source, &p.spectra)?;
                 integrity::unique_pins(
                     "source",
                     p.sources
@@ -1445,6 +1541,7 @@ impl Op {
             Op::ReplaceSource { source } => {
                 let i = position(&p.sources, "source", source.id, |s| s.id)?;
                 integrity::check_source(&source, n)?;
+                integrity::check_source_link(&source, &p.spectra)?;
                 integrity::unique_pins(
                     "source",
                     others(&p.sources, i, |s| s.solver_id, source.solver_id),
@@ -1476,6 +1573,7 @@ impl Op {
                     |r| r.id,
                 )?;
                 integrity::check_point_receiver(&receiver, n)?;
+                integrity::check_receiver_link(&receiver, &p.spectra)?;
                 integrity::unique_pins(
                     "point receiver",
                     p.point_receivers
@@ -1497,6 +1595,7 @@ impl Op {
             Op::ReplacePointReceiver { receiver } => {
                 let i = position(&p.point_receivers, "point receiver", receiver.id, |r| r.id)?;
                 integrity::check_point_receiver(&receiver, n)?;
+                integrity::check_receiver_link(&receiver, &p.spectra)?;
                 integrity::unique_pins(
                     "point receiver",
                     others(&p.point_receivers, i, |r| r.solver_id, receiver.solver_id),

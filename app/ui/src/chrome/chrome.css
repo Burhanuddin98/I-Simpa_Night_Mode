@@ -1426,6 +1426,31 @@
   font-size: 12px;
   box-sizing: border-box;
 }
+/* Parity M17/M48: the library entry a source is linked to, edited in place. */
+.spectrum-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--edge);
+  border-left: 2px solid var(--red);
+  border-radius: 6px;
+  background: var(--red-wash);
+}
+.spectrum-entry .field-row input {
+  flex-grow: 1;
+  min-width: 0;
+}
+.entry-users {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+.entry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
 
 /* C1 audit: a surface row on two lines, the name on the first with the row's whole width, the face
    count and material under it (they shorten first). */

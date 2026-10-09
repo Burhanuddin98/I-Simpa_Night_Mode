@@ -11,7 +11,7 @@ use super::ids::GroupId;
 use super::model::{
     FORMAT_VERSION, Face, FittingShape, FittingZone, Material, PointReceiver, Project,
     SOLVER_INT_MAX, SolverSettings, Source, SurfaceGroup, SurfaceReceiver, SurfaceReceiverShape,
-    Variant,
+    UserSpectrum, Variant,
 };
 
 /// A broken structural invariant. [`IntegrityError::code`] is a stable reason code.
@@ -46,6 +46,9 @@ pub enum IntegrityError {
     DuplicateSolverId { kind: &'static str, solver_id: u32 },
     /// An integer the solver reads as a C `int` is above [`SOLVER_INT_MAX`].
     SolverInt { what: String, value: u32 },
+    /// A spectrum linked to a library entry ([`Spectrum::library`]) does not have that entry's
+    /// levels as its shape.
+    SpectrumLink { what: String, name: String },
 }
 
 impl IntegrityError {
@@ -61,6 +64,7 @@ impl IntegrityError {
             IntegrityError::OverrideOrder { .. } => "override_order",
             IntegrityError::DuplicateSolverId { .. } => "duplicate_solver_id",
             IntegrityError::SolverInt { .. } => "solver_int_range",
+            IntegrityError::SpectrumLink { .. } => "spectrum_link",
         }
     }
 }
@@ -101,6 +105,10 @@ impl fmt::Display for IntegrityError {
             IntegrityError::SolverInt { what, value } => write!(
                 f,
                 "{what} is {value}, but the solver reads it as a C int (at most {SOLVER_INT_MAX})"
+            ),
+            IntegrityError::SpectrumLink { what, name } => write!(
+                f,
+                "{what} is linked to library spectrum '{name}' but does not have its levels"
             ),
         }
     }
@@ -161,6 +169,59 @@ pub(crate) fn check_spectrum(what: impl FnOnce() -> String, s: &Spectrum, n: usi
     match &s.shape {
         SpectrumShape::Custom { relative_db } => band_count(what, relative_db.len(), n),
         SpectrumShape::Pink | SpectrumShape::White => Ok(()),
+    }
+}
+
+/// A library entry: one level per band.
+pub(crate) fn check_user_spectrum(s: &UserSpectrum, n: usize) -> Result {
+    band_count(
+        || format!("library spectrum '{}'", s.name),
+        s.levels_db.len(),
+        n,
+    )
+}
+
+/// A spectrum linked to a library entry: the entry exists in `spectra`, and the spectrum's shape
+/// is that entry's levels, exactly (parity M48).
+pub(crate) fn check_spectrum_link(
+    what: impl Fn() -> String,
+    s: &Spectrum,
+    spectra: &[UserSpectrum],
+) -> Result {
+    let Some(id) = s.library else {
+        return Ok(());
+    };
+    let entry = spectra
+        .iter()
+        .find(|e| e.id == id)
+        .ok_or_else(|| IntegrityError::Dangling {
+            what: what(),
+            kind: "library spectrum",
+            id: id.0,
+        })?;
+    if s.shape == entry.shape() {
+        Ok(())
+    } else {
+        Err(IntegrityError::SpectrumLink {
+            what: what(),
+            name: entry.name.clone(),
+        })
+    }
+}
+
+/// A source's power and a receiver's background noise against the library ([`check_spectrum_link`]).
+pub(crate) fn check_source_link(s: &Source, spectra: &[UserSpectrum]) -> Result {
+    check_spectrum_link(|| format!("source '{}' power", s.name), &s.power, spectra)
+}
+
+pub(crate) fn check_receiver_link(r: &PointReceiver, spectra: &[UserSpectrum]) -> Result {
+    match &r.background_noise {
+        Some(noise) => check_spectrum_link(
+            || format!("receiver '{}' background noise", r.name),
+            noise,
+            spectra,
+        ),
+        None => Ok(()),
     }
 }
 
@@ -402,6 +463,7 @@ impl Project {
 
         unique("surface group", self.surface_groups.iter().map(|g| g.id))?;
         unique("material", self.materials.iter().map(|m| m.id))?;
+        unique("library spectrum", self.spectra.iter().map(|s| s.id))?;
         unique("source", self.sources.iter().map(|s| s.id))?;
         unique("point receiver", self.point_receivers.iter().map(|r| r.id))?;
         unique(
@@ -427,11 +489,16 @@ impl Project {
         for (i, f) in self.geometry.faces.iter().enumerate() {
             check_face(i, f, n_vertices, &group_exists)?;
         }
+        for s in &self.spectra {
+            check_user_spectrum(s, n)?;
+        }
         for s in &self.sources {
             check_source(s, n)?;
+            check_source_link(s, &self.spectra)?;
         }
         for r in &self.point_receivers {
             check_point_receiver(r, n)?;
+            check_receiver_link(r, &self.spectra)?;
         }
         for r in &self.surface_receivers {
             check_surface_receiver(r, &group_exists)?;

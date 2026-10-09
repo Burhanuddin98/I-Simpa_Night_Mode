@@ -603,6 +603,7 @@ fn import(xml: &str, mesh: Option<&cbin::Model>) -> Result<Project> {
         geometry,
         surface_groups,
         materials,
+        spectra: Vec::new(),
         sources,
         point_receivers,
         surface_receivers,

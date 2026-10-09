@@ -16,6 +16,7 @@ import type {
   SolverSettings,
   Source,
   SurfaceReceiver,
+  UserSpectrum,
   Variant,
 } from './bindings/schema.ts';
 
@@ -79,6 +80,13 @@ export const replaceReceiver = (receiver: PointReceiver): Op => ({ op: 'replace_
 /** A source replaced whole, by its id (C1: its power, spectrum or directivity): one undo step. */
 export const replaceSource = (source: Source): Op => ({ op: 'replace_source', source });
 export const removeSource = (id: string): Op => ({ op: 'remove_source', id });
+
+/** Parity M17: an entry added to the project's spectrum library. */
+export const addSpectrum = (index: number, spectrum: UserSpectrum): Op => ({ op: 'add_spectrum', index, spectrum });
+/** Parity M17: a library entry removed; the core refuses one a source or receiver is linked to. */
+export const removeSpectrum = (id: string): Op => ({ op: 'remove_spectrum', id });
+/** Parity M17/M48: a library entry replaced whole; every spectrum linked to it takes its levels in the same step. */
+export const replaceSpectrum = (spectrum: UserSpectrum): Op => ({ op: 'replace_spectrum', spectrum });
 
 export const setMaterialBand = (material: string, quantity: MaterialQuantity, band: number, value: F64): Op => ({
   op: 'set_material_band',

@@ -79,6 +79,7 @@ function view(over: Partial<ProjectView> = {}): ProjectView {
       { id: 'g2', name: 'Rear wall', material: 'm2' },
     ],
     materials: [material('m1', 'Linoleum'), material('m2', 'Plaster'), material('m3', 'Curtain')],
+    spectra: [],
     sources: [],
     point_receivers: [],
     surface_receivers: [],

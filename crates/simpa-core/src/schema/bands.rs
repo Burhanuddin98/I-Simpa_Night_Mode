@@ -193,6 +193,15 @@ pub struct Spectrum {
     /// The energetic sum over the project's bands, in dB.
     pub global_db: F64,
     pub shape: SpectrumShape,
+    /// Parity M48: the entry of the project's spectrum library ([`super::UserSpectrum`]) this
+    /// spectrum stays linked to, as upstream's `idspectre` keeps a source on its user spectrum
+    /// (`generic_element/e_property_freq.cpp:151-175`): the shape is then that entry's levels,
+    /// exactly (`Project::check_integrity`), and editing the entry moves every spectrum linked to
+    /// it (`Op::ReplaceSpectrum`). It reaches no solver: config.xml writes the band levels.
+    /// Optional in the file and not written when `None`, so a project saved before it existed
+    /// loads and saves unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub library: Option<super::SpectrumId>,
 }
 
 impl Spectrum {
@@ -200,6 +209,7 @@ impl Spectrum {
         Spectrum {
             global_db: F64::new(global_db),
             shape,
+            library: None,
         }
     }
 
