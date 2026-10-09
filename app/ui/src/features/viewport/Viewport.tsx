@@ -368,17 +368,18 @@ export function Viewport() {
             <span className="vp-fail">Problem</span> · {n} {n === 1 ? 'face' : 'faces'} highlighted
           </div>
         )}
-        {placing && ui.hasModel && (
-          <div className="vp-chip hint" data-part="place-hint" role="status">
-            {ui.notice ?? `Click any face: the ${placeKind} goes ${offsets[placeKind]} m above a floor, or ${offsets[placeKind]} m off a wall or ceiling into the room. Esc ends.`}
-          </div>
-        )}
-        {placing && ui.hasModel && <PlaceOffset kind={placeKind} />}
       </div>
 
       {/* Items 7 and 8: what the view leaves out, under the view bar (a long list would run under it at the top). */}
-      {ui.hasModel && (hidden.roof || hidden.isolate) && (
+      {/* G48: the place hint and its distance sit here too, under the view bar: at the top a sentence ran under it. */}
+      {ui.hasModel && (hidden.roof || hidden.isolate || placing) && (
         <div className={`vp-hide-chips${live && step === 'simulate' ? ' under-live' : ''}`}>
+          {placing && (
+            <div className="vp-chip hint" data-part="place-hint" role="status">
+              {ui.notice ?? `Click any face: the ${placeKind} goes ${offsets[placeKind]} m above a floor, or ${offsets[placeKind]} m off a wall or ceiling into the room. Esc ends.`}
+            </div>
+          )}
+          {placing && <PlaceOffset kind={placeKind} />}
           {hidden.isolate && (
             <div className="vp-chip hidden-faces" data-part="isolate-chip" role="status" title={hidden.isolate.groups.map(displayName).join(', ')}>
               <span>

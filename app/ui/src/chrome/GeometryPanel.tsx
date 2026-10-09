@@ -57,7 +57,7 @@ function RepairBlock({ ok }: { ok: boolean }) {
           </div>
           {not.length > 0 && (
             <div className="hint" data-part="repair-cannot">
-              Repair does not fix: {not.join('; ')}.
+              Repair alone will not make this model pass; the check also finds: {not.join('; ')}.
             </div>
           )}
           <button

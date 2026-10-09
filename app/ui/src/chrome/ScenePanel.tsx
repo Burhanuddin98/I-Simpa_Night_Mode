@@ -490,7 +490,7 @@ export function ScenePanel() {
                 <div className="scene-row static" data-scene-node="volume" title={`${volume.detail}. Volumes are found by the model check; naming one or making it a fitting zone is not in this version.`}>
                   <span className="marker volume" aria-hidden />
                   <span className="row-name">{volume.text}</span>
-                  <span className="row-detail">read-only</span>
+                  {scene?.check?.verdict === 'ok' && <span className="row-detail">read-only</span>}
                 </div>
               </>
             )}
