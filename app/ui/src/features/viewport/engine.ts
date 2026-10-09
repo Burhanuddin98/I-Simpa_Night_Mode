@@ -2908,11 +2908,19 @@ class ViewportEngine {
     });
     const where = actions.placementText(placement('winding'));
     // The winding's side first; when the room's inside test puts that point outside, the other
-    // side of the face (a face wound inward, or a flipped floor, sends the first one out).
+    // side of the face (a face wound inward, or a flipped floor, sends the first one out). Only the
+    // outcome reaches the Console: a refused first try that the other side cures logs nothing, and
+    // when neither side is in the room, the first refusal (the one the message quotes) is logged once.
     const attempt = async () => {
-      const first = await actions.placeAt(kind, sides.winding.point);
-      if (first.applied || !first.refusals.some((r) => actions.OUTSIDE_CODES.has(r.code))) return { outcome: first, first, side: 'winding' as const };
-      return { outcome: await actions.placeAt(kind, sides.flipped.point), first, side: 'flipped' as const };
+      const first = await actions.placeAt(kind, sides.winding.point, { holdRefusalLines: true });
+      if (first.applied || !first.refusals.some((r) => actions.OUTSIDE_CODES.has(r.code))) {
+        if (!first.applied) actions.logOutcome(first);
+        return { outcome: first, first, side: 'winding' as const };
+      }
+      const second = await actions.placeAt(kind, sides.flipped.point, { holdRefusalLines: true });
+      // An applied edit logged its own lines (`apply` holds only a refusal's).
+      if (!second.applied) actions.logOutcome(first);
+      return { outcome: second, first, side: 'flipped' as const };
     };
     actions.fire(
       attempt().then(({ outcome, first, side }) => {

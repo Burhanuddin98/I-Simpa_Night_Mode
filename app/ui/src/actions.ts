@@ -317,13 +317,23 @@ function fileRefusals(fieldKey: string | undefined, outcome: EditOutcome): void 
  * The checked apply. A refusal is `applied: false` with `refusals`, filed under `fieldKey`
  * (issues.ts) for the field to show; the next accepted edit under the same key clears it.
  */
-export async function apply(op: Op, fieldKey?: string): Promise<EditOutcome> {
+export async function apply(op: Op, fieldKey?: string, opts: { holdRefusalLines?: boolean } = {}): Promise<EditOutcome> {
   return run('Edit failed', async () => {
     const outcome = await backend.editApply(op);
-    await accept(outcome.state);
+    if (opts.holdRefusalLines && !outcome.applied) {
+      // A tentative edit the caller may retry: its refusal's Console lines are the caller's to log
+      // (`logOutcome`), so a retry that succeeds leaves only its own outcome in the Console.
+      sceneStore.set(outcome.state);
+      await fetchMesh(outcome.state);
+    } else await accept(outcome.state);
     fileRefusals(fieldKey, outcome);
     return outcome;
   });
+}
+
+/** Logs the Console lines of an outcome `apply` held back (`holdRefusalLines`). */
+export function logOutcome(outcome: EditOutcome): void {
+  logAll(outcome.state.lines);
 }
 
 /** What "Apply" on a run-quality advice item sends (backlog 80). */
@@ -522,16 +532,16 @@ export const OUTSIDE_CODES: ReadonlySet<string> = new Set(['RECEIVER_OUTSIDE', '
  * named `R<n>` or `S<n>` with the first free n. A point outside the room is refused by the
  * checked apply and the project is left unchanged.
  */
-export async function placeAt(kind: 'receiver' | 'source', point: Vec3): Promise<EditOutcome> {
+export async function placeAt(kind: 'receiver' | 'source', point: Vec3, opts: { holdRefusalLines?: boolean } = {}): Promise<EditOutcome> {
   const view = sceneStore.get()?.view;
   if (!view) throw new Error('placeAt: no project is open');
   const id = crypto.randomUUID();
   if (kind === 'receiver') {
     const name = nextName('R', view.point_receivers.map((r) => r.name));
-    return apply(addReceiver(view.point_receivers.length, newReceiver(id, name, point)), `point_receiver:new:position`);
+    return apply(addReceiver(view.point_receivers.length, newReceiver(id, name, point)), `point_receiver:new:position`, opts);
   }
   const name = nextName('S', view.sources.map((s) => s.name));
-  return apply(addSource(view.sources.length, newSource(id, name, point)), `source:new:position`);
+  return apply(addSource(view.sources.length, newSource(id, name, point)), `source:new:position`, opts);
 }
 
 /**
