@@ -16,7 +16,7 @@
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { notPassed } from '../lib/acoustics.ts';
+import { notPassed, PARAM_LABELS } from '../lib/acoustics.ts';
 import { assertPassRendered, type BedSummary, bedSweep, cliReport, ownBox, repo, runSpps, showRun, summary } from '../lib/acousticsTab.ts';
 import { m10, waitForHooks } from '../lib/hooks.ts';
 import { env } from '../lib/types.ts';
@@ -47,7 +47,8 @@ describe('M12 gate (b): a FAIL planted through core has no element', () => {
     const real = summary();
     assert.equal(real.parameters.c80_db.status, 'PASS', 'C80 is PASS in beds/summary.json');
     // The page first: C80 has no element anywhere, under every selection; the others are rendered.
-    const passed = Object.keys(real.parameters).filter((n) => n !== 'c80_db');
+    // The tab's own parameters (PARAM_LABELS); the M12c entries are shown elsewhere.
+    const passed = Object.keys(real.parameters).filter((n) => n !== 'c80_db' && n in PARAM_LABELS);
     const sweep = await bedSweep(hidden, plant);
     const lines = assertPassRendered(passed, sweep);
     // The report core built in this environment: C80 FAIL with the plant's reason, the rest as

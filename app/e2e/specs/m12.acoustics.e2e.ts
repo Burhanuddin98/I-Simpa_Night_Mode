@@ -170,12 +170,15 @@ describe('M12 P2: the Acoustics tab', () => {
 
   it('m12-b: no element for a parameter not PASS in beds/summary.json; every PASS parameter rendered with its range and status', async () => {
     const s0 = summary();
-    const hidden = notPassed(s0);
+    // The tab's own parameters (PARAM_LABELS): the M12c entries the summary also carries (chosen
+    // ranges and limits, the Schroeder table, the parameter maps) are shown elsewhere, each by its
+    // own status (their unit tests and the v1q-p2n app bed).
+    const hidden = notPassed(s0).filter((n) => n in PARAM_LABELS);
     // The report the app read carries the file's statuses (core reads them, never the UI).
     const bed = (baseJson.bed as { parameters: Record<string, { status: string }> }).parameters;
     for (const [n, p] of Object.entries(s0.parameters)) assert.equal(bed[n]?.status, p.status, `report.bed ${n}`);
     const sweep = await bedSweep(hidden, s0);
-    const passed = Object.keys(s0.parameters).filter((n) => !hidden.includes(n));
+    const passed = Object.keys(s0.parameters).filter((n) => n in PARAM_LABELS && !hidden.includes(n));
     // Every PASS parameter is rendered, each cell with its range and status or its refusal; EDT
     // with row 37's two marks. With every parameter PASS (decision 46), `hidden` is empty here,
     // and the hiding itself is proved by m12.bedplant's m12-b-plant (a FAIL planted through core).
