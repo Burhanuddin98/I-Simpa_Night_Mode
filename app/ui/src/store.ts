@@ -113,7 +113,7 @@ export const fittingZonesStore = new Store<FittingZone[] | null>(null);
 export const busyStore = new Store<number>(0);
 
 /** A mesh file waiting for the import dialog's unit and up axis (File › Open… on a mesh). */
-export const importRequestStore = new Store<{ path: string } | null>(null);
+export const importRequestStore = new Store<{ path: string; keepGroups?: boolean } | null>(null);
 
 /**
  * What the viewport has drawn: `live` once a real viewport has mounted, and the geometry

@@ -14,6 +14,8 @@
 // - Import model… waits while a run is active (PQ4), saying why.
 // - A31: the project's name and description head the panel, editable (one undo step each).
 // - G28/G29: the fitting zones, added and edited below the model (ZonesSection.tsx).
+// - G7: "Replace model, keep groups…" (`[data-part="reimport-model"]`) puts a new file into this
+//   project, each face on an old one keeping its group and material (upstream's re-import).
 import { useEffect, useState } from 'react';
 import * as actions from '../actions';
 import type { UiIssue } from '../bindings/ipc';
@@ -179,8 +181,9 @@ function ProjectBlock() {
   );
 }
 
-function ImportBlock() {
+function ImportBlock({ hasModel = false }: { hasModel?: boolean }) {
   const running = useStore(runStore) !== null;
+  const refusals = useStore(refusalStore);
   return (
     <div className="props-section">
       <button
@@ -192,6 +195,25 @@ function ImportBlock() {
       >
         Import model…
       </button>
+      {/* G7: a new version of the model into this project, its groups and materials kept where the faces match. */}
+      {hasModel && (
+        <>
+          <button
+            className="wide-button"
+            data-part="reimport-model"
+            disabled={running}
+            title={
+              running
+                ? RUN_ACTIVE_TITLE
+                : "Replace this project's model with a new file: faces lying on the old ones keep their surface group and material; the rest get new groups. One undo step"
+            }
+            onClick={() => actions.fire(actions.reimportDialog())}
+          >
+            Replace model, keep groups…
+          </button>
+          <Issues refused={refusals.get('model:reimport') ?? []} current={[]} />
+        </>
+      )}
       <div className="formats">PLY · OBJ · STL</div>
     </div>
   );
@@ -329,7 +351,7 @@ export function GeometryPanel() {
         </div>
       )}
 
-      <ImportBlock />
+      <ImportBlock hasModel />
     </div>
   );
 }

@@ -27,6 +27,7 @@ fn main() {
         "example_open",
         "model_import",
         "model_repair",
+        "model_reimport",
         "project_save",
         "edit_apply",
         "advice_apply",

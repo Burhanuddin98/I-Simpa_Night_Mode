@@ -412,6 +412,26 @@ pub async fn model_repair(state: State<'_, AppState>) -> CmdResult<RepairReport>
     .await
 }
 
+/// Parity G7: the mesh at `path` replaces the open project's model, keeping the surface group (and
+/// so the material) of every new face within 1 cm of an old one; the other faces go to new groups.
+/// One checked edit and one undo step (`Session::model_reimport`). `unit` and `up` as for
+/// `model_import`.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn model_reimport(
+    state: State<'_, AppState>,
+    path: String,
+    unit: String,
+    up: String,
+) -> CmdResult<EditOutcome> {
+    let (session, slot) = (state.session.clone(), state.run.clone());
+    guard::blocking("model_reimport", move || {
+        let mut s = lock(&session, "project")?;
+        runs::refuse_while_running(&slot, "Re-import")?;
+        s.model_reimport(&PathBuf::from(path), &unit, &up)
+    })
+    .await
+}
+
 /// Parity G32: meshes the open project now, as a run would mesh it (the same verified TetGen and
 /// `preprocess.exe`, the project's own mesh settings), into a scratch folder on the temp drive,
 /// and reports whether it meshed and how large the mesh is. A run still meshes again itself.

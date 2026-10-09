@@ -196,6 +196,30 @@ export async function importModel(path: string, unit: Unit, up: Up, repairIfRefu
 }
 
 /**
+ * G7: the mesh at `path` replaces the open project's model (upstream's re-import): each new face within
+ * 1 cm of an old face keeps that face's surface group, and so its material; the others get new groups
+ * (the core's `reassign`). One checked edit, one undo step; the Console says how many faces kept their
+ * group. The project stays open, so nothing is discarded and no save prompt is needed.
+ */
+export async function reimportModel(path: string, unit: Unit, up: Up): Promise<EditOutcome | null> {
+  if (refuseDuringRun('Re-import')) return null;
+  repairStore.set(null);
+  return run(`Could not re-import ${path}`, async () => {
+    const outcome = await backend.modelReimport(path, unit, up);
+    await accept(outcome.state);
+    fileRefusals('model:reimport', outcome);
+    return outcome;
+  });
+}
+
+/** G7: "Replace model, keep groups…": the native dialog for a mesh file, then the import dialog in its re-import mode. */
+export async function reimportDialog(): Promise<void> {
+  if (refuseDuringRun('Re-import')) return;
+  const path = await open({ multiple: false, directory: false, filters: [{ name: 'Room model', extensions: MESH_EXTENSIONS }] });
+  if (typeof path === 'string') importRequestStore.set({ path, keepGroups: true });
+}
+
+/**
  * G8: Repair the open model: the core's safe fixes (weld vertices within 1 um, remove faces of zero area and
  * repeated faces, turn inward faces out; never holes or intersections). When it changes anything, the
  * repaired mesh is written as a new OBJ beside the original, never over it, and the project takes the

@@ -1,7 +1,8 @@
 // The import dialog: a mesh file's length unit and up axis, every choice shown, with `m` and `z`
 // preselected on each opening and confirmed by the user (nothing is guessed from the extents).
 // Opens when `importRequestStore` holds a path (File › Open… or Import model… on a .ply, .obj or
-// .stl). Registers the e2e hook `openImportDialog(path)`, which opens it on a path without the
+// .stl). G7: with `keepGroups` (the Geometry step's "Replace model, keep groups…") the file
+// replaces the open project's model instead, keeping each matching face's surface group. Registers the e2e hook `openImportDialog(path)`, which opens it on a path without the
 // native file dialog that WebDriver cannot drive.
 import { useEffect, useRef, useState } from 'react';
 import * as actions from '../actions';
@@ -53,7 +54,7 @@ function Choice<T extends string>(props: {
   );
 }
 
-function Dialog({ path }: { path: string }) {
+function Dialog({ path, keepGroups = false }: { path: string; keepGroups?: boolean }) {
   const [unit, setUnit] = useState<Unit>('m');
   const [up, setUp] = useState<Up>('z');
   // G8: upstream's "Repair model" at import, as a plain choice; leaving the model as it is stays the default.
@@ -67,7 +68,7 @@ function Dialog({ path }: { path: string }) {
   const go = () => {
     if (runStore.get() !== null) return;
     close();
-    actions.fire(actions.importModel(path, unit, up, repair === 'repair'));
+    actions.fire(keepGroups ? actions.reimportModel(path, unit, up) : actions.importModel(path, unit, up, repair === 'repair'));
   };
   const file = path.split(/[\\/]/).pop();
   return (
@@ -86,7 +87,7 @@ function Dialog({ path }: { path: string }) {
         }}
       >
         <div className="dialog-title" id="import-title">
-          Import model
+          {keepGroups ? 'Replace model, keep groups' : 'Import model'}
         </div>
         <div className="dialog-file mono" title={path}>
           {file}
@@ -96,7 +97,15 @@ function Dialog({ path }: { path: string }) {
         <div className="dialog-note empty">
           The file's numbers are read in this unit, and this axis becomes vertical. Nothing is guessed from the model.
         </div>
-        <Choice field="repair" label="If the check refuses it" options={REPAIR_CHOICES} value={repair} onChange={setRepair} titles={REPAIR_TITLES} labels={REPAIR_LABELS} />
+        {keepGroups ? (
+          <div className="dialog-note empty" data-part="reimport-note">
+            This file replaces the model of the open project. Each face lying within 1 cm of a face of the old model keeps that
+            face's surface group, and so its material; the other faces get new groups. Sources, receivers, materials and
+            settings stay. One undo step.
+          </div>
+        ) : (
+          <Choice field="repair" label="If the check refuses it" options={REPAIR_CHOICES} value={repair} onChange={setRepair} titles={REPAIR_TITLES} labels={REPAIR_LABELS} />
+        )}
         <div className="dialog-actions">
           <button onClick={close} data-part="import-cancel">
             Cancel
@@ -109,7 +118,7 @@ function Dialog({ path }: { path: string }) {
             disabled={running}
             title={running ? RUN_ACTIVE_TITLE : undefined}
           >
-            Import
+            {keepGroups ? 'Replace model' : 'Import'}
           </button>
         </div>
       </div>
@@ -130,12 +139,12 @@ export function ImportDialog() {
   const request = useStore(importRequestStore);
   useEffect(
     () =>
-      registerHook('openImportDialog', (path: string) => {
-        importRequestStore.set({ path });
+      registerHook('openImportDialog', (path: string, keepGroups?: boolean) => {
+        importRequestStore.set({ path, keepGroups: keepGroups === true });
         return true;
       }),
     [],
   );
   if (!request) return null;
-  return <Dialog key={requestId(request)} path={request.path} />;
+  return <Dialog key={requestId(request)} path={request.path} keepGroups={request.keepGroups} />;
 }

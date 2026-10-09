@@ -134,6 +134,27 @@ fn op_error(e: &OpError) -> CmdError {
     )
 }
 
+/// The import dialog's unit (m, cm, mm, ft, in) and up axis (y, z), or why not.
+fn import_options(unit: &str, up: &str) -> CmdResult<ImportOptions> {
+    let u = Unit::from_symbol(unit).ok_or_else(|| {
+        CmdError::new(
+            "IMPORT_UNIT",
+            format!("unknown unit '{unit}': one of m, cm, mm, ft, in"),
+        )
+    })?;
+    let a = match up {
+        "z" => Up::Z,
+        "y" => Up::Y,
+        _ => {
+            return Err(CmdError::new(
+                "IMPORT_UP",
+                format!("unknown up axis '{up}': y or z"),
+            ));
+        }
+    };
+    Ok(ImportOptions::new(u, a))
+}
+
 fn import_error(e: &import::ImportError) -> CmdError {
     CmdError::new(
         format!("IMPORT_{}", e.code().to_ascii_uppercase()),
@@ -483,24 +504,8 @@ impl Session {
         {
             return self.proj_import(path);
         }
-        let u = Unit::from_symbol(unit).ok_or_else(|| {
-            CmdError::new(
-                "IMPORT_UNIT",
-                format!("unknown unit '{unit}': one of m, cm, mm, ft, in"),
-            )
-        })?;
-        let a = match up {
-            "z" => Up::Z,
-            "y" => Up::Y,
-            _ => {
-                return Err(CmdError::new(
-                    "IMPORT_UP",
-                    format!("unknown up axis '{up}': y or z"),
-                ));
-            }
-        };
         let model =
-            import::import_file(path, &ImportOptions::new(u, a)).map_err(|e| import_error(&e))?;
+            import::import_file(path, &import_options(unit, up)?).map_err(|e| import_error(&e))?;
         let stem = path
             .file_stem()
             .map(|s| s.to_string_lossy().into_owned())
@@ -512,6 +517,102 @@ impl Session {
         self.import_source = Some(path.to_path_buf());
         self.lines.extend(report);
         self.state()
+    }
+
+    /// Parity G7, upstream's re-import into the open project (`ProjectManager::LoadFacesFromModel`):
+    /// the mesh at `path` replaces the project's model, and each new face whose centre lies within
+    /// 1 cm of an old face keeps that face's surface group, so its material, variant overrides and
+    /// surface maps stay (`import::reassign`); the other faces go to new groups named after their
+    /// group in the file, with upstream's default material. Everything else in the project stays.
+    /// One checked edit and one undo step: the new materials and groups, then the geometry, as a
+    /// batch; a refused re-import leaves the project as it was. A new group whose name another
+    /// group has takes `<name> (re-import)`, then `(re-import 2)`, ...
+    pub fn model_reimport(&mut self, path: &Path, unit: &str, up: &str) -> CmdResult<EditOutcome> {
+        let options = import_options(unit, up)?;
+        let project = self.project.as_ref().ok_or_else(no_project)?;
+        if project.geometry.faces.is_empty() {
+            return Err(CmdError::new(
+                "REIMPORT_NO_MODEL",
+                "the project has no model to keep groups from: import the file as a new model",
+            ));
+        }
+        let model = import::import_file(path, &options).map_err(|e| import_error(&e))?;
+        let r = import::reassign(project, &model, import::DEFAULT_REASSIGN_TOLERANCE_M)
+            .map_err(|e| import_error(&e))?;
+        let mut ops: Vec<Op> = Vec::new();
+        for (index, m) in r.project.materials.iter().enumerate() {
+            if project.material(m.id).is_none() {
+                ops.push(Op::AddMaterial {
+                    index,
+                    material: m.clone(),
+                });
+            }
+        }
+        let mut taken: HashSet<String> = project
+            .surface_groups
+            .iter()
+            .map(|g| validate::group_name_key(&g.name))
+            .collect();
+        let mut new_names = Vec::new();
+        for (index, g) in r.project.surface_groups.iter().enumerate() {
+            if !r.new_groups.contains(&g.id) {
+                continue;
+            }
+            let mut group = g.clone();
+            let mut n = 1;
+            while !taken.insert(validate::group_name_key(&group.name)) {
+                group.name = if n == 1 {
+                    format!("{} (re-import)", g.name)
+                } else {
+                    format!("{} (re-import {n})", g.name)
+                };
+                n += 1;
+            }
+            new_names.push(group.name.clone());
+            ops.push(Op::AddSurfaceGroup { index, group });
+        }
+        ops.push(Op::SetGeometry {
+            geometry: r.project.geometry.clone(),
+        });
+        let empty: Vec<String> = r
+            .empty_groups
+            .iter()
+            .filter_map(|g| project.group(*g).map(|s| s.name.clone()))
+            .collect();
+        let file = file_name(path);
+        let outcome = self.edit_apply(&Op::Batch { ops }.to_json())?;
+        if !outcome.applied {
+            self.lines.push(LogLine::new(
+                LineClass::Fail,
+                format!("Re-import of {file} refused: the project keeps its model"),
+            ));
+            return Ok(self.with_later_lines(outcome));
+        }
+        self.import_source = Some(path.to_path_buf());
+        let mut text = format!(
+            "Re-import of {file} ({unit}, {up} up): {} kept their surface group, {} went to new \
+             groups",
+            plural_n(r.matched_faces as u32, "face", "faces"),
+            r.unmatched_faces
+        );
+        if !new_names.is_empty() {
+            text.push_str(&format!(" ({})", new_names.join(", ")));
+        }
+        if !empty.is_empty() {
+            text.push_str(&format!(
+                "; no new face lies on {}, kept empty",
+                empty.join(", ")
+            ));
+        }
+        self.lines.push(LogLine::new(LineClass::Ok, text));
+        Ok(self.with_later_lines(outcome))
+    }
+
+    /// `outcome` with the lines logged since its state was made appended to its own (a state
+    /// takes the lines it returns, so a second state alone would drop the edit's).
+    fn with_later_lines(&mut self, mut outcome: EditOutcome) -> EditOutcome {
+        outcome.state.lines.append(&mut self.lines);
+        outcome
     }
 
     /// Parity G8, upstream's "Repair model" at import (`loadingSceneDialog.cpp:128-131`), here the
@@ -1647,6 +1748,109 @@ mod m10_tests {
         assert_eq!(st.check.unwrap().verdict, scene::CheckVerdict::Refused);
         assert_eq!(project(&s).geometry.faces, imported.faces);
         assert_eq!(project(&s).geometry.vertices, imported.vertices);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// The teaching room's box as an OBJ, closed and facing out, the ceiling at `height`: groups
+    /// Floor (faces 0, 1), Ceiling (2, 3) and Walls (4 to 11).
+    fn box_obj(height: f64) -> String {
+        let v = [
+            [0.0, 0.0, 0.0],
+            [10.0, 0.0, 0.0],
+            [10.0, 6.0, 0.0],
+            [0.0, 6.0, 0.0],
+            [0.0, 0.0, height],
+            [10.0, 0.0, height],
+            [10.0, 6.0, height],
+            [0.0, 6.0, height],
+        ];
+        let f = [
+            [0, 2, 1],
+            [0, 3, 2],
+            [4, 5, 6],
+            [4, 6, 7],
+            [3, 7, 6],
+            [3, 6, 2],
+            [0, 1, 5],
+            [0, 5, 4],
+            [0, 4, 7],
+            [0, 7, 3],
+            [1, 2, 6],
+            [1, 6, 5],
+        ];
+        let mut out = String::new();
+        for p in v {
+            out.push_str(&format!("v {} {} {}\n", p[0], p[1], p[2]));
+        }
+        for (i, t) in f.iter().enumerate() {
+            match i {
+                0 => out.push_str("g Floor\n"),
+                2 => out.push_str("g Ceiling\n"),
+                4 => out.push_str("g Walls\n"),
+                _ => {}
+            }
+            out.push_str(&format!("f {} {} {}\n", t[0] + 1, t[1] + 1, t[2] + 1));
+        }
+        out
+    }
+
+    /// Parity G7: a re-import into the open project keeps the group (and material) of every new
+    /// face that lies on an old one; the others go to new groups, renamed when their name is
+    /// taken; old groups stay, empty; it is one undo step.
+    #[test]
+    fn reimport_keeps_each_matching_faces_group_in_one_undo_step() {
+        let dir = scratch("reimport");
+        let first = dir.join("room.obj");
+        std::fs::write(&first, box_obj(3.0)).unwrap();
+        // The same room with the ceiling raised: the floor's faces lie where they were and each
+        // wall's centre still lies on its old wall; the ceiling's do not.
+        let second = dir.join("room_v2.obj");
+        std::fs::write(&second, box_obj(3.5)).unwrap();
+
+        let mut s = Session::default();
+        assert_eq!(
+            s.model_reimport(&first, "m", "z").unwrap_err().code,
+            "NO_PROJECT"
+        );
+        s.model_import(&first, "m", "z").unwrap();
+        let before = project(&s).clone();
+        let id_of =
+            |p: &Project, name: &str| p.surface_groups.iter().find(|g| g.name == name).unwrap().id;
+        let floor = id_of(&before, "Floor");
+
+        let out = s.model_reimport(&second, "m", "z").unwrap();
+        assert!(out.applied, "{:?}", out.refusals);
+        let p = project(&s).clone();
+        assert_eq!(p.geometry.faces.len(), 12);
+        assert!(
+            p.geometry.faces[..2].iter().all(|f| f.group == floor),
+            "the floor kept its group"
+        );
+        let names: Vec<&str> = p.surface_groups.iter().map(|g| g.name.as_str()).collect();
+        assert_eq!(names, ["Floor", "Ceiling", "Walls", "Ceiling (re-import)"]);
+        let used = |g: GroupId| p.geometry.faces.iter().filter(|f| f.group == g).count();
+        assert_eq!(used(id_of(&p, "Ceiling")), 0, "an old group stays, empty");
+        assert_eq!(used(id_of(&p, "Ceiling (re-import)")), 2);
+        assert_eq!(used(id_of(&p, "Walls")), 8, "the walls kept theirs");
+        let line = out
+            .state
+            .lines
+            .iter()
+            .find(|l| l.text.starts_with("Re-import of room_v2.obj"))
+            .map(|l| l.text.clone())
+            .unwrap_or_default();
+        assert!(
+            line.contains("10 faces kept their surface group, 2 went to new groups")
+                && line.contains("kept empty"),
+            "{line}"
+        );
+        assert_eq!(s.import_source.as_deref(), Some(second.as_path()));
+
+        // One undo step puts the old model and groups back.
+        s.edit_undo().unwrap();
+        assert_eq!(project(&s).geometry, before.geometry);
+        assert_eq!(project(&s).surface_groups, before.surface_groups);
+        assert_eq!(project(&s).materials, before.materials);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
