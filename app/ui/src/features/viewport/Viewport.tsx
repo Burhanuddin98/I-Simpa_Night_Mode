@@ -26,6 +26,7 @@ import { liveStore, setLiveLook } from './liveView';
 import { PARTICLE_LOOKS } from './rays';
 import { ResultsOverlay } from './ResultsOverlay';
 import { ViewStyleMenu } from './ViewStyleMenu';
+import { closingProps, usePresence } from '../../chrome/usePresence';
 import './viewport.css';
 
 /** Place source: the source marker's dot and glow, in the toolbar's line style. */
@@ -103,6 +104,8 @@ export function Viewport() {
   const info = useStore(sceneStore)?.info ?? null;
   const selection = useStore(selectionStore);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  // Item 14: the closed menu plays its way out where it stood (motion.css).
+  const { shown: shownMenu, closing: menuGoing } = usePresence(menu);
   const groups = useStore(sceneStore)?.view.surface_groups ?? [];
   const targets = selection.kind === 'faces' ? moveTargets(groups, selection.groups) : [];
   const live = useStore(liveStore);
@@ -166,13 +169,14 @@ export function Viewport() {
       }}
     >
       <div className="viewport-host" ref={hostRef} />
-      {menu && (
+      {shownMenu && (
         <div
           className="dropdown vp-menu"
           role="menu"
           aria-label="Selection"
           data-part="viewport-menu"
-          style={{ left: menu.x, top: menu.y }}
+          style={{ left: shownMenu.x, top: shownMenu.y }}
+          {...closingProps(menuGoing)}
           onMouseDown={(e) => e.stopPropagation()}
         >
           <button

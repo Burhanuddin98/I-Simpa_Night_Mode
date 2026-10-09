@@ -8,7 +8,9 @@
      size run to and from its content's own; `allow-discrete` keeps contents shown until they have
      faded, rather than cutting them at the start.
    - The properties panel's contents slide in from the side the step bar moved toward (data-step-dir).
-   - Every drop-down and menu fades and drops in as it opens. Closing is immediate.
+   - Every drop-down and menu fades and drops in as it opens, and fades and lifts away as it closes
+     (Burhan's 10-05 UI list, item 14): it stays mounted, inert and marked data-closing, for the
+     transition (chrome/usePresence.ts), then goes.
    - Nothing moves under prefers-reduced-motion, nor under WebDriver (html[data-no-motion]), where
      the gates measure the panels and compare frames. */
 
@@ -77,6 +79,14 @@
     opacity: 0;
     transform: translateY(-6px) scale(0.98);
   }
+}
+.dropdown[data-closing],
+.view-style-menu[data-closing],
+.vp-menu[data-closing],
+.mg-lib-list[data-closing] {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+  pointer-events: none;
 }
 
 /* ---- No motion ----------------------------------------------------------------------------- */

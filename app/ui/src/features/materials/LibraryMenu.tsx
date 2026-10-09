@@ -14,6 +14,7 @@ import * as actions from '../../actions';
 import type { LibraryMaterial } from '../../bindings/ipc';
 import { libraryStore, sceneStore, useStore } from '../../store';
 import { registerHook } from '../../testhooks';
+import { closingProps, usePresence } from '../../chrome/usePresence';
 import { errorOf } from './inline';
 import { addedMaterial, libraryRows } from './library';
 
@@ -32,6 +33,7 @@ export function LibraryMenu(props: {
   const [busy, setBusy] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
+  const listed = usePresence(open);
 
   useEffect(() => registerHook('materialLibrary', () => libraryStore.get().map((e) => ({ ...e }))), []);
 
@@ -89,8 +91,16 @@ export function LibraryMenu(props: {
       >
         + From library
       </button>
-      {open && (
-        <div className="mg-lib-list" role="menu" aria-label="Reference materials" data-part="library-list" data-input="" ref={list}>
+      {listed.shown && (
+        <div
+          className="mg-lib-list"
+          role="menu"
+          aria-label="Reference materials"
+          data-part="library-list"
+          data-input=""
+          ref={list}
+          {...closingProps(listed.closing)}
+        >
           {rows.map(({ entry, inProject }) => (
             <button
               key={entry.reference_id}

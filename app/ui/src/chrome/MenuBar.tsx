@@ -26,6 +26,7 @@ import { groupRenameStore, reportStore, runStore, sceneStore, selectedRunStore, 
 import { MERGE_LABEL, mergePlan, RENAME_GROUP_LABEL, renameTarget } from './groupsModel';
 import { Search } from './icons';
 import { RunButton } from './RunButton';
+import { closingProps, usePresence } from './usePresence';
 import { REGROUP_LABEL, regroupFaces, runTooltip } from './sceneModel';
 import './chrome.css';
 
@@ -55,6 +56,8 @@ export function MenuBar() {
   const viewWhy = viewRefusal();
   const info = scene?.info ?? null;
   const [open, setOpen] = useState<MenuName | null>(null);
+  // Item 14: the closed menu plays its way out (motion.css); switching menus is instant.
+  const listed = usePresence(open);
   const bar = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -202,8 +205,8 @@ export function MenuBar() {
             >
               {m}
             </button>
-            {open === m && (
-              <div className="dropdown" role="menu" aria-label={m} data-menu-list={m}>
+            {listed.shown === m && (
+              <div className="dropdown" role="menu" aria-label={m} data-menu-list={m} {...closingProps(listed.closing)}>
                 {list.map((item) => (
                   <button
                     key={item.id}

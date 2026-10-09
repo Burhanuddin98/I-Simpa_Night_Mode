@@ -4,6 +4,7 @@
 // choice is `viewStyle` in the engine, remembered per viewer.
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../../store';
+import { closingProps, usePresence } from '../../chrome/usePresence';
 import { viewStyle, type EdgeStyle, type SurfaceStyle } from './engine';
 
 const SURFACES: { key: SurfaceStyle; label: string; hint: string }[] = [
@@ -21,6 +22,7 @@ export function ViewStyleMenu() {
   const style = useStore(viewStyle);
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
+  const listed = usePresence(open);
 
   useEffect(() => {
     if (!open) return;
@@ -50,8 +52,8 @@ export function ViewStyleMenu() {
       >
         Style <span aria-hidden>▾</span>
       </button>
-      {open && (
-        <div className="view-style-menu float-panel" role="menu" data-part="view-style-menu">
+      {listed.shown && (
+        <div className="view-style-menu float-panel" role="menu" data-part="view-style-menu" {...closingProps(listed.closing)}>
           <div className="view-style-head">Surfaces</div>
           {SURFACES.map((s) => (
             <button

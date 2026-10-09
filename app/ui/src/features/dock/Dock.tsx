@@ -108,7 +108,9 @@ function escapeTaken(e: KeyboardEvent): boolean {
   const t = e.target;
   if (t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return true;
   if (document.documentElement.classList.contains('present')) return true;
-  return document.querySelector('.rw, [aria-modal="true"], [role="dialog"], [role="menu"], [role="listbox"], .dropdown') !== null;
+  // A menu on its way out (data-closing, item 14) is closed already: Escape is the dock's again.
+  const open = ['.rw', '[aria-modal="true"]', '[role="dialog"]', '[role="menu"]', '[role="listbox"]', '.dropdown'];
+  return document.querySelector(open.map((s) => `${s}:not([data-closing])`).join(', ')) !== null;
 }
 
 const MaxIcon = ({ max }: { max: boolean }) =>
