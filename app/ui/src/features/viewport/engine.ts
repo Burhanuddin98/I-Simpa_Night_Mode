@@ -88,6 +88,7 @@ import { buildTopology, coplanarFaces, faceNormalOf, type FaceTopology } from '.
 import { bgraToRgba, flipRows, unpadRows } from './snapshot';
 import { animatorStore } from './animator';
 import { firstFace, modelGeometry, pickingBvh } from './pick';
+import { ARC_MS, arcPose, easeInOut, type Pose } from './arc';
 import { facePlan, faceShowOf, type FacePlan, type FaceShow } from './faces';
 import { ResultsLayer, type MapMeta, type ParticleMeta } from './resultsLayer';
 import { faceBounds, faceCentroid, fitOrtho, gizmoAxes, isFloorLike, placementPoint, planDimensions, rayOnFacePlane, type Box, type Vec } from './geometry';
@@ -147,6 +148,12 @@ export const presentStore = new Store<{ on: boolean; turntable: boolean }>({ on:
 export const replicaStore = new Store<{ saved: number; copies: number } | null>(null);
 /** The turntable's speed, degrees a second. */
 const TURN_DEG_S = 6;
+
+/** Where Frame model looks from: the front left and above (target towards camera). */
+const FRAME_DIR = new Vector3(-0.5, -0.8, 0.62);
+/** Item 6's view presets (View menu): the model framed from each, target towards camera (z up). */
+export type ViewPreset = 'corner' | 'front' | 'side' | 'top';
+const PRESET_DIRS: Record<ViewPreset, Vec> = { corner: [-0.5, -0.8, 0.62], front: [0, -1, 0.1], side: [-1, 0, 0.1], top: [0, -1e-3, 1] };
 
 export const viewportUi = new Store<ViewportUi>({
   view: 'perspective',
@@ -516,6 +523,8 @@ class ViewportEngine {
   private ghosted = false;
   private mapFullWhilePlaying = false;
   private turnFrame = 0;
+  /** Item 6: the camera's flight on the arc in progress (arc.ts), or null. */
+  private flight: { frame: number; resolve: (arrived: boolean) => void } | null = null;
   /** The inset's background: a quad that replaces colour and depth inside the scissor (WebGPU clears whole attachments only). */
   private readonly insetClear = new Scene();
   private readonly scene = new Scene();
@@ -851,6 +860,7 @@ class ViewportEngine {
     this.glowFrame = 0;
     if (this.buildFrame) cancelAnimationFrame(this.buildFrame);
     this.buildFrame = 0;
+    this.stopFlight();
     this.shared.nmBuildZ.value = NO_CUT;
     if (this.dom) this.dom.labels.replaceChildren();
     this.markers = [];
@@ -1979,36 +1989,188 @@ class ViewportEngine {
     this.controls?.update();
   }
 
-  /** Frames the model in the perspective camera, from the front left and above. */
-  frame(): void {
-    this.syncSize();
-    const b = this.bounds;
-    if (!b) {
-      this.defaultCamera();
-      this.invalidate();
-      return;
-    }
+  /**
+   * The perspective camera framing box `b` from direction `dir` (target towards camera, unit): the pose,
+   * and the clip planes and the orbit's reach it needs. The model's own framing (`frame`) has the scene's
+   * radius; a focus on a small selection keeps the clip planes the model needs.
+   */
+  private framing(b: Box, dir: Vector3, clipBox: Box = b): { pose: Pose; near: number; far: number; maxDistance: number } {
     const c = new Vector3((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2);
     const radius = Math.max(0.5 * Math.hypot(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]), 0.05);
     const aspect = this.persp.aspect > 0 ? this.persp.aspect : 1;
     const fovV = (this.persp.fov * Math.PI) / 180;
     const fovH = 2 * Math.atan(Math.tan(fovV / 2) * aspect);
     const dist = (radius / Math.sin(Math.min(fovV, fovH) / 2)) * 1.05;
-    const dir = new Vector3(-0.5, -0.8, 0.62).normalize();
-    this.persp.near = Math.max(radius * 0.002, 0.002);
-    this.persp.far = Math.max(dist * 6, radius * 20);
-    this.persp.position.copy(c).addScaledVector(dir, dist);
-    this.persp.updateProjectionMatrix();
+    const clipRadius = Math.max(0.5 * Math.hypot(clipBox.max[0] - clipBox.min[0], clipBox.max[1] - clipBox.min[1], clipBox.max[2] - clipBox.min[2]), 0.05);
+    const p = c.clone().addScaledVector(dir, dist);
+    return {
+      pose: { position: [p.x, p.y, p.z], target: [c.x, c.y, c.z] },
+      near: Math.max(Math.min(radius, clipRadius) * 0.002, 0.002),
+      far: Math.max(dist * 6, clipRadius * 20),
+      maxDistance: Math.max(dist, clipRadius) * 8,
+    };
+  }
+
+  /** Puts the perspective camera at `pose` now. */
+  private setPose(pose: Pose): void {
+    this.persp.position.set(...pose.position);
     if (this.controls) {
-      this.controls.target.copy(c);
-      this.controls.minDistance = 0;
-      this.controls.maxDistance = dist * 8;
+      this.controls.target.set(...pose.target);
       this.controls.update();
     } else {
-      this.persp.lookAt(c);
+      this.persp.lookAt(...pose.target);
     }
     this.persp.updateMatrixWorld();
+  }
+
+  private posed(): Pose {
+    const t = this.controls?.target ?? new Vector3();
+    return { position: [this.persp.position.x, this.persp.position.y, this.persp.position.z], target: [t.x, t.y, t.z] };
+  }
+
+  /** Frames the model in the perspective camera, from the front left and above, at once (a new model, a remount). */
+  frame(): void {
+    this.syncSize();
+    this.stopFlight();
+    const b = this.bounds;
+    if (!b) {
+      this.defaultCamera();
+      this.invalidate();
+      return;
+    }
+    const f = this.framing(b, FRAME_DIR.clone().normalize());
+    this.persp.near = f.near;
+    this.persp.far = f.far;
+    this.persp.updateProjectionMatrix();
+    if (this.controls) {
+      this.controls.minDistance = 0;
+      this.controls.maxDistance = f.maxDistance;
+    }
+    this.setPose(f.pose);
     this.invalidate();
+  }
+
+  /**
+   * Item 6: a framing the user asked for (Frame model, a view preset, Focus), flown on an arc around the
+   * target over `ARC_MS`; at once under prefers-reduced-motion or WebDriver, in the Plan view (whose
+   * camera is fixed) or without a model.
+   */
+  private moveTo(f: { pose: Pose; near: number; far: number; maxDistance: number }): void {
+    this.syncSize();
+    if (this.controls) {
+      this.controls.minDistance = 0;
+      this.controls.maxDistance = Math.max(this.controls.maxDistance, f.maxDistance);
+    }
+    // Wide enough for the whole flight, then the framing's own once there.
+    this.persp.near = Math.min(this.persp.near, f.near);
+    this.persp.far = Math.max(this.persp.far, f.far);
+    this.persp.updateProjectionMatrix();
+    const done = () => {
+      this.persp.near = f.near;
+      this.persp.far = f.far;
+      this.persp.updateProjectionMatrix();
+      if (this.controls) this.controls.maxDistance = f.maxDistance;
+      this.invalidate();
+    };
+    if (stillMotion() || this.view !== 'perspective' || !this.dom) {
+      this.stopFlight();
+      this.setPose(f.pose);
+      done();
+      return;
+    }
+    void this.fly(f.pose, ARC_MS).then((arrived) => arrived && done());
+  }
+
+  /** Frame model (the tools' button, View › Frame model, Home): the model's framing, flown on the arc. */
+  frameAnimated(): void {
+    const b = this.bounds;
+    if (!b) return this.frame();
+    this.moveTo(this.framing(b, FRAME_DIR.clone().normalize()));
+  }
+
+  /** Item 6's view presets: the model framed from the front, the side, above or the corner, flown on the arc. */
+  viewFrom(preset: ViewPreset): void {
+    const b = this.bounds;
+    if (!b) return;
+    if (this.view !== 'perspective') this.setView('perspective');
+    this.moveTo(this.framing(b, new Vector3(...PRESET_DIRS[preset]).normalize()));
+  }
+
+  /**
+   * Focus (F): the picked faces, surface groups or marker framed from where the camera looks now, flown
+   * on the arc; with nothing picked, the model. Returns whether there was something to frame.
+   */
+  focusSelection(): boolean {
+    const b = this.bounds;
+    if (!b) return false;
+    const box = this.selectionBox();
+    if (!box) {
+      this.frameAnimated();
+      return true;
+    }
+    const t = this.controls?.target ?? new Vector3();
+    const dir = this.persp.position.clone().sub(t);
+    if (dir.lengthSq() < 1e-12) dir.copy(FRAME_DIR);
+    this.moveTo(this.framing(box, dir.normalize(), b));
+    return true;
+  }
+
+  /** The box of what is picked: its faces' (a group's, or several), or a metre and a half about a marker; null with nothing. */
+  private selectionBox(): Box | null {
+    const s = selectionStore.get();
+    if (s.kind === 'source' || s.kind === 'receiver') {
+      const m = this.markers.find((k) => k.kind === s.kind && k.id === s.id);
+      if (!m) return null;
+      return { min: [m.p.x - 0.75, m.p.y - 0.75, m.p.z - 0.75], max: [m.p.x + 0.75, m.p.y + 0.75, m.p.z + 0.75] };
+    }
+    const mesh = this.mesh;
+    const faces = this.selectedFaces();
+    if (!mesh || faces.length === 0) return null;
+    const idx = new Uint32Array(3 * faces.length);
+    faces.forEach((f, i) => idx.set(mesh.indices.subarray(3 * f, 3 * f + 3), 3 * i));
+    return faceBounds(mesh.positions, idx);
+  }
+
+  private stopFlight(): void {
+    if (this.flight) cancelAnimationFrame(this.flight.frame);
+    this.flight?.resolve(false);
+    this.flight = null;
+  }
+
+  /**
+   * The perspective camera flown from where it is to `pose` over `ms` on the arc (arc.ts), eased; resolves
+   * true when there, false when another move or a drag on the view stopped it first.
+   */
+  private fly(pose: Pose, ms: number): Promise<boolean> {
+    this.stopFlight();
+    const controls = this.controls;
+    if (!controls) return Promise.resolve(false);
+    const from = this.posed();
+    const start = performance.now();
+    return new Promise((resolve) => {
+      const stop = () => this.stopFlight();
+      controls.addEventListener('start', stop);
+      const flight = {
+        frame: 0,
+        resolve: (arrived: boolean) => {
+          controls.removeEventListener('start', stop);
+          resolve(arrived);
+        },
+      };
+      const step = (now: number) => {
+        const f = ms > 0 ? Math.min(1, (now - start) / ms) : 1;
+        this.setPose(arcPose(from, pose, easeInOut(f)));
+        this.invalidate();
+        if (f < 1) {
+          flight.frame = requestAnimationFrame(step);
+        } else {
+          this.flight = null;
+          flight.resolve(true);
+        }
+      };
+      this.flight = flight;
+      flight.frame = requestAnimationFrame(step);
+    });
   }
 
   setView(view: ViewMode): void {
@@ -2019,28 +2181,14 @@ class ViewportEngine {
     this.invalidate();
   }
 
-  /** The perspective camera eased from where it is to `position` looking at `target` over `ms`; resolves when there. */
+  /**
+   * The recorded tour's flight (its hook): the perspective camera from where it is to `position` looking at
+   * `target` over `ms`, on the arc (item 6); resolves when there. It moves under WebDriver too: the tour
+   * is a video, and asks for the motion.
+   */
   private flyCamera(position: Vec, target: Vec, ms: number): Promise<boolean> {
-    const controls = this.controls;
-    if (!controls || this.view !== 'perspective') return Promise.resolve(false);
-    const p0 = this.persp.position.clone();
-    const t0 = controls.target.clone();
-    const p1 = new Vector3(...position);
-    const t1 = new Vector3(...target);
-    const start = performance.now();
-    return new Promise((resolve) => {
-      const step = (now: number) => {
-        const f = ms > 0 ? Math.min(1, (now - start) / ms) : 1;
-        const e = f < 0.5 ? 2 * f * f : 1 - 2 * (1 - f) * (1 - f);
-        this.persp.position.lerpVectors(p0, p1, e);
-        controls.target.lerpVectors(t0, t1, e);
-        controls.update();
-        this.invalidate();
-        if (f < 1) requestAnimationFrame(step);
-        else resolve(true);
-      };
-      requestAnimationFrame(step);
-    });
+    if (!this.controls || this.view !== 'perspective') return Promise.resolve(false);
+    return this.fly({ position, target }, ms);
   }
 
   private cameraState() {
@@ -2343,6 +2491,7 @@ class ViewportEngine {
   private aimAtFace(f: number): { x: number; y: number } | null {
     const mesh = this.mesh;
     if (!mesh || !this.controls || !(f >= 0 && f < mesh.faceCount)) return null;
+    this.stopFlight();
     this.setView('perspective');
     const n = new Vector3(...faceNormalOf(mesh.positions, mesh.indices, f));
     if (n.lengthSq() === 0) return null;
@@ -2519,7 +2668,17 @@ export function setTurntable(on: boolean): void {
   engine.setTurntable(on);
 }
 
-/** Frames the model in the perspective view (View › Frame model may call it). */
+/** Frames the model in the perspective view, flown on the arc (View › Frame model, the tools' button, Home). */
 export function frameModel(): void {
-  engine.frame();
+  engine.frameAnimated();
+}
+
+/** Item 6: the model framed from a preset direction, flown on the arc (View menu). */
+export function viewFrom(preset: ViewPreset): void {
+  engine.viewFrom(preset);
+}
+
+/** Item 6: Focus (F): the selection framed from where the camera looks, flown on the arc; the model with nothing picked. */
+export function focusSelection(): boolean {
+  return engine.focusSelection();
 }

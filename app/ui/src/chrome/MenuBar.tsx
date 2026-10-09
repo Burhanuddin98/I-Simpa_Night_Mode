@@ -20,7 +20,7 @@ import { blockersWithSize, settingsStore } from '../features/simulate/runSize';
 import { useEffect, useRef, useState } from 'react';
 import * as actions from '../actions';
 import { exportParams, exportView, paramsRefusal, viewRefusal } from '../features/export/exportActions';
-import { frameModel, setView } from '../features/viewport/engine';
+import { focusSelection, frameModel, setView, viewFrom } from '../features/viewport/engine';
 import { joinBlockers } from '../flow';
 import { groupRenameStore, reportStore, runStore, sceneStore, selectedRunStore, selectionStore, solversStatusStore, solverStore, stepStore, useStore, viewportStore } from '../store';
 import { ADD_GROUP_LABEL, DELETE_GROUP_LABEL, MERGE_LABEL, mergePlan, RENAME_GROUP_LABEL, renameTarget } from './groupsModel';
@@ -176,6 +176,12 @@ export function MenuBar() {
       { id: 'perspective', label: 'Perspective', run: () => setView('perspective') },
       { id: 'plan', label: 'Plan', run: () => setView('plan') },
       { id: 'frame', label: 'Frame model', keys: 'Home', run: () => frameModel(), disabled: !hasModel },
+      // Item 6: each flies on an arc around the target (arc.ts), never through the model.
+      { id: 'focus', label: 'Focus on selection', keys: 'F', run: () => focusSelection(), disabled: !hasModel, title: 'Frame what is picked from where you look now; with nothing picked, the model' },
+      { id: 'view-front', label: 'View from the front', run: () => viewFrom('front'), disabled: !hasModel },
+      { id: 'view-side', label: 'View from the side', run: () => viewFrom('side'), disabled: !hasModel },
+      { id: 'view-top', label: 'View from above', run: () => viewFrom('top'), disabled: !hasModel },
+      { id: 'view-corner', label: 'View from the corner', run: () => viewFrom('corner'), disabled: !hasModel },
     ],
     Simulate: [
       {

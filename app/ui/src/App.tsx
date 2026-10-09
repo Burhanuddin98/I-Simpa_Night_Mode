@@ -21,7 +21,7 @@ import { ScenePanel } from './chrome/ScenePanel';
 import { StatusBar } from './chrome/StatusBar';
 import { StepBar } from './chrome/StepBar';
 import { Dock } from './features/dock/Dock';
-import { frameModel } from './features/viewport/engine';
+import { focusSelection, frameModel } from './features/viewport/engine';
 import { Viewport } from './features/viewport/Viewport';
 import { isReloadKey, joinBlockers } from './flow';
 import { probeWebGL } from './gpu';
@@ -77,7 +77,7 @@ function typing(target: EventTarget | null): boolean {
   return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
 }
 
-/** Run (F5) when nothing blocks it, as the Run button would; Frame model (Home). */
+/** Run (F5) when nothing blocks it, as the Run button would; Frame model (Home); Focus on selection (F). */
 function onPlainKey(e: KeyboardEvent): boolean {
   if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey || typing(e.target)) return false;
   if (e.key === 'F5') {
@@ -92,6 +92,11 @@ function onPlainKey(e: KeyboardEvent): boolean {
     e.preventDefault();
     frameModel();
     return true;
+  }
+  // Item 6: Focus on selection, flown on the arc (View › Focus on selection).
+  if (e.key === 'f' || e.key === 'F') {
+    if (!sceneStore.get()?.check) return false;
+    return focusSelection();
   }
   return false;
 }
