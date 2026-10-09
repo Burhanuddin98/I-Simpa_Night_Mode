@@ -29,6 +29,7 @@ import type { Setting, UiIssue } from './bindings/ipc';
 import type { BandKind, Op, ReflectionLaw } from './bindings/schema';
 import { regroupFaces } from './chrome/sceneModel';
 import { noteRecent } from './chrome/recent';
+import { dropChoice } from './chrome/drop';
 import { mapOfGroup, surfaceMapPlan } from './chrome/groupsModel';
 import { newBoxZone } from './chrome/zones';
 import { emptyLog, endLine, foldEvent, needsSavePrompt, progressText } from './flow';
@@ -1152,11 +1153,28 @@ async function onCloseRequested(): Promise<void> {
 function appEventsChannel(): Channel<AppEvent> {
   const channel = new Channel<AppEvent>();
   channel.onmessage = (e) => {
+    if (e.kind === 'files_dropped') return fire(openDropped(e.paths));
     if (e.kind !== 'close_requested') return;
     fire(run('Acknowledging the close request', () => backend.appEvents(appEventsChannel())));
     fire(onCloseRequested());
   };
   return channel;
+}
+
+/**
+ * A38, files dropped on the window: the first opens as File › Open… opens it (`openPath`: the save
+ * prompt, the run guard, a room model through the import dialog), as upstream opens the first file
+ * dropped; the others are named in the Console, never opened. A file Open does not take is a FAIL
+ * line saying so, and nothing changes.
+ */
+export async function openDropped(paths: readonly string[]): Promise<void> {
+  const choice = dropChoice(paths);
+  if ('problem' in choice) {
+    log('FAIL', `Drop: ${choice.problem}`);
+    return;
+  }
+  log('INFO', `Dropped ${choice.path}${choice.ignored > 0 ? `; ${choice.ignored} more ${choice.ignored === 1 ? 'file' : 'files'} not opened (one at a time)` : ''}`);
+  await openPath(choice.path);
 }
 
 /** At boot: the channel the backend sends the close request on. */

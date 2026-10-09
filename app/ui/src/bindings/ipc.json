@@ -190,6 +190,26 @@
             "run_active"
           ],
           "type": "object"
+        },
+        {
+          "description": "Parity A38: files dropped on the window from Explorer, in the order given. The UI opens the\nfirst as File › Open… would; the webview gets the paths only through this channel.",
+          "properties": {
+            "kind": {
+              "const": "files_dropped",
+              "type": "string"
+            },
+            "paths": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "paths"
+          ],
+          "type": "object"
         }
       ]
     },

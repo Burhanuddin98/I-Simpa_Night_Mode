@@ -6,11 +6,16 @@
  * This interface was referenced by `IpcBindings`'s JSON-Schema
  * via the `definition` "AppEvent".
  */
-export type AppEvent = {
-  dirty: boolean;
-  kind: 'close_requested';
-  run_active: boolean;
-};
+export type AppEvent =
+  | {
+      dirty: boolean;
+      kind: 'close_requested';
+      run_active: boolean;
+    }
+  | {
+      kind: 'files_dropped';
+      paths: string[];
+    };
 /**
  * A named entity of the project. In JSON: `{"kind": "material", "id": "<uuid>"}`; any other
  * key is refused.

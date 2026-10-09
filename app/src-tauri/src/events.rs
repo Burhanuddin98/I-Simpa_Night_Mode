@@ -74,6 +74,9 @@ pub enum AppEvent {
     /// The window's close button, Alt+F4 or `WM_CLOSE`: the close is held until the UI answers
     /// with `app_quit` (after the save prompt), or not at all when the user cancels.
     CloseRequested { dirty: bool, run_active: bool },
+    /// Parity A38: files dropped on the window from Explorer, in the order given. The UI opens the
+    /// first as File › Open… would; the webview gets the paths only through this channel.
+    FilesDropped { paths: Vec<String> },
 }
 
 /// Collects events on its own thread and hands them to a sink in batches.

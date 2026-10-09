@@ -208,6 +208,17 @@ fn on_close_requested(state: &AppState, api: &tauri::CloseRequestApi) {
     api.prevent_close();
 }
 
+/// Parity A38: files dropped on the window go to the UI on its app-event channel, which opens the
+/// first as File › Open… would. Before the UI has registered the channel there is no one to open
+/// them, and the drop is let go.
+fn on_files_dropped(state: &AppState, paths: &[PathBuf]) {
+    let channel = state.ui_events.lock().ok().and_then(|c| c.clone());
+    if let Some(channel) = channel {
+        let paths = paths.iter().map(|p| p.display().to_string()).collect();
+        let _ = channel.send(AppEvent::FilesDropped { paths });
+    }
+}
+
 fn run(args: GuiArgs) -> ExitCode {
     let focus = focus_on_open(&args);
     let selftest = args
@@ -294,10 +305,14 @@ fn run(args: GuiArgs) -> ExitCode {
             commands::app_quit,
             commands::export_write,
         ])
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
                 on_close_requested(&window.state::<AppState>(), api);
             }
+            tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) => {
+                on_files_dropped(&window.state::<AppState>(), paths);
+            }
+            _ => {}
         })
         .setup(move |app| {
             // The one window, from tauri.conf.json ("create": false there), unfocused for tests.
