@@ -773,6 +773,138 @@ pub fn r27() -> BedRun {
     )
 }
 
+/// R42 with R73: each parameter map's faces that hold a point receiver's centre, against that
+/// receiver's value of the same parameter in the same band, on a real run (`run`, a run folder
+/// `results::load` verifies). Tolerance: the parameter's difference limen (ISO 3382-1 Table A.1 as
+/// the project carries it: 5 % for EDT and T30, 1 dB for C80, 0.05 for D50), since the face and
+/// the ball are two Monte-Carlo estimators of one quantity at one place. A receiver value or a
+/// face value that is refused leaves the case unheld: the bed passes only on numbers compared.
+pub fn r42(run: &std::path::Path) -> Result<BedRun, String> {
+    use super::maps::{self, MapParameter};
+    let r = super::load(run).map_err(|e| format!("{}: {e}", run.display()))?;
+    let rep = super::report::report(&r);
+    let spps = rep.spps.as_ref().ok_or("not an SPPS run")?;
+    let mut cases = Vec::new();
+    let files: Vec<(String, i32)> = spps
+        .surfaces
+        .iter()
+        .filter(|f| f.cutting_plane)
+        .filter_map(|f| f.band_hz.map(|b| (f.path.clone(), b)))
+        .collect();
+    if files.is_empty() {
+        return Err("the run has no cutting plane stored per band".into());
+    }
+    for p in MapParameter::ALL {
+        let (tol, relative, unit) = match p {
+            MapParameter::T30 | MapParameter::Edt => (0.05, true, "relative"),
+            MapParameter::C80 => (1.0, false, "dB"),
+            MapParameter::D50 => (0.05, false, "fraction"),
+        };
+        for (path, band_hz) in &files {
+            let map = maps::parameter_map(&r, path, p)
+                .map_err(|e| format!("{path}: {} {}", e.code, e.message))?;
+            for rx in &spps.point_receivers {
+                let Some(pos) = rx.position_m else { continue };
+                let faces = maps::faces_at(&r, path, pos, 0.02);
+                if faces.is_empty() {
+                    continue;
+                }
+                let Some(band) = rx.bands.iter().find(|b| b.freq_hz == *band_hz) else {
+                    continue;
+                };
+                let want = match p {
+                    MapParameter::T30 => &band.parameters.t30_s,
+                    MapParameter::Edt => &band.parameters.edt_s,
+                    MapParameter::C80 => &band.parameters.c80_db,
+                    MapParameter::D50 => &band.parameters.d50,
+                };
+                for f in faces {
+                    let name = format!(
+                        "{} at {} {band_hz} Hz: face {f} of {path}",
+                        p.name(),
+                        rx.label
+                    );
+                    let reference = format!(
+                        "{} of point receiver {} (radius {} m) in the same run and band{}",
+                        p.name(),
+                        rx.label,
+                        spps.receiver_radius_m,
+                        match (want.value(), want) {
+                            (
+                                Some(_),
+                                Evaluated::Value {
+                                    lo: Some(lo),
+                                    hi: Some(hi),
+                                    ..
+                                },
+                            ) => format!(", shown range {lo:.4} to {hi:.4}"),
+                            _ => String::new(),
+                        }
+                    );
+                    match (map.values[f], want.value()) {
+                        (Some(v), Some(w)) => {
+                            let got = Evaluated::bare(v, None);
+                            let mut both = value_cases(
+                                &got,
+                                Want {
+                                    name: name.clone(),
+                                    quantity: p.name(),
+                                    reference,
+                                    expected: w,
+                                    tolerance: tol,
+                                    relative,
+                                    unit,
+                                },
+                            );
+                            // The face's value carries no noise status of its own (`maps`): shown.
+                            for c in &mut both {
+                                c.status = "map".into();
+                                let within = c.error.is_some_and(|e| e <= tol);
+                                c.holds = if c.control { !within } else { within };
+                            }
+                            cases.extend(both);
+                        }
+                        (face, recv) => cases.push(Case {
+                            name,
+                            quantity: p.name().into(),
+                            reference,
+                            expected: recv,
+                            expected_refusal: None,
+                            value: face,
+                            status: format!(
+                                "not compared: face {}, receiver {}",
+                                map.why[f].clone().unwrap_or_else(|| "a value".into()),
+                                want.refusal()
+                                    .map_or("a value".to_string(), |x| x.code.clone())
+                            ),
+                            tolerance: tol,
+                            relative,
+                            unit: unit.into(),
+                            error: None,
+                            control: false,
+                            holds: false,
+                        }),
+                    }
+                }
+            }
+        }
+    }
+    if cases.is_empty() {
+        return Err("no point receiver's centre lies on a cutting plane stored per band".into());
+    }
+    let mut b = bed(
+        "m12c-r42",
+        &format!(
+            "R42 with R73: T30, EDT, C80 and D50 maps (results::maps, the receivers' code on each face's series) at the faces holding a point receiver's centre, against that receiver's value, run {}",
+            run.display()
+        ),
+        cases,
+    );
+    b.rule = "PASS when every face holding a receiver's centre, in every band stored and for each of T30, EDT, C80 and D50, gives a value within the parameter's difference limen of that receiver's (5 % for T30 and EDT, 1 dB for C80, 0.05 for D50), a face or receiver value refused counts as not holding, and each control (the receiver's value moved by twice the limen) is caught"
+        .into();
+    Ok(b)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -858,6 +990,15 @@ mod tests {
     #[test]
     fn the_committed_r27_artifact_is_this_build_s() {
         committed_is_fresh("r27", &r27());
+    }
+
+    /// The R42 artifact is this build's on the bed's run (`SIMPA_R42_RUN`, the run folder
+    /// `beds/m12c-r42.json` names).
+    #[test]
+    #[ignore = "needs the R42 bed's run: SIMPA_R42_RUN"]
+    fn the_committed_r42_artifact_is_this_build_s() {
+        let run = std::env::var("SIMPA_R42_RUN").expect("SIMPA_R42_RUN");
+        committed_is_fresh("r42", &r42(std::path::Path::new(&run)).unwrap());
     }
     #[test]
     fn the_two_slope_reference_differs_by_range() {

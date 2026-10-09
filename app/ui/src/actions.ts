@@ -26,7 +26,7 @@ import {
   type Unit,
   type Up,
 } from './backend';
-import type { AboutInfo, Extra, Setting, UiIssue } from './bindings/ipc';
+import type { AboutInfo, Extra, MapParameter, Setting, UiIssue } from './bindings/ipc';
 import type { BandKind, Op, ReflectionLaw } from './bindings/schema';
 import { blockerText, regroupFaces } from './chrome/sceneModel';
 import { withBandLaw } from './features/materials/law';
@@ -904,6 +904,8 @@ export async function deleteRun(runName: string): Promise<RunsView> {
  * is called only from this file (M10's lint). */
 export const runData = (runName: string) => backend.runData(runName);
 export const runSurfaceMap = (runName: string, path: string, maxTexels: number) => backend.runSurfaceMap(runName, path, maxTexels);
+/** Parity R42/R73: a parameter map's PMAP bytes (`decodeParameterMap`). */
+export const runParameterMap = (runName: string, path: string, parameter: MapParameter) => backend.runParameterMap(runName, path, parameter);
 export const runParticles = (runName: string, bandHz: number) => backend.runParticles(runName, bandHz);
 /** C5: the listening window's read (features/acoustics/AuralWindow.tsx), passed through as the
  * backend returns it; the window reads a refusal itself. */

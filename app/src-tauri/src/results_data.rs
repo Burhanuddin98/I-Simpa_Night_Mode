@@ -11,6 +11,10 @@
 //! - [`surface_map_bytes`] (`run_surface_map`): one `.csbin`, its float32 values bit for bit, as
 //!   bytes (layout below; decoded by `app/ui/src/resultsData.ts`).
 //! - [`particles_bytes`] (`run_particles`): one band's `.pbin`, bit for bit, as bytes.
+//! - [`parameter_map_bytes`] (`run_parameter_map`, parity R42/R73): T30, EDT, C80 or D50 on every
+//!   face of one per-band `.csbin`, computed by core (`results::maps`), as PMAP bytes: the map's
+//!   JSON (`ParameterMapView`) and, when it is not refused, the file's SMAP with one step whose
+//!   record per face is the value as `f32` (NaN where refused).
 //! - [`echogram`] (`run_echogram`): one SPPS point receiver's `.recp` series per band, and each
 //!   source's when the run wrote them.
 //!
@@ -28,6 +32,11 @@
 //!       u32 x nf+1  each face's first record; face i holds records [off[i], off[i+1])
 //!       u32 x nr    each record's time step (the file's u16)
 //!       f32 x nr    each record's value, bit for bit
+//!
+//! PMAP v1 (a parameter map)
+//!   0   u32 magic 0x50414D50 ("PMAP")      4   u32 version 1
+//!   8   u32 n, the JSON's bytes           12   u8 x n  `ParameterMapView`, UTF-8; zero bytes to 4
+//!       SMAP v1 as above, one step, one record per face, when `map` is not null
 //!
 //! PART v1 (a particle file)
 //!   0   u32 magic 0x54524150 ("PART")      4   u32 version 1
@@ -58,6 +67,7 @@ use crate::runs::{ReasonUi, ResultsState, is_run_name, reason_ui};
 
 pub const SMAP_MAGIC: u32 = 0x5041_4D53;
 pub const PART_MAGIC: u32 = 0x5452_4150;
+pub const PMAP_MAGIC: u32 = 0x5041_4D50;
 pub const LAYOUT_VERSION: u32 = 1;
 const HEADER: usize = 32;
 
@@ -632,6 +642,87 @@ pub fn surface_map_bytes_within(
         },
     )?;
     encode_surface(&data)
+}
+
+/// `run_parameter_map`'s JSON (PMAP's head): the map, or why it cannot be computed.
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+pub struct ParameterMapView {
+    pub map: Option<simpa_core::results::maps::ParameterMap>,
+    pub refusal: Option<simpa_core::results::maps::MapRefusal>,
+}
+
+/// Parameter `p` on every face of the run's `.csbin` at `path` as PMAP v1 (the module's header).
+/// The values are core's (`results::maps::parameter_map`), each face's `f32` in the SMAP for the
+/// GPU and its `f64` in the JSON for the probe.
+pub fn parameter_map_bytes(
+    root: &Path,
+    run: &str,
+    path: &str,
+    p: simpa_core::results::maps::MapParameter,
+) -> CmdResult<Vec<u8>> {
+    let r = loaded(root, run)?;
+    let (map, refusal) = match simpa_core::results::maps::parameter_map(&r, path, p) {
+        Ok(m) => (Some(m), None),
+        Err(e) => (None, Some(e)),
+    };
+    let smap = match &map {
+        Some(m) => {
+            let file = surfaces(&r)
+                .iter()
+                .find(|s| s.path == path)
+                .ok_or_else(|| {
+                    CmdError::new(
+                        "MAP_NOT_FOUND",
+                        format!("run '{run}' has no surface map '{path}'"),
+                    )
+                })?;
+            let mut data =
+                csbin::read_file(&r.folder.join("solve").join(&file.path)).map_err(|e| {
+                    CmdError::new(
+                        "MAP_UNREADABLE",
+                        format!("run '{run}': surface map '{path}' does not read now: {e}"),
+                    )
+                })?;
+            let mut values = m.values.iter();
+            for rx in &mut data.receivers {
+                for face in &mut rx.faces {
+                    let v = values.next().copied().flatten();
+                    face.records = vec![csbin::Record {
+                        time_step: 0,
+                        energy: v.map_or(f32::NAN, |x| x as f32),
+                    }]
+                    .into_boxed_slice();
+                }
+            }
+            if values.next().is_some() {
+                return Err(CmdError::new(
+                    "MAP_UNREADABLE",
+                    format!("{path}: the map's faces are not the file's"),
+                ));
+            }
+            data.time_step_count = 1;
+            Some(encode_surface(&data)?)
+        }
+        None => None,
+    };
+    let json = serde_json::to_vec(&ParameterMapView { map, refusal }).map_err(|e| {
+        CmdError::new(
+            "RESULTS_TOO_LARGE",
+            format!("the map does not serialise: {e}"),
+        )
+    })?;
+    let mut b = Vec::with_capacity(12 + json.len() + 3 + smap.as_ref().map_or(0, Vec::len));
+    put_u32(&mut b, PMAP_MAGIC);
+    put_u32(&mut b, LAYOUT_VERSION);
+    put_u32(&mut b, count(json.len(), "JSON bytes")?);
+    b.extend_from_slice(&json);
+    while b.len() % 4 != 0 {
+        b.push(0);
+    }
+    if let Some(s) = smap {
+        b.extend_from_slice(&s);
+    }
+    Ok(b)
 }
 
 /// A `.pbin` as PART v1 (the module's header).

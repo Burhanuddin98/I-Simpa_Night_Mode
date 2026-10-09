@@ -179,6 +179,24 @@ export function probeOf(
   return { face, step, title, level: `${la.toFixed(1)} dB`, bits, value: `file value ${rec.toExponential(4)}`, note };
 }
 
+/** Parity R42: the probe of a parameter map's face: core's own value (the JSON's double, not the
+ * texture's float), EDT with its range, or why the face has none. */
+export function probeOfParam(
+  m: SurfaceMap,
+  face: number,
+  p: { label: string; unit: string; values: (number | null)[]; lo: (number | null)[]; hi: (number | null)[]; why: (string | null)[]; note: string },
+  o: { what: string; band: string },
+): ProbeView {
+  const title = `${o.what} · ${p.label} · ${o.band}`;
+  const v = p.values[face];
+  const fmt = (x: number) => (p.unit === 's' ? `${x.toFixed(2)} s` : p.unit === 'dB' ? `${x.toFixed(1)} dB` : `${(x * 100).toFixed(1)} %`);
+  if (v === null || v === undefined) return { face, step: 0, title, level: null, bits: null, value: `Refused: ${p.why[face] ?? 'no value'}`, note: p.note };
+  const lo = p.lo[face];
+  const hi = p.hi[face];
+  const range = lo !== null && lo !== undefined && hi !== null && hi !== undefined ? `, range ${fmt(lo)} to ${fmt(hi)}` : '';
+  return { face, step: 0, title, level: fmt(v), bits: valueBits(m.values[m.offsets[face]] ?? Number.NaN), value: `core's value ${v.toPrecision(6)}${range}`, note: p.note };
+}
+
 /** The legend's line for contours every `stepDb` dB; null when off. */
 export function contourText(stepDb: number): string | null {
   return stepDb > 0 ? `Contours every ${stepDb} dB, on the smoothed levels` : null;

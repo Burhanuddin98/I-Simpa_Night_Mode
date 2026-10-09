@@ -36,6 +36,7 @@ use crate::schema::SolverKind;
 
 pub mod bed;
 pub mod extra_bed;
+pub mod maps;
 pub mod reference;
 pub mod report;
 pub mod room;

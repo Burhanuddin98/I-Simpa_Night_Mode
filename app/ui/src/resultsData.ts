@@ -18,6 +18,7 @@
 //      u32 x nr step
 //      f32 x nr value
 // Little-endian throughout; every WebView2 platform is little-endian, as mesh.ts assumes.
+import type { ParameterMapView } from './bindings/ipc';
 
 export const SMAP_MAGIC = 0x50414d53;
 export const PART_MAGIC = 0x54524150;
@@ -71,6 +72,23 @@ function header(buf: ArrayBuffer, what: string, magic: number, tag: string): Dat
   const version = view.getUint32(4, true);
   if (version !== LAYOUT_VERSION) throw new Error(`${what}: version ${version}, expected ${LAYOUT_VERSION}`);
   return view;
+}
+
+export const PMAP_MAGIC = 0x50414d50;
+
+/** Parity R42/R73: a PMAP v1 (`results_data.rs`): the map's JSON and, unless refused, its SMAP. */
+export function decodeParameterMap(buf: ArrayBuffer): { view: ParameterMapView; map: SurfaceMap | null } {
+  if (buf.byteLength < 12) throw new Error(`run_parameter_map: ${buf.byteLength} bytes, shorter than the header`);
+  const v = new DataView(buf);
+  if (v.getUint32(0, true) !== PMAP_MAGIC) throw new Error(`run_parameter_map: magic 0x${v.getUint32(0, true).toString(16)}, not "PMAP"`);
+  if (v.getUint32(4, true) !== LAYOUT_VERSION) throw new Error(`run_parameter_map: version ${v.getUint32(4, true)}, expected ${LAYOUT_VERSION}`);
+  const n = v.getUint32(8, true);
+  if (12 + n > buf.byteLength) throw new Error(`run_parameter_map: its JSON runs past the end`);
+  const view = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 12, n))) as ParameterMapView;
+  const at = 12 + n + ((4 - (n % 4)) % 4);
+  const map = view.map ? decodeSurfaceMap(buf.slice(at)) : null;
+  if (view.map && map && map.faceCount !== view.map.values.length) throw new Error(`run_parameter_map: ${map.faceCount} faces, ${view.map.values.length} values`);
+  return { view, map };
 }
 
 /** Throws on a buffer that is not an SMAP v1 of the size its header states. */

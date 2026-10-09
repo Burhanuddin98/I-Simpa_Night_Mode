@@ -19,7 +19,7 @@ use crate::commands::{EventsProbeReport, StartupInfo};
 use crate::events::{AppEvent, RunEventBatch};
 use crate::guard::CmdError;
 use crate::mesh_now::MeshNowReport;
-use crate::results_data::{EchogramView, ReportView, RunDataIndex};
+use crate::results_data::{EchogramView, ParameterMapView, ReportView, RunDataIndex};
 use crate::runs::{
     GpuStatus, LibraryMaterial, LibrarySpectrum, ResultsState, RunStarted, RunStreamBatch,
     RunsView, SolversStatus,
@@ -152,6 +152,11 @@ fn dumps() -> Vec<Dump> {
                     "echogram_view",
                     "EchogramView",
                     schema_for!(EchogramView).to_value(),
+                ),
+                (
+                    "parameter_map",
+                    "ParameterMapView",
+                    schema_for!(ParameterMapView).to_value(),
                 ),
                 // Parity A34: crash recovery.
                 (

@@ -71,11 +71,19 @@ pub struct BedParameters {
     pub definition_custom: BedParameter,
     /// Parity M12c: `schroeder_table` (beds/m12c-*.json).
     pub schroeder_table: BedParameter,
+    /// Parity M12c: `map_t30_s` (beds/m12c-*.json).
+    pub map_t30_s: BedParameter,
+    /// Parity M12c: `map_edt_s` (beds/m12c-*.json).
+    pub map_edt_s: BedParameter,
+    /// Parity M12c: `map_c80_db` (beds/m12c-*.json).
+    pub map_c80_db: BedParameter,
+    /// Parity M12c: `map_d50` (beds/m12c-*.json).
+    pub map_d50: BedParameter,
 }
 
 impl BedParameters {
     /// Every one in the report's order, with their JSON names.
-    pub fn named(&self) -> [(&'static str, &BedParameter); 16] {
+    pub fn named(&self) -> [(&'static str, &BedParameter); 20] {
         [
             ("spl_db", &self.spl_db),
             ("edt_s", &self.edt_s),
@@ -93,6 +101,10 @@ impl BedParameters {
             ("clarity_custom", &self.clarity_custom),
             ("definition_custom", &self.definition_custom),
             ("schroeder_table", &self.schroeder_table),
+            ("map_t30_s", &self.map_t30_s),
+            ("map_edt_s", &self.map_edt_s),
+            ("map_c80_db", &self.map_c80_db),
+            ("map_d50", &self.map_d50),
         ]
     }
 
@@ -119,6 +131,10 @@ impl BedParameters {
             clarity_custom: p(),
             definition_custom: p(),
             schroeder_table: p(),
+            map_t30_s: p(),
+            map_edt_s: p(),
+            map_c80_db: p(),
+            map_d50: p(),
         }
     }
 }
@@ -201,6 +217,10 @@ pub fn demote(base: &BedParameters, plant: &BedParameters, source: &str) -> BedP
         clarity_custom: one(&base.clarity_custom, &plant.clarity_custom),
         definition_custom: one(&base.definition_custom, &plant.definition_custom),
         schroeder_table: one(&base.schroeder_table, &plant.schroeder_table),
+        map_t30_s: one(&base.map_t30_s, &plant.map_t30_s),
+        map_edt_s: one(&base.map_edt_s, &plant.map_edt_s),
+        map_c80_db: one(&base.map_c80_db, &plant.map_c80_db),
+        map_d50: one(&base.map_d50, &plant.map_d50),
     }
 }
 

@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { decodeParticles, decodeSurfaceMap, PART_MAGIC, SMAP_MAGIC, surfaceValue } from './resultsData.ts';
+import { decodeParameterMap, decodeParticles, decodeSurfaceMap, PART_MAGIC, PMAP_MAGIC, SMAP_MAGIC, surfaceValue } from './resultsData.ts';
 
 /** SMAP v1 as `results_data::encode_surface` writes it, built by hand. */
 function smap(nodes: number[], faces: { v: number[]; r: number; rec: [number, number][] }[], dt = 0.01, steps = 7): ArrayBuffer {
@@ -110,4 +110,30 @@ test('a buffer that is not the layout is refused, never read', () => {
   const p = part([{ first: 0, steps: [[0, 0, 0, 1]] }]);
   assert.throws(() => decodeParticles(good), /magic/);
   assert.throws(() => decodeParticles(p.slice(0, p.byteLength - 4)), /header says/);
+});
+
+test('R42: a PMAP is the map JSON, padded to 4, then its SMAP; a refused map has no SMAP', () => {
+  const s = smap([0, 0, 0, 1, 0, 0, 0, 1, 0], [{ v: [0, 1, 2], r: 0, rec: [[0, 0.95]] }, { v: [0, 1, 2], r: 0, rec: [[0, NaN]] }], 0.001, 1);
+  const pmap = (view: unknown, tail: ArrayBuffer | null) => {
+    const json = new TextEncoder().encode(JSON.stringify(view));
+    const pad = (4 - (json.length % 4)) % 4;
+    const b = new Uint8Array(12 + json.length + pad + (tail ? tail.byteLength : 0));
+    const d = new DataView(b.buffer);
+    d.setUint32(0, PMAP_MAGIC, true);
+    d.setUint32(4, 1, true);
+    d.setUint32(8, json.length, true);
+    b.set(json, 12);
+    if (tail) b.set(new Uint8Array(tail), 12 + json.length + pad);
+    return b.buffer;
+  };
+  const view = { map: { parameter: 't30_s', values: [0.9512345678, null], why: [null, 'range_not_reached'], unit: 's' }, refusal: null };
+  const got = decodeParameterMap(pmap(view, s));
+  assert.equal(got.view.map?.values[0], 0.9512345678, "core's double, not the texture's float");
+  assert.equal(got.map?.faceCount, 2);
+  assert.ok(Number.isNaN(got.map?.values[1] as number));
+  const refused = decodeParameterMap(pmap({ map: null, refusal: { code: 'map_global', message: 'per band' } }, null));
+  assert.equal(refused.map, null);
+  assert.equal(refused.view.refusal?.code, 'map_global');
+  // Says no: a map whose faces are not its values' is refused.
+  assert.throws(() => decodeParameterMap(pmap({ ...view, map: { ...view.map, values: [0.9] } }, s)), /2 faces, 1 values/);
 });

@@ -30,6 +30,8 @@ export interface MapUniforms {
 export interface LookUniforms {
   step: N;
   diff: N;
+  /** Parity R42: 1 for a parameter map, whose values are drawn as they are (s, dB, a fraction), not as levels. */
+  linear: N;
   smooth: N;
   iso: N;
   lo: N;
@@ -49,7 +51,7 @@ export function mapUniforms(placeholder: Texture): MapUniforms {
 }
 
 export function lookUniforms(): LookUniforms {
-  return { step: uniform(0, 'int'), diff: uniform(0, 'int'), smooth: uniform(0, 'int'), iso: uniform(0), lo: uniform(0), hi: uniform(1) };
+  return { step: uniform(0, 'int'), diff: uniform(0, 'int'), linear: uniform(0, 'int'), smooth: uniform(0, 'int'), iso: uniform(0), lo: uniform(0), hi: uniform(1) };
 }
 
 /** The texel of (face, step): i = face * steps + step, in rows of `width` (mapData.ts `texelOf`). */
@@ -170,6 +172,13 @@ export function faceLevel(u: MapUniforms, look: LookUniforms, face: N): N {
       If(r.ok, () => {
         ok.assign(1);
         lvl.assign(r.d);
+      });
+    }).ElseIf(look.linear.equal(1), () => {
+      // A parameter map: the face's value as it is; NaN (refused) is not drawn.
+      const e = mapTexel(u, u.map, face, int(0)).toVar();
+      If(finite(e), () => {
+        ok.assign(1);
+        lvl.assign(e);
       });
     }).Else(() => {
       const e = faceValue(u, u.map, face, look.step).toVar();

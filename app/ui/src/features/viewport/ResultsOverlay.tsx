@@ -30,7 +30,7 @@ import { exportParams, exportView, lastExportStore } from '../export/exportActio
 import { Animator, animatorStore, rateText, readout, SPEEDS, speedLabel, stepsPerSecond } from './animator';
 import { drawnSteps, framePixels, frameRgba, mapFacePoint, mapPixels, mapPointerStore, offMapPoint, replicaStore, resultsLayer } from './engine';
 import { CUMULATIVE_HINT, CUMULATIVE_NOTE } from './cumulative';
-import { CONTOUR_STEPS_DB, contourText, parseRange, probeOf, type ProbeView } from './mapView';
+import { CONTOUR_STEPS_DB, contourText, parseRange, probeOf, probeOfParam, type ProbeView } from './mapView';
 import { TRAIL_HINT, TRAIL_LENGTHS, TRAIL_NOTE } from './particles';
 import { PARTICLE_LOOKS, type ParticleLook } from './rays';
 import { warmGradient, warmLabels } from './warmRamp';
@@ -228,6 +228,7 @@ function currentProbe(): (ProbeView & { x: number; y: number }) | null {
   const step = Math.min(animatorStore.get().step, s.map.timeStepCount - 1);
   const dt = v.data?.time_step_s ?? v.data?.surfaces[0]?.time_step_s;
   const base = v.map.kind === 'diff' ? s.base : null;
+  if (s.param) return { ...probeOfParam(s.map, at.face, s.param, { what: s.what, band: bandName(v.bandHz) }), x: at.x, y: at.y };
   return { ...probeOf(s.map, at.face, step, { what: s.what, band: bandName(v.bandHz), dtS: s.map.timeStepS || dt, smooth: v.smooth, base, cumulative: s.cumulative, windowSteps: s.windowSteps }), x: at.x, y: at.y };
 }
 
@@ -405,7 +406,29 @@ export function ResultsOverlay() {
             ))}
           </div>
         )}
-        <button className="vp-switch" role="switch" aria-checked={v.diff} data-part="map-diff" onClick={() => resultsView.setDiff(!v.diff)}>
+        {v.quantities.length > 0 && (
+          <div className="vp-row" role="radiogroup" aria-label="Shows" data-part="map-quantity">
+            <span className="vp-row-label">Shows</span>
+            <button className="vp-chip-btn" role="radio" data-map-quantity="level" aria-checked={v.quantity === 'level'} title="The sound level the solver wrote, step by step" onClick={() => resultsView.setQuantity('level')}>
+              Level
+            </button>
+            {v.quantities.map((q) => (
+              <button
+                key={q.key}
+                className="vp-chip-btn mono"
+                role="radio"
+                data-map-quantity={q.key}
+                aria-checked={v.quantity === q.key}
+                disabled={q.withheld !== null || v.diff}
+                title={q.withheld ? `Withheld: ${q.withheld}` : v.diff ? 'A difference is of levels only' : `${q.label} on every face, read from its time series by the code the receivers use`}
+                onClick={() => resultsView.setQuantity(q.key)}
+              >
+                {q.label}
+              </button>
+            ))}
+          </div>
+        )}
+        <button className="vp-switch" role="switch" aria-checked={v.diff} data-part="map-diff" disabled={v.quantity !== 'level' && !v.diff} title={v.quantity !== 'level' ? 'A difference is of levels: show the level first' : undefined} onClick={() => resultsView.setDiff(!v.diff)}>
           <span>Difference from baseline</span>
           <span className="track" aria-hidden>
             <span className="knob" />
@@ -562,6 +585,13 @@ export function ResultsOverlay() {
           {v.map && (
             <div className="vp-legend float-panel" data-part="map-legend" data-results-region data-map-kind-shown={v.map.kind}>
               <div className="vp-legend-title">{v.map.legend.title}</div>
+              {v.map.kind === 'param' && v.param ? (
+                <div className="vp-legend-note" data-part="param-note">
+                  {v.param.note}
+                  {Object.keys(v.param.refused).length ? `; not drawn: ${Object.entries(v.param.refused).map(([k, n]) => `${n} ${k.replace(/_/g, ' ')}`).join(', ')}` : ''}
+                  {v.param.lostWarning !== null ? `; ${(v.param.lostWarning * 100).toFixed(2)} % of particles lost: the late decay may hold too little energy` : ''}
+                </div>
+              ) : null}
               <div className="vp-legend-bar" style={{ background: v.map.legend.gradient }} />
               <div className="vp-legend-labels">
                 <span data-legend="lo">{v.map.legend.lo}</span>

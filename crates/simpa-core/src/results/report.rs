@@ -1607,7 +1607,7 @@ impl RoomReport {
 /// when it has one, and the share the particles left alive at the end of a complete band can have
 /// taken from the arrival's step on (the onset bin's, when the arrival is not known). Lost
 /// particles are not given: reported, not bounded (decision 56, [`Evaluation::lost_particles`]).
-fn series_of(
+pub(crate) fn series_of(
     s: &SppsResults,
     index: usize,
     freq_hz: i32,
@@ -1872,6 +1872,34 @@ fn arrival_time(a: Arrival) -> Option<f64> {
         Arrival::Known { time_s, .. } => Some(time_s),
         Arrival::Detected => None,
     }
+}
+
+/// EDT v2.1 on a face's series (`results::maps`), as a point receiver's is shown: the method's
+/// value with its range and status, checked against the energy the series can lack
+/// ([`edt_missing`]), refused as the receivers' `edt_s` is ([`EdtReport::evaluated`]). `h` is the
+/// direct sound's half-spread over the face, where a receiver has its ball's `R/c`.
+pub(crate) fn face_edt(
+    s: &SppsResults,
+    series: &EnergySeries,
+    arrival: Arrival,
+    h: f64,
+) -> Evaluated {
+    let t_arrival = arrival_time(arrival);
+    let o = edt::analyse(series.values(), s.time_step_s, t_arrival, Some(h));
+    let missing_moves = edt_missing(series, &o, s.time_step_s, t_arrival, h);
+    EdtReport {
+        method: edt::METHOD.into(),
+        status: o.status,
+        value_s: o.edt,
+        lo_s: o.edt_lo,
+        hi_s: o.edt_hi,
+        reason: o.reason,
+        arrival_s: t_arrival,
+        validated: false,
+        validation_note: None,
+        missing_moves,
+    }
+    .evaluated()
 }
 
 /// EDT v2.1 ([`edt`]) on `series`' histogram as the solver wrote it, with `arrival`'s time, which
@@ -2873,7 +2901,7 @@ mod tests {
     /// `docs/formats/results-json.md`), and pin the new pair.
     const REQUIRED_FIELDS_PIN: (u32, &str) = (
         18,
-        "1f675c437b5da099ad3570886c48cd86b44bf32920cc2f141ab4842b2bfd16bb",
+        "ed618d692e67103c1c09d0c4d31c6a1c7c633fa6dce5279d612f112b9c034ef6",
     );
 
     /// Every `required` list of `v`, as `<path>: <fields, sorted>`, sorted.

@@ -147,9 +147,32 @@ export function rampColor(stops: readonly string[], t: number): [number, number,
 /** The stops as 0-1 RGB, for the shader. */
 export const rampFloats = (stops: readonly string[]): number[] => stops.flatMap((c) => hex3(c).map((v) => v / 255));
 
+/**
+ * Parity R42/R73: a parameter map's colour range, in its own unit: from the smallest to the largest
+ * value shown (core's `min`/`max`), widened to whole steps of `step` (0.05 s, 0.5 dB, 0.05), at
+ * least one step wide; null when no face has a value.
+ */
+export function paramRange(min: number | null | undefined, max: number | null | undefined, unit: string): Range | null {
+  if (typeof min !== 'number' || typeof max !== 'number' || !Number.isFinite(min) || !Number.isFinite(max)) return null;
+  const step = unit === 's' ? 0.05 : unit === 'dB' ? 0.5 : 0.05;
+  let lo = Math.floor(min / step + 1e-9) * step;
+  let hi = Math.ceil(max / step - 1e-9) * step;
+  if (hi - lo < step) hi = lo + step;
+  lo = Number(lo.toFixed(4));
+  hi = Number(hi.toFixed(4));
+  return { lo, hi };
+}
+
+/** A parameter map's legend labels, in its unit: seconds and dB to two and one decimals, D as a percentage. */
+export function paramLabels(r: Range, unit: string): { lo: string; mid: string; hi: string } {
+  const f = (v: number) => (unit === 's' ? v.toFixed(2) : unit === 'dB' ? (v < 0 ? `−${Math.abs(v).toFixed(1)}` : v.toFixed(1)) : `${(v * 100).toFixed(0)}`);
+  const u = unit === '' ? ' %' : ` ${unit}`;
+  return { lo: f(r.lo), mid: f((r.lo + r.hi) / 2), hi: `${f(r.hi)}${u}` };
+}
+
 /** The legend bar's CSS gradient. */
-export function legendGradient(kind: 'level' | 'diff'): string {
-  const stops = kind === 'level' ? [...HOT] : [...COOL].reverse().concat(HOT.slice(1));
+export function legendGradient(kind: 'level' | 'diff' | 'param'): string {
+  const stops = kind !== 'diff' ? [...HOT] : [...COOL].reverse().concat(HOT.slice(1));
   return `linear-gradient(90deg, ${stops.join(', ')})`;
 }
 

@@ -255,6 +255,13 @@ export type SurfaceReceiverShape =
       resolution_m: number | string;
     };
 /**
+ * A parameter a map shows.
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "MapParameter".
+ */
+export type MapParameter = 't30_s' | 'edt_s' | 'c80_db' | 'd50';
+/**
  * A parameter's bed status.
  *
  * This interface was referenced by `IpcBindings`'s JSON-Schema
@@ -2898,6 +2905,7 @@ export interface IpcBindings {
   library_material: LibraryMaterial;
   library_spectrum: LibrarySpectrum;
   mesh_now_report: MeshNowReport;
+  parameter_map: ParameterMapView;
   prepared: Prepared;
   project_info: ProjectInfo;
   recovery_entry: RecoveryEntry;
@@ -3938,6 +3946,84 @@ export interface SceneState1 {
   view: ProjectView;
 }
 /**
+ * `run_parameter_map`'s JSON (PMAP's head): the map, or why it cannot be computed.
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "ParameterMapView".
+ */
+export interface ParameterMapView {
+  map?: ParameterMap | null;
+  refusal?: MapRefusal | null;
+}
+/**
+ * [`MapParameter`] on every face of one `.csbin`, faces in file order (every receiver's, as
+ * SMAP orders them).
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "ParameterMap".
+ */
+export interface ParameterMap {
+  band_hz: number;
+  cutting_plane: boolean;
+  hi: (number | null)[];
+  /**
+   * EDT only: the range EDT v2.1 reads, per face (`null` where refused); empty otherwise.
+   */
+  lo: (number | null)[];
+  /**
+   * The band's lost share when it is a warning (0.3 % to 1 %), shown beside the map.
+   */
+  lost_share_warning?: number | null;
+  max?: number | null;
+  /**
+   * The smallest and largest value shown; `null` when none is.
+   */
+  min?: number | null;
+  /**
+   * What a map's values carry and what they do not ([`NOISE_NOTE`] or [`EDT_NOTE`]).
+   */
+  note: string;
+  parameter: MapParameter;
+  /**
+   * The file, relative to `solve/`.
+   */
+  path: string;
+  /**
+   * Refused faces, by kind.
+   */
+  refused: {
+    [k: string]: number | undefined;
+  };
+  /**
+   * Faces with a value.
+   */
+  shown: number;
+  unit: string;
+  /**
+   * Per face: the value, or `null` where it is refused (`why` says why).
+   */
+  values: (number | null)[];
+  /**
+   * Per face: `null` for a value, else the refusal's kind (`range_not_reached`, `truncated`,
+   * `no_energy`, ...).
+   */
+  why: (string | null)[];
+}
+/**
+ * Why a map cannot be computed at all.
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "MapRefusal".
+ */
+export interface MapRefusal {
+  /**
+   * `map_not_spps`, `map_not_found`, `map_global`, `map_intensity`, `several_sources`,
+   * `map_time_step`, `map_unreadable`.
+   */
+  code: string;
+  message: string;
+}
+/**
  * A prepared buffer: take it with `token`; `checksum` is [`checksum`] of its bytes.
  *
  * This interface was referenced by `IpcBindings`'s JSON-Schema
@@ -4140,10 +4226,14 @@ export interface BedParameters {
   definition_custom: BedParameter4;
   edt_s: BedParameter;
   g_db: BedParameter5;
-  schroeder_table: BedParameter6;
+  map_c80_db: BedParameter6;
+  map_d50: BedParameter7;
+  map_edt_s: BedParameter8;
+  map_t30_s: BedParameter9;
+  schroeder_table: BedParameter10;
   spl_db: BedParameter;
-  sti: BedParameter7;
-  t15_s: BedParameter8;
+  sti: BedParameter11;
+  t15_s: BedParameter12;
   t20_s: BedParameter;
   t30_s: BedParameter;
   ts_s: BedParameter;
@@ -4228,6 +4318,42 @@ export interface BedParameter7 {
  * (the marks, the `wide` rules, what was not tested).
  */
 export interface BedParameter8 {
+  notes: string[];
+  reasons: string[];
+  status: BedStatus;
+}
+/**
+ * One parameter's entry: its status, why it failed (empty for a PASS), and the summary's notes
+ * (the marks, the `wide` rules, what was not tested).
+ */
+export interface BedParameter9 {
+  notes: string[];
+  reasons: string[];
+  status: BedStatus;
+}
+/**
+ * One parameter's entry: its status, why it failed (empty for a PASS), and the summary's notes
+ * (the marks, the `wide` rules, what was not tested).
+ */
+export interface BedParameter10 {
+  notes: string[];
+  reasons: string[];
+  status: BedStatus;
+}
+/**
+ * One parameter's entry: its status, why it failed (empty for a PASS), and the summary's notes
+ * (the marks, the `wide` rules, what was not tested).
+ */
+export interface BedParameter11 {
+  notes: string[];
+  reasons: string[];
+  status: BedStatus;
+}
+/**
+ * One parameter's entry: its status, why it failed (empty for a PASS), and the summary's notes
+ * (the marks, the `wide` rules, what was not tested).
+ */
+export interface BedParameter12 {
   notes: string[];
   reasons: string[];
   status: BedStatus;

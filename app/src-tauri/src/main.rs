@@ -301,6 +301,7 @@ fn run(args: GuiArgs) -> ExitCode {
             commands::run_report,
             commands::run_data,
             commands::run_surface_map,
+            commands::run_parameter_map,
             commands::run_particles,
             commands::run_echogram,
             commands::run_auralize,

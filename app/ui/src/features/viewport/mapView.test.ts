@@ -10,6 +10,7 @@ import {
   nodeFaces,
   parseRange,
   probeOf,
+  probeOfParam,
   stepTime,
   valueBits,
 } from './mapView.ts';
@@ -134,4 +135,18 @@ test('contourText names the spacing and what the lines follow; off is no text', 
   assert.deepEqual(CONTOUR_STEPS_DB, [1, 3, 6]);
   assert.equal(contourText(3), 'Contours every 3 dB, on the smoothed levels');
   assert.equal(contourText(0), null);
+});
+
+test('R42: the probe of a parameter map reads core’s value for the face, EDT with its range, or why it has none', () => {
+  const m = { values: new Float32Array([0.95, Number.NaN]), offsets: new Uint32Array([0, 1, 2]) } as unknown as SurfaceMap;
+  const p = { label: 'EDT', unit: 's', values: [0.712345, null], lo: [0.69, null], hi: [0.73, null], why: [null, 'edt_refused'], note: 'the range is its own' };
+  const a = probeOfParam(m, 0, p, { what: 'Cutting planes', band: '1 kHz' });
+  assert.equal(a.title, 'Cutting planes · EDT · 1 kHz');
+  assert.equal(a.level, '0.71 s');
+  assert.equal(a.value, "core's value 0.712345, range 0.69 s to 0.73 s");
+  const b = probeOfParam(m, 1, p, { what: 'Cutting planes', band: '1 kHz' });
+  assert.equal(b.level, null);
+  assert.equal(b.value, 'Refused: edt_refused');
+  const d = probeOfParam(m, 0, { ...p, unit: '', label: 'D50', values: [0.70321, null], lo: [], hi: [] }, { what: 'x', band: 'y' });
+  assert.equal(d.level, '70.3 %');
 });

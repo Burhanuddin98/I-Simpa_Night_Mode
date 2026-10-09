@@ -9,6 +9,8 @@ import {
   legendLabels,
   levelDb,
   levelRange,
+  paramLabels,
+  paramRange,
   mapLayout,
   rampColor,
   surfaceMismatch,
@@ -160,4 +162,15 @@ test('decision 63: each level stop is lighter than the last by an even step (CIE
     assert.ok(step >= 8 && step <= 14, `stop ${i}: L* ${l[i - 1].toFixed(1)} -> ${l[i].toFixed(1)}`);
   }
   assert.ok(l[l.length - 1] > 95, 'the loudest is near white');
+});
+
+test('R42/R73: a parameter map is drawn over its own range in its unit, in whole steps, labelled in that unit', () => {
+  assert.deepEqual(paramRange(0.912, 1.011, 's'), { lo: 0.9, hi: 1.05 });
+  assert.deepEqual(paramRange(6.2, 7.22, 'dB'), { lo: 6, hi: 7.5 });
+  assert.deepEqual(paramRange(0.663, 0.713, ''), { lo: 0.65, hi: 0.75 });
+  assert.deepEqual(paramRange(1, 1, 's'), { lo: 1, hi: 1.05 }, 'at least one step wide');
+  assert.equal(paramRange(null, null, 's'), null);
+  assert.deepEqual(paramLabels({ lo: 0.9, hi: 1.05 }, 's'), { lo: '0.90', mid: '0.98', hi: '1.05 s' });
+  assert.deepEqual(paramLabels({ lo: -2, hi: 7.5 }, 'dB'), { lo: '−2.0', mid: '2.8', hi: '7.5 dB' });
+  assert.deepEqual(paramLabels({ lo: 0.65, hi: 0.75 }, ''), { lo: '65', mid: '70', hi: '75 %' });
 });

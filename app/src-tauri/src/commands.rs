@@ -814,6 +814,24 @@ pub async fn run_surface_map(
     .await
 }
 
+/// Parity R42/R73: T30, EDT, C80 or D50 on every face of one per-band surface map as PMAP bytes
+/// (`results_data::parameter_map_bytes`): the map's JSON, its values computed by core with the
+/// receivers' code, and the SMAP the viewport draws them from.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn run_parameter_map(
+    state: State<'_, AppState>,
+    run: String,
+    path: String,
+    parameter: simpa_core::results::maps::MapParameter,
+) -> CmdResult<Response> {
+    let session = state.session.clone();
+    guard::blocking("run_parameter_map", move || {
+        results_data::parameter_map_bytes(&runs_root_for(&session, &run)?, &run, &path, parameter)
+            .map(Response::new)
+    })
+    .await
+}
+
 /// One band's saved particles as PART bytes (`results_data`): an ArrayBuffer in JS, the
 /// `.pbin`'s positions and energies bit for bit.
 #[tauri::command(rename_all = "snake_case")]

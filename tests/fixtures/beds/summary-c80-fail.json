@@ -82,6 +82,26 @@
       "status": "PASS",
       "reasons": [],
       "notes": []
+    },
+    "map_t30_s": {
+      "status": "PASS",
+      "reasons": [],
+      "notes": []
+    },
+    "map_edt_s": {
+      "status": "PASS",
+      "reasons": [],
+      "notes": []
+    },
+    "map_c80_db": {
+      "status": "PASS",
+      "reasons": [],
+      "notes": []
+    },
+    "map_d50": {
+      "status": "PASS",
+      "reasons": [],
+      "notes": []
     }
   }
 }

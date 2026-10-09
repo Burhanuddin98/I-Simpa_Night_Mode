@@ -507,6 +507,22 @@
             "$ref": "#/$defs/BedParameter",
             "description": "Sound strength G (`g_db` on a band)."
           },
+          "map_c80_db": {
+            "$ref": "#/$defs/BedParameter",
+            "description": "Parity M12c: `map_c80_db` (beds/m12c-*.json)."
+          },
+          "map_d50": {
+            "$ref": "#/$defs/BedParameter",
+            "description": "Parity M12c: `map_d50` (beds/m12c-*.json)."
+          },
+          "map_edt_s": {
+            "$ref": "#/$defs/BedParameter",
+            "description": "Parity M12c: `map_edt_s` (beds/m12c-*.json)."
+          },
+          "map_t30_s": {
+            "$ref": "#/$defs/BedParameter",
+            "description": "Parity M12c: `map_t30_s` (beds/m12c-*.json)."
+          },
           "schroeder_table": {
             "$ref": "#/$defs/BedParameter",
             "description": "Parity M12c: `schroeder_table` (beds/m12c-*.json)."
@@ -548,7 +564,11 @@
           "decay_custom",
           "clarity_custom",
           "definition_custom",
-          "schroeder_table"
+          "schroeder_table",
+          "map_t30_s",
+          "map_edt_s",
+          "map_c80_db",
+          "map_d50"
         ],
         "type": "object"
       },

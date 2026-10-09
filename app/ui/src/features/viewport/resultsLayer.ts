@@ -80,7 +80,7 @@ export interface MapMeta {
   run: string;
   path: string;
   bandHz: number | null;
-  kind: 'level' | 'diff';
+  kind: 'level' | 'diff' | 'param';
   range: Range;
   baseline: string | null;
   /** W2: the texture holds each face's running sum from the first step (cumulative.ts). */
@@ -264,7 +264,7 @@ export class ResultsLayer {
     // W5: the node mean's faces; above MAX_NODE_FACES a node's mean is not computed, so the map
     // is drawn flat and says why. Face indices as float32 are exact below 2^24.
     this.adj = nodeFaces(m);
-    this.smoothRefusal = this.adj.maxFaces > MAX_NODE_FACES ? `a node of this map links ${this.adj.maxFaces} faces, more than the ${MAX_NODE_FACES} the smooth colouring averages` : m.faceCount >= 1 << 24 ? 'the map has too many faces for smooth colouring' : null;
+    this.smoothRefusal = meta.kind === 'param' ? 'a parameter map is drawn face by face, each its own value' : this.adj.maxFaces > MAX_NODE_FACES ? `a node of this map links ${this.adj.maxFaces} faces, more than the ${MAX_NODE_FACES} the smooth colouring averages` : m.faceCount >= 1 << 24 ? 'the map has too many faces for smooth colouring' : null;
     const adjN = Math.max(1, this.adj.faces.length);
     const adjW = Math.min(this.maxTextureSize(), adjN);
     const adjH = Math.ceil(adjN / adjW);
@@ -307,6 +307,7 @@ export class ResultsLayer {
     u.width.value = l.width;
     u.steps.value = l.steps;
     this.lu.diff.value = meta.kind === 'diff' && base ? 1 : 0;
+    this.lu.linear.value = meta.kind === 'param' ? 1 : 0;
     u.win.value = this.windowOf(meta);
     this.lu.lo.value = meta.range.lo;
     this.lu.hi.value = meta.range.hi;

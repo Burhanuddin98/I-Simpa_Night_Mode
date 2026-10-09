@@ -1,4 +1,4 @@
-//! `simpa bed-extra r15|r20|r27 [--out <file>]`: M12c's closed-form beds of the numbers parity
+//! `simpa bed-extra r15|r20|r27 [--out <file>]` and `simpa bed-extra r42 --run <run folder> [--out <file>]`: M12c's closed-form beds of the numbers parity
 //! added (`simpa_core::results::extra_bed`). The bed's cases go to stdout as JSON and, with
 //! `--out`, to the file, with the commit they ran at and whether the tree was edited
 //! (`hashes.head`, `hashes.src_uncommitted`: the shape `tools/bed/summary.py` reads a set's
@@ -32,9 +32,14 @@ fn git() -> (Option<String>, Option<String>) {
 pub fn extra_bed_cmd(args: &[&str]) -> ExitCode {
     let mut which = None;
     let mut out = None;
+    let mut run = None;
     let mut it = args.iter().copied();
     while let Some(a) = it.next() {
         match a {
+            "--run" => match it.next() {
+                Some(p) => run = Some(p),
+                None => return fail("--run needs a run folder"),
+            },
             "--out" => match it.next() {
                 Some(p) => out = Some(p),
                 None => return fail("--out needs a file"),
@@ -48,7 +53,16 @@ pub fn extra_bed_cmd(args: &[&str]) -> ExitCode {
         Some("r15") => extra_bed::r15(),
         Some("r20") => extra_bed::r20(),
         Some("r27") => extra_bed::r27(),
-        Some(other) => return fail(&format!("no bed '{other}': r15, r20, r27")),
+        Some("r42") => match run.map(|r| extra_bed::r42(Path::new(r))) {
+            Some(Ok(b)) => b,
+            Some(Err(why)) => return fail(&format!("bed r42: {why}")),
+            None => {
+                return fail(
+                    "bed r42 needs --run <run folder>: a run with a cutting plane through a receiver",
+                );
+            }
+        },
+        Some(other) => return fail(&format!("no bed '{other}': r15, r20, r27, r42")),
         None => return fail("bed-extra needs a bed: simpa bed-extra r15 [--out <file>]"),
     };
     let (head, diff) = git();

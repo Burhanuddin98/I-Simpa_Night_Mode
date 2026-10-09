@@ -168,6 +168,11 @@ ARTIFACTS = {
         "repo",
         f"{M12C_RESULT} section 4, R27: simpa bed-extra r27 (crates/simpa-core/src/results/extra_bed.rs)",
     ),
+    "m12c-r42": (
+        "beds/m12c-r42.json",
+        "repo",
+        f"{M12C_RESULT} section 4, R42 with R73 (decision 77): simpa bed-extra r42 --run <the bed's run> (crates/simpa-core/src/results/extra_bed.rs, results/maps.rs)",
+    ),
 }
 
 # Where a set's commit is read when the summary does not carry it: the scorer's log, first line.
@@ -586,6 +591,25 @@ PARAMETERS += [
             NO_MEASURED_ROOM,
         ],
     ),
+]
+
+M12C_MAP_NOTES = [
+    "Each face's value is the receivers' code on that face's series (results::maps): T30, C80 and D50 by "
+    "params::decay, EDT by EDT v2.1 with the same missing-energy check; the arrival is the source's "
+    "emission plus the face centroid's distance over c, spread over half its vertices' spread.",
+    "No Monte-Carlo noise range for T30, C80 and D50 maps: the receivers' noise model is calibrated on "
+    "spheres, not on faces (shown as a note on the map); EDT keeps EDT v2.1's own range.",
+    "Per band, SPL maps (surf_receiv_method 1) and one source only; the Global map, intensity maps and "
+    "several sources are refused with the reason.",
+    "The bed is one real run (beds/m12c-r42.json names it): the faces holding each point receiver's "
+    "centre on two cutting planes of tutorial 1's room, three bands, 40,000,000 particles per source, "
+    "against that receiver's value, within the difference limen. It does not show that a map is right "
+    "far from a receiver, or on walls (scene surface receivers), or at fewer particles.",
+    NO_MEASURED_ROOM,
+]
+PARAMETERS += [
+    (name, name, "M12c R42 with R73: maps against the receivers on a real run (simpa bed-extra r42)", ["m12c-r42"], M12C_MAP_NOTES)
+    for name in ("map_t30_s", "map_edt_s", "map_c80_db", "map_d50")
 ]
 
 # ---- the rulings --------------------------------------------------------------------------------

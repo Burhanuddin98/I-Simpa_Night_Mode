@@ -57,6 +57,7 @@ fn main() {
         "run_report",
         "run_data",
         "run_surface_map",
+        "run_parameter_map",
         "run_particles",
         "run_echogram",
         "run_auralize",

@@ -20,16 +20,39 @@
 // (the panel says why); a run that saved no particles shows MQ4's notice instead of playback.
 import * as actions from '../../actions';
 import { asCmdError } from '../../backend';
-import type { RunData, SurfaceMapInfo } from '../../bindings/ipc';
-import { decodeParticles, decodeSurfaceMap, type SurfaceMap } from '../../resultsData';
+import type { MapParameter, RunData, SurfaceMapInfo } from '../../bindings/ipc';
+import { decodeParameterMap, decodeParticles, decodeSurfaceMap, type SurfaceMap } from '../../resultsData';
 import { runsStore, sceneStore, selectedRunStore, stepStore, Store } from '../../store';
 import { Animator } from './animator';
 import { resultsLayer, renderNow, setGlow, setMapOpacity, setMapWhilePlaying, showMap, showParticles, type Glow } from './engine';
 import { cumulativeRange, cumulativeRefusal } from './cumulative';
-import { diffRange, legendGradient, legendLabels, levelRange, surfaceMismatch, type Range } from './mapData';
+import { diffRange, legendGradient, legendLabels, levelRange, paramLabels, paramRange, surfaceMismatch, type Range } from './mapData';
 import { emissionStep, noParticlesText } from './particles';
 import type { ParticleLook } from './rays';
 import { DEFAULT_WINDOW_MS, windowChoice, WINDOW_CUMULATIVE_REFUSAL, windowLabel } from './window';
+
+/** Parity R42/R73: what a map can show besides the level: the four parameters, each behind its bed (`map_<name>`). */
+export const MAP_QUANTITIES: readonly { key: MapParameter; label: string }[] = [
+  { key: 't30_s', label: 'T30' },
+  { key: 'edt_s', label: 'EDT' },
+  { key: 'c80_db', label: 'C80' },
+  { key: 'd50', label: 'D50' },
+];
+
+/** A parameter map's values for the probe and the legend: core's JSON, per face in SMAP order. */
+export interface ParamShown {
+  key: MapParameter;
+  label: string;
+  unit: string;
+  values: (number | null)[];
+  lo: (number | null)[];
+  hi: (number | null)[];
+  why: (string | null)[];
+  note: string;
+  shown: number;
+  refused: Record<string, number>;
+  lostWarning: number | null;
+}
 
 export interface MapGroup {
   key: string;
@@ -54,13 +77,19 @@ export interface ResultsView {
   bands: (number | null)[];
   bandHz: number | null;
   diff: boolean;
+  /** Parity R42: the level, or a parameter on every face; and which parameters the bed lets the map show
+   * (`withheld` says why one is not). */
+  quantity: 'level' | MapParameter;
+  quantities: { key: MapParameter; label: string; withheld: string | null }[];
+  /** The parameter map shown: its faces counted, refused by kind, its note. */
+  param: Omit<ParamShown, 'values' | 'lo' | 'hi' | 'why'> | null;
   /** The run the difference is taken from, and why it cannot be, when it cannot. */
   baseline: string | null;
   baselineLabel: string | null;
   baselineReason: string | null;
   map: {
     path: string;
-    kind: 'level' | 'diff';
+    kind: 'level' | 'diff' | 'param';
     cumulative: boolean;
     /** The window the map is drawn with, steps (1: none), and the map's time step. */
     windowSteps: number;
@@ -114,6 +143,9 @@ const OFF: ResultsView = {
   bands: [],
   bandHz: null,
   diff: false,
+  quantity: 'level',
+  quantities: [],
+  param: null,
   baseline: null,
   baselineLabel: null,
   baselineReason: null,
@@ -139,10 +171,10 @@ const OFF: ResultsView = {
 };
 
 /** The view choices a new run keeps (W5). */
-const kept = (v: ResultsView) => ({ smooth: v.smooth, isoDb: v.isoDb, fixed: v.fixed, cumulative: v.cumulative, windowMs: v.windowMs, trails: v.trails, look: v.look, glow: v.glow, mapFull: v.mapFull, opacity: v.opacity });
+const kept = (v: ResultsView) => ({ quantity: v.quantity, smooth: v.smooth, isoDb: v.isoDb, fixed: v.fixed, cumulative: v.cumulative, windowMs: v.windowMs, trails: v.trails, look: v.look, glow: v.glow, mapFull: v.mapFull, opacity: v.opacity });
 
 /** The map on screen and its baseline, as decoded: the probe reads its values here. */
-let shown: { map: SurfaceMap; base: SurfaceMap | null; what: string; cumulative: boolean; windowSteps: number } | null = null;
+let shown: { map: SurfaceMap; base: SurfaceMap | null; what: string; cumulative: boolean; windowSteps: number; param?: ParamShown } | null = null;
 export const shownMaps = () => shown;
 
 export const resultsViewStore = new Store<ResultsView>(OFF);
@@ -219,7 +251,18 @@ async function loadIndex(run: string, g: number): Promise<void> {
     indexed = run;
     const dtS = data.time_step_s ?? data.surfaces[0]?.time_step_s ?? null;
     Animator.reset(data.steps ?? Math.max(1, ...data.surfaces.map((s) => s.time_step_count)), dtS ? dtS * 1000 : null);
-    set({ status: 'ready', data, groups, group, bands, bandHz: defaultBand(bands), baseline: defaultBaseline(run) });
+    // Parity R42: a parameter map is shown only while its bed passed (gate (b)), read from the run's report.
+    let quantities: ResultsView['quantities'] = [];
+    if (data.solver === 'spps') {
+      const rep = await actions.reportFor(run).catch(() => null);
+      if (!fresh(g)) return;
+      const bed = rep?.report?.bed?.parameters as unknown as Record<string, { status?: string; reasons?: string[] } | undefined> | undefined;
+      quantities = MAP_QUANTITIES.map((q) => {
+        const b = bed?.[`map_${q.key}`];
+        return { ...q, withheld: b?.status === 'PASS' ? null : `its test bed has not passed${b?.reasons?.length ? `: ${b.reasons[0]}` : ''}` };
+      });
+    }
+    set({ status: 'ready', data, groups, group, bands, bandHz: defaultBand(bands), baseline: defaultBaseline(run), quantities });
   } catch (e) {
     if (!fresh(g)) return;
     const err = asCmdError(e);
@@ -253,6 +296,10 @@ async function loadMap(g: number): Promise<void> {
     shown = null;
     showMap(null);
     set({ map: null, mapMessage: d.surfaces.length ? 'No map for this choice.' : 'This run has no surface receivers or cutting planes.' });
+    return;
+  }
+  if (v.quantity !== 'level' && !v.diff) {
+    await loadParamMap(g, v.run, info, v.quantity);
     return;
   }
   try {
@@ -300,6 +347,7 @@ async function loadMap(g: number): Promise<void> {
     shown = err ? null : { map: m, base, what, cumulative, windowSteps: win.steps };
     const dtS = m.timeStepS || null;
     set({
+      param: null,
       map: err ? null : { path: info.path, kind, cumulative, windowSteps: win.steps, dtS, range: shownRange, legend: legendOf(shownRange, kind, v.bandHz, fixed !== null, cumulative, windowLabel(win.steps, dtS)) },
       cumulativeRefusal: cumRefusal,
       windowRefusal: win.refusal,
@@ -314,6 +362,61 @@ async function loadMap(g: number): Promise<void> {
     shown = null;
     showMap(null);
     set({ map: null, mapMessage: `${err.message} (${err.code})` });
+  }
+}
+
+/** Parity R42/R73: parameter `key` on every face of the map `info`, computed by core with the receivers' code; drawn over
+ * its own range in its own unit, refused faces not drawn, and why the whole map is refused when it is. */
+async function loadParamMap(g: number, run: string, info: SurfaceMapInfo, key: MapParameter): Promise<void> {
+  const v = resultsViewStore.get();
+  const q = v.quantities.find((x) => x.key === key);
+  const what = groupLabel(info);
+  const off = (message: string) => {
+    shown = null;
+    showMap(null);
+    set({ map: null, param: null, mapMessage: message, cumulativeRefusal: null, windowRefusal: null });
+  };
+  if (!q || q.withheld) return off(`${q?.label ?? key}: withheld, ${q?.withheld ?? 'not offered for this run'}.`);
+  if (info.band_hz === null || info.band_hz === undefined) return off(`${q.label} is read per band: pick a band (the Global map sums them).`);
+  try {
+    const { view, map: m } = decodeParameterMap(await actions.runParameterMap(run, info.path, key));
+    if (!fresh(g)) return;
+    if (!view.map || !m) return off(`${q.label} map refused: ${view.refusal?.message ?? 'no reason given'} (${view.refusal?.code ?? 'refused'}).`);
+    const pm = view.map;
+    const range = paramRange(pm.min, pm.max, pm.unit) ?? { lo: 0, hi: 1 };
+    const err = showMap(m, { run, path: info.path, bandHz: info.band_hz, kind: 'param', range, baseline: null, cumulative: false, windowSteps: 1, stepRatio: 1 }, null);
+    if (!fresh(g)) return;
+    const layer = resultsLayer();
+    layer.setLook({ smooth: false, isoDb: 0 });
+    renderNow();
+    const param: ParamShown = {
+      key,
+      label: q.label,
+      unit: pm.unit,
+      values: pm.values,
+      lo: pm.lo,
+      hi: pm.hi,
+      why: pm.why,
+      note: pm.note,
+      shown: pm.shown,
+      refused: pm.refused as Record<string, number>,
+      lostWarning: pm.lost_share_warning ?? null,
+    };
+    shown = err ? null : { map: m, base: null, what, cumulative: false, windowSteps: 1, param };
+    const { values: _v, lo: _l, hi: _h, why: _w, ...summary } = param;
+    const title = `${what} · ${q.label} · ${bandName(info.band_hz)} · ${pm.shown} of ${pm.values.length} faces`;
+    set({
+      param: summary,
+      map: err ? null : { path: info.path, kind: 'param', cumulative: false, windowSteps: 1, dtS: null, range, legend: { ...paramLabels(range, pm.unit), gradient: legendGradient('param'), title } },
+      cumulativeRefusal: v.cumulative ? 'A parameter map is one value per face, not a sound building up' : null,
+      windowRefusal: null,
+      mapMessage: err ?? (pm.shown ? null : `No face of the ${what.toLowerCase()} has a ${q.label} value at ${bandName(info.band_hz)}.`),
+      smoothRefusal: err ? null : layer.smoothRefusal,
+    });
+  } catch (e) {
+    if (!fresh(g)) return;
+    const err = asCmdError(e);
+    off(`${err.message} (${err.code})`);
   }
 }
 
@@ -404,6 +507,11 @@ export const resultsView = {
     set({ diff: on });
     fire();
   },
+  /** Parity R42: the level, or a parameter map; kept across bands and runs. */
+  setQuantity(q: 'level' | MapParameter): void {
+    set({ quantity: q });
+    fire();
+  },
   setBaseline(run: string): void {
     set({ baseline: run });
     fire();
@@ -442,7 +550,8 @@ export const resultsView = {
   setWindow(ms: number): void {
     set({ windowMs: ms });
     const v = resultsViewStore.get();
-    if (!v.map || !shown) return;
+    // A parameter map is one value per face: no window (it keeps the choice for the level).
+    if (!v.map || !shown || v.map.kind === 'param') return;
     const win = windowOf(ms, v.map.dtS, v.map.cumulative);
     resultsLayer().setWindow(win.steps);
     renderNow();

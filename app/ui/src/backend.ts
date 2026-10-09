@@ -14,6 +14,7 @@ import type {
   EditOutcome,
   EventsProbeReport,
   Extra,
+  MapParameter,
   FloatProbe,
   GpuStatus,
   LibraryMaterial,
@@ -215,6 +216,9 @@ export const backend = {
    */
   runSurfaceMap: (run: string, path: string, maxTexels: number) =>
     invoke<ArrayBuffer>('run_surface_map', { run, path, max_texels: maxTexels }),
+  /** Parity R42/R73: T30, EDT, C80 or D50 on every face of one per-band map, as PMAP bytes
+   * (`decodeParameterMap`): core's values with the receivers' code, and the SMAP they are drawn from. */
+  runParameterMap: (run: string, path: string, parameter: MapParameter) => invoke<ArrayBuffer>('run_parameter_map', { run, path, parameter }),
   /** One band's saved particles as PART bytes (`decodeParticles`). */
   runParticles: (run: string, bandHz: number) => invoke<ArrayBuffer>('run_particles', { run, band_hz: bandHz }),
   runEchogram: (run: string, receiver: string) => invoke<EchogramView>('run_echogram', { run, receiver }),

@@ -669,6 +669,22 @@
           "$ref": "#/$defs/BedParameter",
           "description": "Sound strength G (`g_db` on a band)."
         },
+        "map_c80_db": {
+          "$ref": "#/$defs/BedParameter",
+          "description": "Parity M12c: `map_c80_db` (beds/m12c-*.json)."
+        },
+        "map_d50": {
+          "$ref": "#/$defs/BedParameter",
+          "description": "Parity M12c: `map_d50` (beds/m12c-*.json)."
+        },
+        "map_edt_s": {
+          "$ref": "#/$defs/BedParameter",
+          "description": "Parity M12c: `map_edt_s` (beds/m12c-*.json)."
+        },
+        "map_t30_s": {
+          "$ref": "#/$defs/BedParameter",
+          "description": "Parity M12c: `map_t30_s` (beds/m12c-*.json)."
+        },
         "schroeder_table": {
           "$ref": "#/$defs/BedParameter",
           "description": "Parity M12c: `schroeder_table` (beds/m12c-*.json)."
@@ -710,7 +726,11 @@
         "decay_custom",
         "clarity_custom",
         "definition_custom",
-        "schroeder_table"
+        "schroeder_table",
+        "map_t30_s",
+        "map_edt_s",
+        "map_c80_db",
+        "map_d50"
       ],
       "type": "object"
     },
@@ -2406,6 +2426,33 @@
       ],
       "type": "object"
     },
+    "MapParameter": {
+      "description": "A parameter a map shows.",
+      "enum": [
+        "t30_s",
+        "edt_s",
+        "c80_db",
+        "d50"
+      ],
+      "type": "string"
+    },
+    "MapRefusal": {
+      "description": "Why a map cannot be computed at all.",
+      "properties": {
+        "code": {
+          "description": "`map_not_spps`, `map_not_found`, `map_global`, `map_intensity`, `several_sources`,\n`map_time_step`, `map_unreadable`.",
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
     "MarkerDisplay": {
       "additionalProperties": false,
       "description": "How the 3D view draws a source, a point receiver or a fitting zone (parity G50): upstream's render\nproperties of each (`e_scene_sources_source_rendu.h:46,48`, `e_scene_recepteursp_recepteur_rendu.h:46,48`,\n`e_scene_encombrements_encombrement_rendu.h:57,59`, \"Color\" and \"Show name\"). Display only: no\nsolver file carries it.\n\nIn JSON: `{\"color\": \"#rrggbb\", \"show_name\": false}`, each key left out at its default: the view's\nown colour for the kind, and the name as upstream defaults it (shown beside a source or a\nreceiver, not beside a fitting zone). The element's `display` is left out when both are defaults\n([`MarkerDisplay::normalized`]), so a project saved before it existed loads and saves unchanged.",
@@ -3716,6 +3763,153 @@
           "type": "object"
         }
       ]
+    },
+    "ParameterMap": {
+      "description": "[`MapParameter`] on every face of one `.csbin`, faces in file order (every receiver's, as\nSMAP orders them).",
+      "properties": {
+        "band_hz": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "cutting_plane": {
+          "type": "boolean"
+        },
+        "hi": {
+          "items": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "type": "array"
+        },
+        "lo": {
+          "description": "EDT only: the range EDT v2.1 reads, per face (`null` where refused); empty otherwise.",
+          "items": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "type": "array"
+        },
+        "lost_share_warning": {
+          "description": "The band's lost share when it is a warning (0.3 % to 1 %), shown beside the map.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "max": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "min": {
+          "description": "The smallest and largest value shown; `null` when none is.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "note": {
+          "description": "What a map's values carry and what they do not ([`NOISE_NOTE`] or [`EDT_NOTE`]).",
+          "type": "string"
+        },
+        "parameter": {
+          "$ref": "#/$defs/MapParameter"
+        },
+        "path": {
+          "description": "The file, relative to `solve/`.",
+          "type": "string"
+        },
+        "refused": {
+          "additionalProperties": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "description": "Refused faces, by kind.",
+          "type": "object"
+        },
+        "shown": {
+          "description": "Faces with a value.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "values": {
+          "description": "Per face: the value, or `null` where it is refused (`why` says why).",
+          "items": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "type": "array"
+        },
+        "why": {
+          "description": "Per face: `null` for a value, else the refusal's kind (`range_not_reached`, `truncated`,\n`no_energy`, ...).",
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "parameter",
+        "path",
+        "band_hz",
+        "cutting_plane",
+        "unit",
+        "values",
+        "lo",
+        "hi",
+        "why",
+        "shown",
+        "refused",
+        "note"
+      ],
+      "type": "object"
+    },
+    "ParameterMapView": {
+      "description": "`run_parameter_map`'s JSON (PMAP's head): the map, or why it cannot be computed.",
+      "properties": {
+        "map": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ParameterMap"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "refusal": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MapRefusal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
     },
     "Parameters": {
       "description": "The eight parameters of one band (or of the aggregate).",
@@ -7986,6 +8180,9 @@
     "mesh_now_report": {
       "$ref": "#/$defs/MeshNowReport"
     },
+    "parameter_map": {
+      "$ref": "#/$defs/ParameterMapView"
+    },
     "prepared": {
       "$ref": "#/$defs/Prepared"
     },
@@ -8042,6 +8239,7 @@
     "library_material",
     "library_spectrum",
     "mesh_now_report",
+    "parameter_map",
     "prepared",
     "project_info",
     "recovery_entry",
