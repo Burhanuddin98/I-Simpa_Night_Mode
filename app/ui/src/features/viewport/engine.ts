@@ -114,6 +114,7 @@ import { zoneEdges } from '../../chrome/zones';
 import { DEFAULT_MARKER_COLOR, hasOwnColor, markerColor, nameShown } from '../../chrome/markerDisplay';
 import type { MarkerDisplay } from '../../bindings/schema';
 import { dimensionLines } from './dims';
+import { arrowLength, arrowSegments } from './arrows';
 
 const { acesFilmicToneMapping, attribute, clamp, Fn, max, screenUV, texture, float, instancedBufferAttribute, materialOpacity, mix, output, positionGeometry, sRGBTransferOETF, uniform, uniformArray, vec3, vec4 } = T;
 
@@ -649,6 +650,9 @@ class ViewportEngine {
   private readonly halo: MarkerSprites;
   private readonly sourceStems: LineSegments;
   private readonly receiverStems: LineSegments;
+  /** M30: each enabled directional source's arrow along the direction it emits (arrows.ts), in its marker's colour. */
+  private readonly sourceArrows: LineSegments;
+  private arrowSummary: { name: string; from: Vec; to: Vec; color: string }[] = [];
   /** W1: each cutting plane's outline, and its cell grid off the Results step (upstream's DrawPlan). */
   private readonly planeOutline: LineSegments2;
   private readonly planeGrid: LineSegments2;
@@ -778,6 +782,7 @@ class ViewportEngine {
     this.halo = new MarkerSprites(ringPixels(64, 0.78, 0.92, RED, null), 64, HALO_PX);
     this.sourceStems = new LineSegments(emptyGeometry(), inSrgb(new LineBasicNodeMaterial({ color: SELECT, transparent: true, opacity: 0.9 })));
     this.receiverStems = new LineSegments(emptyGeometry(), inSrgb(new LineBasicNodeMaterial({ color: LINE, transparent: true, opacity: 0.5 })));
+    this.sourceArrows = new LineSegments(emptyGeometry(), inSrgb(new LineBasicNodeMaterial({ vertexColors: true, transparent: true, opacity: 0.95, depthWrite: false })));
     this.planeOutline = new LineSegments2(emptyFat(), new FatLineMaterial({ color: SELECT, linewidth: 3.5, opacity: 0.95, depthWrite: false }));
     this.planeGrid = new LineSegments2(emptyFat(), new FatLineMaterial({ color: SELECT, linewidth: 1.5, opacity: 0.45, depthWrite: false }));
     // G28: a fitting zone's box, in the line colour (the planes and the selection are red), dashed by its opacity.
@@ -822,6 +827,7 @@ class ViewportEngine {
       [this.selectionEdges, 4],
       [this.sourceStems, 5],
       [this.receiverStems, 5],
+      [this.sourceArrows, 5],
       [this.planeGrid, 4],
       [this.planeOutline, 5],
       [this.zoneOutline, 5],
@@ -841,6 +847,7 @@ class ViewportEngine {
       this.selectionEdges,
       this.sourceStems,
       this.receiverStems,
+      this.sourceArrows,
       this.planeGrid,
       this.planeOutline,
       this.zoneOutline,
@@ -951,6 +958,9 @@ class ViewportEngine {
       registerHook('planeOutlines', () => this.planeSummary),
       // G28: the fitting zones the view draws (name, box, edges drawn).
       registerHook('zoneOutlines', () => this.zoneSummary),
+      // M30 and G50: the directional sources' arrows drawn, and every marker's colour and whether its name is written.
+      registerHook('sourceArrows', () => this.arrowSummary),
+      registerHook('markerLooks', () => this.markers.map((m) => ({ kind: m.kind, name: m.name, color: m.color, named: m.named, labelShown: m.label.style.display !== 'none' }))),
       // G44 and G46: whether the model's edges are drawn, and the upright grids laid out (kind, line count).
       registerHook('styleLayers', () => ({ edges: this.edges.visible, wallGrids: this.wallGridKinds, wallGridLines: this.wallGridSegments })),
       // Items 7 and 8: the faces the view leaves out now (Roof off, Isolate), in project face numbering.
@@ -2372,6 +2382,7 @@ class ViewportEngine {
     this.receiverPoints.set(rcv.xyz, rcv.tints);
     this.sourceStems.geometry = stems(src.ms);
     this.receiverStems.geometry = stems(rcv.ms);
+    this.updateArrows();
     const picked = list.find((m) => (sel.kind === 'source' || sel.kind === 'receiver') && m.kind === sel.kind && m.id === sel.id);
     this.halo.set(picked ? [picked.p.x, picked.p.y, picked.p.z] : []);
 
@@ -2379,6 +2390,38 @@ class ViewportEngine {
     lit.forEach((s, i) => (this.shared.glowPos.array[i] as Vector3).set(...(s.position as [number, number, number])));
     this.shared.glowCount.value = lit.length;
     this.updateGlow();
+  }
+
+  /**
+   * M30: an arrow from each enabled unidirectional or balloon source along its direction (upstream draws one
+   * for those two kinds only), in the source's marker colour, its length set by the room (arrows.ts).
+   */
+  private updateArrows(): void {
+    const view = sceneStore.get()?.view;
+    const len = arrowLength(this.bounds);
+    const flat: number[] = [];
+    const colors: number[] = [];
+    const summary: typeof this.arrowSummary = [];
+    for (const s of view?.sources ?? []) {
+      const d = s.directivity;
+      if (!s.enabled || (d.kind !== 'unidirectional' && d.kind !== 'balloon')) continue;
+      if (![...s.position, ...d.direction].every(finite)) continue;
+      const seg = arrowSegments(s.position as Vec, d.direction as Vec, len);
+      if (!seg.length) continue;
+      const color = markerColor(s, 'source');
+      const c = new Color(color);
+      flat.push(...seg);
+      for (let k = 0; k < seg.length / 3; k++) colors.push(c.r, c.g, c.b);
+      summary.push({ name: s.name, from: seg.slice(0, 3) as Vec, to: seg.slice(3, 6) as Vec, color });
+    }
+    this.sourceArrows.geometry.dispose();
+    const g = emptyGeometry();
+    if (flat.length) {
+      g.setAttribute('position', new Float32BufferAttribute(flat, 3));
+      g.setAttribute('color', new Float32BufferAttribute(colors, 3));
+    }
+    this.sourceArrows.geometry = g;
+    this.arrowSummary = summary;
   }
 
   /**
