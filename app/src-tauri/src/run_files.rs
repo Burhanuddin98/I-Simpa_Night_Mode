@@ -3,12 +3,15 @@
 //! - **R2, a label**: a name of the person's own beside `#n`, kept in `notes.json` beside
 //!   `run.json`, never by renaming the folder (the folder's name is the run's key everywhere, and
 //!   `is_run_name` is what keeps a path from climbing out of the runs root).
+//! - **R4, open the folder**: Explorer on the run's folder, started from here, so the webview keeps
+//!   no shell permission (capabilities/default.json: "No shell").
 //!
 //! `notes.json` is the person's, not the run's: `results::load` re-checks `run.json` and `solve/`
 //! only, so a note never changes whether a run's results verify. A run is acted on only when it is
-//! a row of the open project's Runs tab (`runs::list`), and never while it is the active run.
+//! a row of the open project's Runs tab (`runs::list`), and changed never while it is the active
+//! run.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -82,21 +85,30 @@ pub fn checked_label(label: &str) -> CmdResult<Option<String>> {
     Ok((!t.is_empty()).then(|| t.to_string()))
 }
 
+/// The row of `run` in the open project's runs, refused unless it is one.
+fn row_of(view: &RunsView, run: &str, what: &str) -> CmdResult<RunRow> {
+    view.rows
+        .iter()
+        .find(|r| r.run == run)
+        .cloned()
+        .ok_or_else(|| {
+            CmdError::new(
+                "RUN_NOT_FOUND",
+                format!("{what}: '{run}' is not a run of the open project"),
+            )
+        })
+}
+
 /// The row of `run` in the open project's runs, refused unless it is one and is not running.
 fn listed(view: &RunsView, run: &str, what: &str) -> CmdResult<RunRow> {
-    let row = view.rows.iter().find(|r| r.run == run).ok_or_else(|| {
-        CmdError::new(
-            "RUN_NOT_FOUND",
-            format!("{what}: '{run}' is not a run of the open project"),
-        )
-    })?;
+    let row = row_of(view, run, what)?;
     if row.status == RunStatusUi::Running || view.active.as_deref() == Some(run) {
         return Err(CmdError::new(
             "RUN_ACTIVE",
             format!("{what}: run {} is still running", row.number),
         ));
     }
-    Ok(row.clone())
+    Ok(row)
 }
 
 /// R2: sets (or, empty, clears) the label of `run`, one of the project at `project`'s runs under
@@ -124,6 +136,47 @@ pub fn set_label(
     notes.label = label;
     write_notes(&dir, &notes)?;
     runs::list(root, project, active)
+}
+
+/// R4: the folder of `run`, one of the open project's runs (a running one too), that Explorer
+/// is to open; refused for anything else, so no path but a listed run folder reaches Explorer.
+pub fn folder_to_open(
+    root: &Path,
+    project: &Path,
+    active: Option<&str>,
+    run: &str,
+) -> CmdResult<PathBuf> {
+    let view = runs::list(root, project, active)?;
+    row_of(&view, run, "Open folder")?;
+    let dir = root.join(run);
+    if !dir.is_dir() {
+        return Err(CmdError::new(
+            "RUN_NOT_FOUND",
+            format!("Open folder: {} is not there", dir.display()),
+        ));
+    }
+    Ok(std::path::absolute(&dir).unwrap_or(dir))
+}
+
+/// R4: opens `dir` in Explorer. Explorer answers 1 even when it opened the window, so only a
+/// failure to start it is an error.
+pub fn open_in_explorer(dir: &Path) -> CmdResult<()> {
+    if !cfg!(windows) {
+        return Err(CmdError::new(
+            "OPEN_FOLDER_UNSUPPORTED",
+            "opening a folder is done with Explorer, on Windows only",
+        ));
+    }
+    std::process::Command::new("explorer.exe")
+        .arg(dir)
+        .spawn()
+        .map(drop)
+        .map_err(|e| {
+            CmdError::new(
+                "OPEN_FOLDER_FAILED",
+                format!("Explorer did not start for {}: {e}", dir.display()),
+            )
+        })
 }
 
 #[cfg(test)]
@@ -235,6 +288,27 @@ mod tests {
             std::fs::read_to_string(root.join(run).join(NOTES_FILE)).unwrap(),
             "{"
         );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn r4_only_a_listed_run_folder_is_opened_a_running_one_too() {
+        let (dir, project, root) = bed("open");
+        let run = "20260101-000001-000-spps";
+        let got = folder_to_open(&root, &project, Some(run), run).unwrap();
+        assert!(got.is_absolute() && got.ends_with(run), "{got:?}");
+        for bad in [
+            "notes",
+            "..",
+            "20260101-000009-000-spps",
+            "20260101-000001-000-spps/..",
+        ] {
+            assert_eq!(
+                folder_to_open(&root, &project, None, bad).unwrap_err().code,
+                "RUN_NOT_FOUND",
+                "{bad}"
+            );
+        }
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

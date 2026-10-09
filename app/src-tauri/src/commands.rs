@@ -650,6 +650,21 @@ pub async fn run_label(
     .await
 }
 
+/// Parity R4: opens the folder of `run`, one of the open project's runs, in Explorer. Started
+/// from here, so the webview has no shell permission; answers the folder opened.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn run_open_folder(state: State<'_, AppState>, run: String) -> CmdResult<String> {
+    let (session, slot) = (state.session.clone(), state.run.clone());
+    guard::blocking("run_open_folder", move || {
+        let (path, root) = project_and_root(&session, &run)?;
+        let active = lock(&slot, "run")?.active_run().map(str::to_string);
+        let dir = run_files::folder_to_open(&root, &path, active.as_deref(), &run)?;
+        run_files::open_in_explorer(&dir)?;
+        Ok(dir.display().to_string())
+    })
+    .await
+}
+
 /// Whether the run `run` (a bare run-folder name) has results that verify. Never a value.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn run_results(state: State<'_, AppState>, run: String) -> CmdResult<ResultsState> {

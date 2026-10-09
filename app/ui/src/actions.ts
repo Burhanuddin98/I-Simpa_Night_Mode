@@ -686,6 +686,13 @@ export async function labelRun(runName: string, label: string): Promise<RunsView
   return view;
 }
 
+/** R4: opens run `run`'s folder in Explorer (the core starts it); the Console says which folder. */
+export async function openRunFolder(runName: string): Promise<string> {
+  const dir = await run('Could not open the run folder', () => backend.runOpenFolder(runName));
+  log('INFO', `Opened ${dir} in Explorer`);
+  return dir;
+}
+
 /**
  * A run the backend is running that this page has no record of: the page was reloaded mid-run
  * (WebView2's reload, the devtools), which loses everything in its memory, `runStore` included,

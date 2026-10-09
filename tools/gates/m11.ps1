@@ -231,7 +231,9 @@ Check "M10 static checks (m10.ps1 -Only static -SkipCore; they run M9's)" {
 # (df74c17, surface groups added empty), which had joined the four lists without a re-pin.
 # Re-pinned 2026-10-09 (parity R2): 54 to 55, run_label added on purpose (a run's label, kept in
 # notes.json beside its run.json, never a folder rename).
-Check "command inventory: 55 commands (M10's 28, M11's 9, PQ3's edit_reband, row 15's edit_regroup, M12's 5 reads, W9's export_write, backlog 80's advice_apply, the landing page's example_open, A5's spps_gpu_status, C1's spectrum_library, C5's run_auralize, G8's model_repair, G18's edit_add_group, G32's mesh_now, G7's model_reimport and R2's run_label), the same set in the attributes, generate_handler!, build.rs and capabilities" {
+# Re-pinned 2026-10-09 (parity R4): 55 to 56, run_open_folder added on purpose (Explorer on a listed
+# run folder, started by the core so the webview keeps no shell permission).
+Check "command inventory: 56 commands (M10's 28, M11's 9, PQ3's edit_reband, row 15's edit_regroup, M12's 5 reads, W9's export_write, backlog 80's advice_apply, the landing page's example_open, A5's spps_gpu_status, C1's spectrum_library, C5's run_auralize, G8's model_repair, G18's edit_add_group, G32's mesh_now, G7's model_reimport, R2's run_label and R4's run_open_folder), the same set in the attributes, generate_handler!, build.rs and capabilities" {
     $attrs = @()
     foreach ($f in Get-ChildItem (Join-Path $tauriDir 'src') -Filter *.rs) {
         $attrs += @([regex]::Matches((RustCode $f.FullName), '#\[tauri::command\b[^\]]*\]\s*(?:#\[[^\]]*\]\s*)*pub\s+async\s+fn\s+(\w+)') | ForEach-Object { $_.Groups[1].Value })
@@ -251,7 +253,7 @@ Check "command inventory: 55 commands (M10's 28, M11's 9, PQ3's edit_reband, row
     $absent = @($m11Commands | Where-Object { $attrs -notcontains $_ })
     if ($absent) { Note "M11 commands missing: $($absent -join ', ')" }
     $m12Reads = @('run_report', 'run_data', 'run_surface_map', 'run_particles', 'run_echogram')
-    $same -and $attrs.Count -eq 55 -and $attrs -contains 'run_label' -and $attrs -contains 'model_reimport' -and $attrs -contains 'mesh_now' -and $attrs -contains 'edit_add_group' -and $attrs -contains 'model_repair' -and $attrs -contains 'run_auralize' -and $attrs -contains 'advice_apply' -and $attrs -contains 'example_open' -and $attrs -contains 'spps_gpu_status' -and $attrs -contains 'spectrum_library' -and $absent.Count -eq 0 -and $attrs -contains 'edit_reband' -and $attrs -contains 'edit_regroup' -and $attrs -contains 'export_write' -and @($m12Reads | Where-Object { $attrs -notcontains $_ }).Count -eq 0
+    $same -and $attrs.Count -eq 56 -and $attrs -contains 'run_open_folder' -and $attrs -contains 'run_label' -and $attrs -contains 'model_reimport' -and $attrs -contains 'mesh_now' -and $attrs -contains 'edit_add_group' -and $attrs -contains 'model_repair' -and $attrs -contains 'run_auralize' -and $attrs -contains 'advice_apply' -and $attrs -contains 'example_open' -and $attrs -contains 'spps_gpu_status' -and $attrs -contains 'spectrum_library' -and $absent.Count -eq 0 -and $attrs -contains 'edit_reband' -and $attrs -contains 'edit_regroup' -and $attrs -contains 'export_write' -and @($m12Reads | Where-Object { $attrs -notcontains $_ }).Count -eq 0
 }
 
 Check "lint: the M11 commands are called only from actions.ts (and declared in backend.ts)" {

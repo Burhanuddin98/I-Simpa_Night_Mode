@@ -8,6 +8,8 @@
 // - R2: the person's label for a run, from notes.json beside its run.json, leads the Check column
 //   (`[data-part=label]`); the selected row's detail edits it (`[data-field=run-label]`: Enter or
 //   leaving the field keeps it, Esc puts it back, empty clears it).
+// - R4: "Open folder" in the detail (`[data-action=run-open-folder]`): Explorer on the run's folder,
+//   started by the core, so the page holds no shell permission.
 // - A click selects the run (the Results step shows it). The selected row opens to show the
 //   per-band loss, the exe's sha256 and the solver build's verdict (the core's, `buildMark`,
 //   backlog 38), the mesh's sha256, the line counts, the exit code and the folder.
@@ -289,6 +291,21 @@ function Detail({ row, root }: { row: RunRow; root: string | null }) {
           <DetailText text={row.manifest_error} />
         </div>
       )}
+      <div className="detail-line run-actions" data-part="run-actions">
+        <span className="k">Folder</span>
+        <button
+          type="button"
+          className="small-button"
+          data-action="run-open-folder"
+          title={root ? `Open ${root}\\${row.run} in Explorer` : 'Open the run folder in Explorer'}
+          onClick={(e) => {
+            e.stopPropagation();
+            actions.fire(actions.openRunFolder(row.run));
+          }}
+        >
+          Open folder
+        </button>
+      </div>
     </div>
   );
 }

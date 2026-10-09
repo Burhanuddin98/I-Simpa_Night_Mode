@@ -169,6 +169,8 @@ export const backend = {
   runsList: () => invoke<RunsView>('runs_list'),
   /** R2: a run's label (empty clears it), kept beside its run.json; answers the runs listed after it. */
   runLabel: (run: string, label: string) => invoke<RunsView>('run_label', { run, label }),
+  /** R4: Explorer on a listed run's folder, started by the core; answers the folder opened. */
+  runOpenFolder: (run: string) => invoke<string>('run_open_folder', { run }),
   runResults: (run: string) => invoke<ResultsState>('run_results', { run }),
   projImport: (path: string) => invoke<SceneState>('proj_import', { path }),
   materialLibrary: () => invoke<LibraryMaterial[]>('material_library'),
