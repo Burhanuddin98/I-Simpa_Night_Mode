@@ -259,3 +259,16 @@ test('withReceiverFaceArea: no op when stored; setting turns -Y off with it; cle
   assert.deepEqual(off.meshing, { ...s.meshing, preserve_boundary: false }, 'clearing does not turn -Y back on');
   assert.match(opText(setSolverSettings(on)), /"surface_receiver_max_area_m2":2.5,"preserve_boundary":false/);
 });
+
+// G36: upstream's scene correction before meshing.
+import { withPreprocess } from './settings.ts';
+
+test('withPreprocess: no op when stored; otherwise meshing.preprocess only', () => {
+  const s = solvers();
+  assert.equal(withPreprocess(s, true), null);
+  const off = withPreprocess(s, false);
+  assert.ok(off);
+  assert.deepEqual(off.meshing, { ...s.meshing, preprocess: false });
+  assert.deepEqual({ ...off, meshing: s.meshing }, s);
+  assert.match(opText(setSolverSettings(off)), /"preprocess":false/);
+});

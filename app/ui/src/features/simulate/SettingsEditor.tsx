@@ -6,8 +6,8 @@
 // SPPS: particles per source and band (C7), particles saved for playback with the particle
 // file's size (C8), duration (C10), time step in ms with the step count (C11), the receiver
 // radius, the particle extinction and "Preserve walls when meshing (-Y)" (backlog 80: every value
-// the run-quality advisor's Apply sets has its field), the surface-receiver face size TetGen
-// refines to (G34), the method (C12),
+// the run-quality advisor's Apply sets has its field), upstream's scene correction before meshing
+// (G36), the surface-receiver face size TetGen refines to (G34), the method (C12),
 // sound maps per band (C21) and what they show (C20), echogram per source (C22), transmission
 // through walls (C17), the bands it computes (C25) and the band
 // presets (C26), and the air (C27) with the switch that lets it absorb (C14). TCR: its method as
@@ -51,6 +51,7 @@ import {
   timeStepInputText,
   withAir,
   withMeshing,
+  withPreprocess,
   withReceiverFaceArea,
   withSpps,
   withSoundMap,
@@ -468,6 +469,13 @@ export function SettingsEditor({ scene, settings, solver }: { scene: SceneState 
         return next ? setSolverSettings(next) : null;
       }),
     );
+  const setPreprocess = (on: boolean) =>
+    actions.fire(
+      edit(keyOf('meshing', 'preprocess'), (now) => {
+        const next = withPreprocess(now.solvers, on);
+        return next ? setSolverSettings(next) : null;
+      }),
+    );
   const setMethod = (m: ComputationMethod) =>
     actions.fire(edit(keyOf('spps', 'method'), (now) => (now.solvers.spps.method === m ? null : setSolverSettings(withSpps(now.solvers, { method: m })))));
 
@@ -580,6 +588,15 @@ export function SettingsEditor({ scene, settings, solver }: { scene: SceneState 
           refused={refusals.get(keyOf('meshing', 'preserve_boundary')) ?? []}
           current={issuesAt(issues, ['/solvers/meshing/preserve_boundary'])}
         />
+      </div>
+      <div className="sim-setting sim-block" data-setting="preprocess">
+        <Toggle field="preprocess" label="Scene correction before meshing" checked={s.solvers.meshing.preprocess} onChange={setPreprocess} />
+        <div className="sim-hint" data-part="preprocess-hint">
+          Runs upstream's preprocess.exe on the model before TetGen, as upstream does by default: it rewrites faces that overlap or
+          cut through each other, so a model TetGen refuses may mesh. The model check then runs on what it wrote; when it gives
+          up, the model is meshed as it is. Off is this app's default.
+        </div>
+        <Issues refused={refusals.get(keyOf('meshing', 'preprocess')) ?? []} current={issuesAt(issues, ['/solvers/meshing/preprocess'])} />
       </div>
       <div className="sim-setting sim-block" data-setting="receiver_face_area">
         <NumberField

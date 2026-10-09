@@ -265,6 +265,15 @@ export function withReceiverFaceArea(s: SolverSettings, area: number | null): So
   return withMeshing(s, area === null ? { surface_receiver_max_area_m2: null } : { surface_receiver_max_area_m2: area, preserve_boundary: false });
 }
 
+/**
+ * The solver settings with upstream's scene correction before meshing set (G36,
+ * `mesh_conf@preprocess`: `preprocess.exe` on the `.poly` before TetGen), everything else as
+ * stored; null when it already is.
+ */
+export function withPreprocess(s: SolverSettings, on: boolean): SolverSettings | null {
+  return s.meshing.preprocess === on ? null : withMeshing(s, { preprocess: on });
+}
+
 /** The environment with the air's fields replaced; everything else as stored. */
 export function withAir(
   env: Environment,

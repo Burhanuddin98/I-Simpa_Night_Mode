@@ -360,3 +360,50 @@ fn the_face_size_turned_back_leaves_tetgen_input_byte_identical() {
         );
     }
 }
+
+#[test]
+fn the_scene_correction_turned_back_leaves_tetgen_input_byte_identical() {
+    for (name, original) in fixtures() {
+        let before = mesh_input(&original);
+        let configs = both_configs(&original);
+        let stored = original.solvers.meshing.preprocess;
+        let mut p = original.clone();
+        let undo = control_op(&p, &["meshing", "preprocess"], Value::Bool(!stored))
+            .apply(&mut p)
+            .unwrap();
+        assert_eq!(p.solvers.meshing.preprocess, !stored);
+        let turned = mesh_input(&p);
+        assert_eq!(
+            both_configs(&p),
+            configs,
+            "{name}: config.xml does not hold it"
+        );
+        assert_eq!(
+            turned.flags, before.flags,
+            "{name}: TetGen's flags do not change"
+        );
+        assert_eq!(turned.var, before.var, "{name}: nor the .var");
+        assert_ne!(turned.hash, before.hash, "{name}: a run would mesh again");
+        let mut back = p.clone();
+        control_op(&back, &["meshing", "preprocess"], Value::Bool(stored))
+            .apply(&mut back)
+            .unwrap();
+        assert_eq!(
+            mesh_input(&back),
+            before,
+            "{name}: turned back, byte-identical"
+        );
+        assert_eq!(back, original, "{name}");
+        undo.apply(&mut p).unwrap();
+        assert_eq!(mesh_input(&p), before, "{name}: undone");
+        println!(
+            "{name}: G36 preprocess {stored} -> {} -> {stored}, .poly {} on the way, TetGen input identical turned back",
+            !stored,
+            if turned.poly == before.poly {
+                "the same"
+            } else {
+                "rewritten for preprocess.exe"
+            }
+        );
+    }
+}
