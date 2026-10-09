@@ -195,3 +195,17 @@ test('withSppsSwitch: the value already stored is no op; another sets that one f
   assert.match(opText(setSolverSettings(off)), /"air_absorption":false/);
   assert.equal(withSppsSwitch(off, 'air_absorption', false), null);
 });
+
+// C23: TCR's own switch, written into TCR's config.xml only.
+import { withTcrAirAbsorption } from './settings.ts';
+
+test("withTcrAirAbsorption: no op when stored; otherwise TCR's switch only, SPPS's left as it is", () => {
+  const s = solvers();
+  assert.equal(withTcrAirAbsorption(s, true), null);
+  const off = withTcrAirAbsorption(s, false);
+  assert.ok(off);
+  assert.equal(off.tcr.air_absorption, false);
+  assert.equal(off.spps.air_absorption, true, "SPPS's switch is its own");
+  assert.deepEqual({ ...off, tcr: s.tcr }, s);
+  assert.equal(s.tcr.air_absorption, true, 'the input is not changed');
+});

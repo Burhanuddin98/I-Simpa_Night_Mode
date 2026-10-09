@@ -80,14 +80,24 @@ fn flag(v: &Value) -> String {
 }
 
 fn controls() -> Vec<Control> {
-    vec![Control {
-        row: "C14 SPPS air absorption",
-        solver: SolverKind::Spps,
-        field: &["spps", "air_absorption"],
-        turn: flip,
-        written: flag,
-        attr: "abs_atmo_calc",
-    }]
+    vec![
+        Control {
+            row: "C14 SPPS air absorption",
+            solver: SolverKind::Spps,
+            field: &["spps", "air_absorption"],
+            turn: flip,
+            written: flag,
+            attr: "abs_atmo_calc",
+        },
+        Control {
+            row: "C23 TCR air absorption",
+            solver: SolverKind::Tcr,
+            field: &["tcr", "air_absorption"],
+            turn: flip,
+            written: flag,
+            attr: "abs_atmo_calc",
+        },
+    ]
 }
 
 fn get<'a>(v: &'a Value, path: &[&str]) -> &'a Value {

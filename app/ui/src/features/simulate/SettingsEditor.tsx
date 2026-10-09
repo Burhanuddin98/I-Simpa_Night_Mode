@@ -9,7 +9,7 @@
 // the run-quality advisor's Apply sets has its field), the method (C12),
 // sound maps per band (C21), echogram per source (C22), the bands it computes (C25) and the band
 // presets (C26), and the air (C27) with the switch that lets it absorb (C14). TCR: its method as
-// drawn, its bands and the air.
+// drawn, its bands and the air with TCR's own absorb switch (C23).
 // Under the particles (and TCR's method), the run-time forecast (runTime.ts, Burhan's 10-05 UI
 // list item 5): this project's last run of the solver, scaled to the field as typed, and the
 // finish as a clock time; or that there is no measurement yet.
@@ -49,6 +49,7 @@ import {
   withMeshing,
   withSpps,
   withSppsSwitch,
+  withTcrAirAbsorption,
   type SppsSwitch,
 } from './settings';
 
@@ -322,8 +323,9 @@ function airPatch(key: AirKey, v: number) {
 }
 
 /**
- * The air (C27): temperature, humidity and pressure, which both solvers use; and, for SPPS, the
- * switch that lets the air absorb at all (C14, `simulation@abs_atmo_calc`).
+ * The air (C27): temperature, humidity and pressure, which both solvers use; and the chosen
+ * solver's own switch that lets the air absorb at all (`simulation@abs_atmo_calc`: SPPS C14,
+ * TCR C23), each solver's written into its own config.xml.
  */
 function AirEditor({ scene, s, solver }: { scene: SceneState; s: ProjectSettings; solver: SolverName }) {
   const refusals = useStore(refusalStore);
@@ -332,7 +334,7 @@ function AirEditor({ scene, s, solver }: { scene: SceneState; s: ProjectSettings
   const setAirAbsorption = (on: boolean) =>
     actions.fire(
       edit(airKey, (now) => {
-        const next = withSppsSwitch(now.solvers, 'air_absorption', on);
+        const next = solver === 'tcr' ? withTcrAirAbsorption(now.solvers, on) : withSppsSwitch(now.solvers, 'air_absorption', on);
         return next ? setSolverSettings(next) : null;
       }),
     );
@@ -358,16 +360,13 @@ function AirEditor({ scene, s, solver }: { scene: SceneState; s: ProjectSettings
         />
       ))}
       <Issues refused={[]} current={range} />
-      {solver === 'spps' && (
-        <>
-          <Toggle field="air_absorption" label="Air absorption" checked={s.solvers.spps.air_absorption} onChange={setAirAbsorption} />
-          <div className="sim-hint" data-part="air-absorption-hint">
-            Off, the air takes no energy from the sound and only the surfaces absorb it, so the sound dies away more slowly, most
-            in the high bands. The air above still sets the speed of sound. On is upstream's default.
-          </div>
-          <Issues refused={refusals.get(airKey) ?? []} current={issuesAt(scene.issues, [`/solvers/${solver}/air_absorption`])} />
-        </>
-      )}
+      <Toggle field="air_absorption" label="Air absorption" checked={s.solvers[solver].air_absorption} onChange={setAirAbsorption} />
+      <div className="sim-hint" data-part="air-absorption-hint">
+        {solver === 'tcr'
+          ? "Off, Sabine and Eyring leave the air out of the absorption: only the surfaces absorb, so the reverberation comes out longer and the level higher, most in the high bands. On is upstream's default."
+          : "Off, the air takes no energy from the sound and only the surfaces absorb it, so the sound dies away more slowly, most in the high bands. The air above still sets the speed of sound. On is upstream's default."}
+      </div>
+      <Issues refused={refusals.get(airKey) ?? []} current={issuesAt(scene.issues, [`/solvers/${solver}/air_absorption`])} />
     </>
   );
 }

@@ -216,6 +216,15 @@ export function withSppsSwitch(s: SolverSettings, field: SppsSwitch, on: boolean
   return withSpps(s, patch);
 }
 
+/**
+ * The solver settings with TCR's air absorption switch set (C23, TCR's own
+ * `simulation@abs_atmo_calc`), everything else as stored; null when it already is.
+ */
+export function withTcrAirAbsorption(s: SolverSettings, on: boolean): SolverSettings | null {
+  if (s.tcr.air_absorption === on) return null;
+  return { ...s, tcr: { ...s.tcr, air_absorption: on } };
+}
+
 /** The solver settings with meshing fields replaced (`-Y`, backlog 80); everything else as stored. */
 export function withMeshing(s: SolverSettings, patch: Partial<MeshSettings>): SolverSettings {
   return { ...s, meshing: { ...s.meshing, ...patch } };
