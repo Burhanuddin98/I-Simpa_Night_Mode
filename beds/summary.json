@@ -1569,6 +1569,90 @@
         "The bed is closed-form series through the report's own path (results::report::parameters_with); no SPPS-scale bed (M8b sets B and C) scores it.",
         "No comparison with a measured room (V2-9)."
       ]
+    },
+    "clarity_custom": {
+      "status": "PASS",
+      "by": "the rule",
+      "bed": "M12c R20, closed-form splits through the report's path (simpa bed-extra r20)",
+      "result": {
+        "document": "docs/investigations/2026-10-09-parity-refresh/README.md",
+        "sections": [
+          "docs/investigations/2026-10-09-parity-refresh/README.md section 4, R20: simpa bed-extra r20 (crates/simpa-core/src/results/extra_bed.rs)"
+        ]
+      },
+      "artifacts": [
+        {
+          "path": "beds/m12c-r20.json",
+          "sha256": "a339a91ef18cd93e8b5c484d985b033bc0e875897ebedfd81562c981603619b4",
+          "section": "docs/investigations/2026-10-09-parity-refresh/README.md section 4, R20: simpa bed-extra r20 (crates/simpa-core/src/results/extra_bed.rs)",
+          "git_commit": "3aa520d1a58b2ee7463454b6b1234d4120b186a0",
+          "uncommitted_changes": true,
+          "uncommitted_summary": "12 files changed, 342 insertions(+), 8 deletions(-)",
+          "checks": [
+            {
+              "read": "pass",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            },
+            {
+              "read": "failures",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            }
+          ]
+        }
+      ],
+      "reasons": [],
+      "notes": [
+        "C at a time limit a user chooses, 5 to 1000 ms (upstream's C list), by C50's and C80's split of the Schroeder curve; shown `wide` where the bin straddling the limit moves it past 1/10 of the JND, as C50 and C80 are.",
+        "Its Monte-Carlo noise is judged with a calibration it carries, not one measured for it: of its measured neighbours, the largest calibrated factor, on the narrowest domain (params::noise::extra_calibration). For C: C50's and C80's.",
+        "The bed is closed-form series through the report's own path (results::report::parameters_with); no SPPS-scale bed (M8b sets B and C) scores it.",
+        "No comparison with a measured room (V2-9)."
+      ]
+    },
+    "definition_custom": {
+      "status": "PASS",
+      "by": "the rule",
+      "bed": "M12c R20, closed-form splits through the report's path (simpa bed-extra r20)",
+      "result": {
+        "document": "docs/investigations/2026-10-09-parity-refresh/README.md",
+        "sections": [
+          "docs/investigations/2026-10-09-parity-refresh/README.md section 4, R20: simpa bed-extra r20 (crates/simpa-core/src/results/extra_bed.rs)"
+        ]
+      },
+      "artifacts": [
+        {
+          "path": "beds/m12c-r20.json",
+          "sha256": "a339a91ef18cd93e8b5c484d985b033bc0e875897ebedfd81562c981603619b4",
+          "section": "docs/investigations/2026-10-09-parity-refresh/README.md section 4, R20: simpa bed-extra r20 (crates/simpa-core/src/results/extra_bed.rs)",
+          "git_commit": "3aa520d1a58b2ee7463454b6b1234d4120b186a0",
+          "uncommitted_changes": true,
+          "uncommitted_summary": "12 files changed, 342 insertions(+), 8 deletions(-)",
+          "checks": [
+            {
+              "read": "pass",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            },
+            {
+              "read": "failures",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            }
+          ]
+        }
+      ],
+      "reasons": [],
+      "notes": [
+        "D at a time limit a user chooses, 5 to 1000 ms (upstream's D list), by D50's split of the Schroeder curve.",
+        "Its Monte-Carlo noise is judged with a calibration it carries, not one measured for it: of its measured neighbours, the largest calibrated factor, on the narrowest domain (params::noise::extra_calibration). For D: D50's.",
+        "The bed is closed-form series through the report's own path (results::report::parameters_with); no SPPS-scale bed (M8b sets B and C) scores it.",
+        "No comparison with a measured room (V2-9)."
+      ]
     }
   }
 }

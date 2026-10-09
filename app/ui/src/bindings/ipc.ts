@@ -4133,14 +4133,16 @@ export interface BedReport {
 export interface BedParameters {
   c50_db: BedParameter;
   c80_db: BedParameter;
+  clarity_custom: BedParameter1;
   d50: BedParameter;
-  dba: BedParameter1;
-  decay_custom: BedParameter2;
+  dba: BedParameter2;
+  decay_custom: BedParameter3;
+  definition_custom: BedParameter4;
   edt_s: BedParameter;
-  g_db: BedParameter3;
+  g_db: BedParameter5;
   spl_db: BedParameter;
-  sti: BedParameter4;
-  t15_s: BedParameter5;
+  sti: BedParameter6;
+  t15_s: BedParameter7;
   t20_s: BedParameter;
   t30_s: BedParameter;
   ts_s: BedParameter;
@@ -4198,6 +4200,24 @@ export interface BedParameter4 {
  * (the marks, the `wide` rules, what was not tested).
  */
 export interface BedParameter5 {
+  notes: string[];
+  reasons: string[];
+  status: BedStatus;
+}
+/**
+ * One parameter's entry: its status, why it failed (empty for a PASS), and the summary's notes
+ * (the marks, the `wide` rules, what was not tested).
+ */
+export interface BedParameter6 {
+  notes: string[];
+  reasons: string[];
+  status: BedStatus;
+}
+/**
+ * One parameter's entry: its status, why it failed (empty for a PASS), and the summary's notes
+ * (the marks, the `wide` rules, what was not tested).
+ */
+export interface BedParameter7 {
   notes: string[];
   reasons: string[];
   status: BedStatus;

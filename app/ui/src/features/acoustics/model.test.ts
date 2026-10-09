@@ -563,3 +563,12 @@ test('Acoustics R15: chosen decay ranges parse, are shown only by their bed, and
   assert.deepEqual(c.value, { path: 'spps.point_receivers.1.bands.0.parameters.custom.0.value.value', digits: 2, text: '0.73' });
   assert.equal(customCell(rep, 1, 0, 0), null, 'no second chosen quantity');
 });
+
+test('Acoustics R20: chosen C and D limits parse in ms, within 5 to 1000, and are named C<ms> and D<ms>', () => {
+  assert.deepEqual(parseCustom('clarity', '30, 100'), { ok: true, list: [{ kind: 'clarity', te_ms: 30 }, { kind: 'clarity', te_ms: 100 }] });
+  assert.deepEqual(parseCustom('definition', '80'), { ok: true, list: [{ kind: 'definition', te_ms: 80 }] });
+  assert.equal(parseCustom('clarity', '4').ok, false);
+  assert.equal(parseCustom('definition', '1001').ok, false);
+  assert.deepEqual([customSpec({ kind: 'clarity', te_ms: 30 }).label, customSpec({ kind: 'clarity', te_ms: 30 }).unit], ['C30', 'dB']);
+  assert.deepEqual([customSpec({ kind: 'definition', te_ms: 80 }).name, customSpec({ kind: 'definition', te_ms: 80 }).digits], ['d80', 2]);
+});

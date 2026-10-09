@@ -65,11 +65,15 @@ pub struct BedParameters {
     pub t15_s: BedParameter,
     /// Decay times over ranges a user chooses (`parameters.custom` of kind `decay`), parity R15.
     pub decay_custom: BedParameter,
+    /// Parity M12c: `clarity_custom` (beds/m12c-*.json).
+    pub clarity_custom: BedParameter,
+    /// Parity M12c: `definition_custom` (beds/m12c-*.json).
+    pub definition_custom: BedParameter,
 }
 
 impl BedParameters {
     /// Every one in the report's order, with their JSON names.
-    pub fn named(&self) -> [(&'static str, &BedParameter); 13] {
+    pub fn named(&self) -> [(&'static str, &BedParameter); 15] {
         [
             ("spl_db", &self.spl_db),
             ("edt_s", &self.edt_s),
@@ -84,6 +88,8 @@ impl BedParameters {
             ("dba", &self.dba),
             ("t15_s", &self.t15_s),
             ("decay_custom", &self.decay_custom),
+            ("clarity_custom", &self.clarity_custom),
+            ("definition_custom", &self.definition_custom),
         ]
     }
 
@@ -107,6 +113,8 @@ impl BedParameters {
             dba: p(),
             t15_s: p(),
             decay_custom: p(),
+            clarity_custom: p(),
+            definition_custom: p(),
         }
     }
 }
@@ -186,6 +194,8 @@ pub fn demote(base: &BedParameters, plant: &BedParameters, source: &str) -> BedP
         dba: one(&base.dba, &plant.dba),
         t15_s: one(&base.t15_s, &plant.t15_s),
         decay_custom: one(&base.decay_custom, &plant.decay_custom),
+        clarity_custom: one(&base.clarity_custom, &plant.clarity_custom),
+        definition_custom: one(&base.definition_custom, &plant.definition_custom),
     }
 }
 

@@ -643,6 +643,10 @@
         "c80_db": {
           "$ref": "#/$defs/BedParameter"
         },
+        "clarity_custom": {
+          "$ref": "#/$defs/BedParameter",
+          "description": "Parity M12c: `clarity_custom` (beds/m12c-*.json)."
+        },
         "d50": {
           "$ref": "#/$defs/BedParameter"
         },
@@ -653,6 +657,10 @@
         "decay_custom": {
           "$ref": "#/$defs/BedParameter",
           "description": "Decay times over ranges a user chooses (`parameters.custom` of kind `decay`), parity R15."
+        },
+        "definition_custom": {
+          "$ref": "#/$defs/BedParameter",
+          "description": "Parity M12c: `definition_custom` (beds/m12c-*.json)."
         },
         "edt_s": {
           "$ref": "#/$defs/BedParameter"
@@ -695,7 +703,9 @@
         "g_db",
         "dba",
         "t15_s",
-        "decay_custom"
+        "decay_custom",
+        "clarity_custom",
+        "definition_custom"
       ],
       "type": "object"
     },

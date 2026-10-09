@@ -155,8 +155,8 @@ function SettingValueView({ n, word, unit }: { n: AdviceCard['from']; word: stri
   return <N n={n} unit={unit || undefined} />;
 }
 
-/** The kinds of chosen quantity the card offers, in its order (parity R15: decay ranges). */
-const CUSTOM_KINDS: readonly Extra['kind'][] = ['decay'];
+/** The kinds of chosen quantity the card offers, in its order (parity R15: decay ranges; R20: C and D limits). */
+const CUSTOM_KINDS: readonly Extra['kind'][] = ['decay', 'clarity', 'definition'];
 
 /**
  * Parity R15/R20: upstream's "Calculate acoustic parameters" ranges and limits. The inputs set what

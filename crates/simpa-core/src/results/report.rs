@@ -97,7 +97,9 @@ use crate::schema::SolverKind;
 /// over -5 to -20 dB; and, when asked (`simpa results --decay-range`, `--clarity-ms`,
 /// `--definition-ms`), `custom` beside the report's other fields and `parameters.custom` in every
 /// SPPS series: decay times over chosen ranges and C and D at chosen time limits, each judged and
-/// shown as the fixed ones are, with a calibration it carries. No other field changes.
+/// shown as the fixed ones are, with a calibration it carries; and `bed.parameters` the M12c beds'
+/// entries (`t15_s`, `decay_custom`, `clarity_custom`, `definition_custom`, ...). No other field
+/// changes.
 pub const REPORT_VERSION: u32 = 18;
 
 /// A quantity's value, or why it has none.
@@ -2871,7 +2873,7 @@ mod tests {
     /// `docs/formats/results-json.md`), and pin the new pair.
     const REQUIRED_FIELDS_PIN: (u32, &str) = (
         18,
-        "c921a1ae6f4070efff905da9810b48fb3f47a89f69811117842b43912b290cd9",
+        "8b9e09e3e43a0a0b4ca09ef876bfb9e50135a84515d569a80570fd5dbfc1d165",
     );
 
     /// Every `required` list of `v`, as `<path>: <fields, sorted>`, sorted.

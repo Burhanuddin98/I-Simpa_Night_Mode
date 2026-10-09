@@ -422,6 +422,196 @@ pub fn r15() -> BedRun {
     )
 }
 
+/// R20: C and D at time limits a user chooses (upstream's C and D lists), read by C50's, C80's and
+/// D50's split of the curve.
+pub fn r20() -> BedRun {
+    let mut cases = Vec::new();
+    let limits = [20u32, 30, 50, 80, 100, 150, 300];
+    let custom: Vec<Extra> = limits
+        .iter()
+        .flat_map(|&te_ms| [Extra::Clarity { te_ms }, Extra::Definition { te_ms }])
+        .collect();
+    // A direct sound D at 0 over a reverberation R·e^(-t/tau).
+    for (d, t60, dt) in [(0.3, 1.2, 0.001), (2.0, 0.6, 0.001), (0.8, 2.0, 0.001)] {
+        let tr = tau(t60);
+        let n = (2.5 * t60 / dt) as usize;
+        let mut bins = exp_bins(1.0, tr, dt, n);
+        bins[0] += d;
+        let s = EnergySeries::complete(dt, bins).expect("a series");
+        let end = n as f64 * dt;
+        // The reverberation's energy after u, to the series' end.
+        let after = |u: f64| tr * ((-u / tr).exp() - (-end / tr).exp());
+        let total = d + after(0.0);
+        for &te_ms in &limits {
+            let te = f64::from(te_ms) / 1000.0;
+            let early = total - after(te);
+            let c = 10.0 * (early / after(te)).log10();
+            let dd = early / total;
+            let label = format!("direct {d} over a {t60} s reverberation, 1 ms bins");
+            let got = read(&s, Arrival::at(0.0), &custom, &format!("c{te_ms}_db"));
+            cases.extend(value_cases(
+                &got,
+                Want {
+                    name: format!("{label}: C{te_ms}"),
+                    quantity: &format!("c{te_ms}_db"),
+                    reference: "10 lg((D + R tau (1 - e^(-te/tau))) / (R tau e^(-te/tau))), ISO 3382-1 A.2.3".into(),
+                    expected: c,
+                    tolerance: 0.1,
+                    relative: false,
+                    unit: "dB",
+                },
+            ));
+            let got = read(&s, Arrival::at(0.0), &custom, &format!("d{te_ms}"));
+            cases.extend(value_cases(
+                &got,
+                Want {
+                    name: format!("{label}: D{te_ms}"),
+                    quantity: &format!("d{te_ms}"),
+                    reference: "(D + R tau (1 - e^(-te/tau))) / (D + R tau), ISO 3382-1 A.2.3"
+                        .into(),
+                    expected: dd,
+                    tolerance: 0.005,
+                    relative: false,
+                    unit: "fraction",
+                },
+            ));
+        }
+    }
+    // 10 ms bins with the limit inside a bin: the curve's in-bin decay is exact for an exponential,
+    // and the straddling bin makes the value `wide`, never wrong.
+    {
+        let (d, t60, dt) = (0.3, 1.2, 0.01);
+        let tr = tau(t60);
+        let n = (2.5 * t60 / dt) as usize;
+        let mut bins = exp_bins(1.0, tr, dt, n);
+        bins[0] += d;
+        let s = EnergySeries::complete(dt, bins).expect("a series");
+        let end = n as f64 * dt;
+        let after = |u: f64| tr * ((-u / tr).exp() - (-end / tr).exp());
+        let total = d + after(0.0);
+        let asked = [
+            Extra::Clarity { te_ms: 35 },
+            Extra::Definition { te_ms: 125 },
+        ];
+        let early = |te: f64| total - after(te);
+        let got = read(&s, Arrival::at(0.0), &asked, "c35_db");
+        cases.extend(value_cases(
+            &got,
+            Want {
+                name: "direct 0.3 over a 1.2 s reverberation, 10 ms bins: C35, inside a bin".into(),
+                quantity: "c35_db",
+                reference: "10 lg((D + R tau (1 - e^(-te/tau))) / (R tau e^(-te/tau)))".into(),
+                expected: 10.0 * (early(0.035) / after(0.035)).log10(),
+                tolerance: 0.1,
+                relative: false,
+                unit: "dB",
+            },
+        ));
+        let got = read(&s, Arrival::at(0.0), &asked, "d125");
+        cases.extend(value_cases(
+            &got,
+            Want {
+                name: "direct 0.3 over a 1.2 s reverberation, 10 ms bins: D125, inside a bin"
+                    .into(),
+                quantity: "d125",
+                reference: "(D + R tau (1 - e^(-te/tau))) / (D + R tau)".into(),
+                expected: early(0.125) / total,
+                tolerance: 0.005,
+                relative: false,
+                unit: "fraction",
+            },
+        ));
+    }
+    // Impulses either side of the limits: 1 at 0 ms, 0.5 at 60 ms, 0.25 at 200 ms, and a tail of
+    // 1e-6 falling 1 % a bin from 400 ms. Each split is the energies' own.
+    let dt = 0.001;
+    let mut bins = vec![0.0; 1400];
+    bins[0] = 1.0;
+    bins[60] = 0.5;
+    bins[200] = 0.25;
+    let (eps, q) = (1e-6, 0.99f64);
+    for (k, b) in bins.iter_mut().enumerate().skip(400) {
+        *b = eps * q.powi((k - 400) as i32);
+    }
+    let tail = eps * (1.0 - q.powi(1000)) / (1.0 - q);
+    let s = EnergySeries::complete(dt, bins).expect("a series");
+    let total = 1.75 + tail;
+    for (te_ms, early) in [(50u32, 1.0), (100, 1.5), (300, 1.75)] {
+        let late = total - early;
+        let asked = [Extra::Clarity { te_ms }, Extra::Definition { te_ms }];
+        let got = read(&s, Arrival::at(0.0), &asked, &format!("c{te_ms}_db"));
+        cases.extend(value_cases(
+            &got,
+            Want {
+                name: format!("impulses at 0, 60 and 200 ms: C{te_ms}"),
+                quantity: &format!("c{te_ms}_db"),
+                reference: format!(
+                    "10 lg({early} / {late:.7}): the energy before {te_ms} ms over the energy after"
+                ),
+                expected: 10.0 * (early / late).log10(),
+                tolerance: 0.1,
+                relative: false,
+                unit: "dB",
+            },
+        ));
+        let got = read(&s, Arrival::at(0.0), &asked, &format!("d{te_ms}"));
+        cases.extend(value_cases(
+            &got,
+            Want {
+                name: format!("impulses at 0, 60 and 200 ms: D{te_ms}"),
+                quantity: &format!("d{te_ms}"),
+                reference: format!("{early} / {total:.7}"),
+                expected: early / total,
+                tolerance: 0.005,
+                relative: false,
+                unit: "fraction",
+            },
+        ));
+    }
+    // The same code as C50, C80 and D50: those limits give them exactly.
+    for (asked, fixed) in [
+        (Extra::Clarity { te_ms: 50 }, "c50_db"),
+        (Extra::Clarity { te_ms: 80 }, "c80_db"),
+        (Extra::Definition { te_ms: 50 }, "d50"),
+    ] {
+        let got = read(&s, Arrival::at(0.0), &[asked], &asked.name());
+        let want = read(&s, Arrival::at(0.0), &[asked], fixed)
+            .value()
+            .unwrap_or(f64::NAN);
+        cases.extend(value_cases(
+            &got,
+            Want {
+                name: format!("impulses: a chosen {} against {fixed} itself", asked.name()),
+                quantity: &asked.name(),
+                reference: format!("{fixed} of the same series: one split, one code path"),
+                expected: want,
+                tolerance: 1e-12,
+                relative: false,
+                unit: if fixed == "d50" { "fraction" } else { "dB" },
+            },
+        ));
+    }
+    // A limit past the series' end is refused, not read.
+    let s = EnergySeries::complete(0.001, exp_bins(1.0, tau(0.3), 0.001, 400)).expect("a series");
+    let got = read(
+        &s,
+        Arrival::at(0.0),
+        &[Extra::Clarity { te_ms: 500 }],
+        "c500_db",
+    );
+    cases.push(refusal_case(
+        &got,
+        "a 0.4 s series: C500".into(),
+        "c500_db",
+        "params_series_too_short",
+    ));
+    bed(
+        "m12c-r20",
+        "R20: C and D at time limits chosen from 5 to 1000 ms, read by C50's, C80's and D50's split of the curve through the report's own path (results::report::parameters_with)",
+        cases,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -481,6 +671,19 @@ mod tests {
         committed_is_fresh("r15", &r15());
     }
 
+    #[test]
+    fn r20_passes_and_its_controls_are_caught() {
+        let b = r20();
+        for c in &b.cases {
+            assert!(c.holds, "{c:?}");
+        }
+        assert!(b.pass);
+    }
+
+    #[test]
+    fn the_committed_r20_artifact_is_this_build_s() {
+        committed_is_fresh("r20", &r20());
+    }
     #[test]
     fn the_two_slope_reference_differs_by_range() {
         // Says no: were the ranges read alike, T15 and T55 of the two-slope decay would agree.

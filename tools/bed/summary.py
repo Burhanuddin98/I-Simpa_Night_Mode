@@ -158,6 +158,11 @@ ARTIFACTS = {
         "repo",
         f"{M12C_RESULT} section 4, R15: simpa bed-extra r15 (crates/simpa-core/src/results/extra_bed.rs)",
     ),
+    "m12c-r20": (
+        "beds/m12c-r20.json",
+        "repo",
+        f"{M12C_RESULT} section 4, R20: simpa bed-extra r20 (crates/simpa-core/src/results/extra_bed.rs)",
+    ),
 }
 
 # Where a set's commit is read when the summary does not carry it: the scorer's log, first line.
@@ -523,6 +528,36 @@ PARAMETERS += [
             "Decay ranges a user chooses from -5 dB down 10 to 60 dB (upstream's TR list), fitted by "
             "T20's and T30's regression; a range the series does not reach is refused.",
             M12C_NOISE + " For a decay range: EDT's, T20's and T30's.",
+            M12C_CLOSED_FORM,
+            NO_MEASURED_ROOM,
+        ],
+    ),
+]
+
+PARAMETERS += [
+    (
+        "clarity_custom",
+        "clarity_custom",
+        "M12c R20, closed-form splits through the report's path (simpa bed-extra r20)",
+        ["m12c-r20"],
+        [
+            "C at a time limit a user chooses, 5 to 1000 ms (upstream's C list), by C50's and C80's split "
+            "of the Schroeder curve; shown `wide` where the bin straddling the limit moves it past 1/10 "
+            "of the JND, as C50 and C80 are.",
+            M12C_NOISE + " For C: C50's and C80's.",
+            M12C_CLOSED_FORM,
+            NO_MEASURED_ROOM,
+        ],
+    ),
+    (
+        "definition_custom",
+        "definition_custom",
+        "M12c R20, closed-form splits through the report's path (simpa bed-extra r20)",
+        ["m12c-r20"],
+        [
+            "D at a time limit a user chooses, 5 to 1000 ms (upstream's D list), by D50's split of the "
+            "Schroeder curve.",
+            M12C_NOISE + " For D: D50's.",
             M12C_CLOSED_FORM,
             NO_MEASURED_ROOM,
         ],
