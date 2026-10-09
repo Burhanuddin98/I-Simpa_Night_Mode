@@ -17,6 +17,12 @@
 //   [data-part="advice-card"]                       "Why values are missing" (backlog 80): each
 //                                                   item of `report.advice`, `[data-advice=<code>]`,
 //                                                   its words and numbers paths into the report
+// R36: a TCR run adds "Receiver levels", each receiver's direct level and its total level with
+// Sabine's and Eyring's reverberant field as TCR computed them, `[data-part="tcr-levels-table"]`,
+// every number a `[data-num]` of the report like the rest of the tab, so gate (a) reads it and it
+// is shown only where the tab shows numbers at all (results that load, on the Results step, an
+// unverified solver build tagged). The bed has no row for these levels (it checks TCR's Eyring
+// time, D), so they carry no per-parameter status and the card says they are not bed-checked.
 // The charts (uPlot) are drawn from the same arrays the numbers are read from (`rtSeries`,
 // `decay`), and the `acousticsView` test hook returns those arrays.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -58,6 +64,7 @@ import {
   sourceNote,
   sources,
   type SourceSel,
+  tcrLevels,
   type Str,
 } from './model';
 import './acoustics.css';
@@ -473,6 +480,8 @@ export function AcousticsPane() {
   const groupNames = new Map((view?.surface_groups ?? []).map((g) => [g.material_id, g.names]));
   const abs = absorption(report, groupNames);
   const cls = classical(report);
+  // R36: a TCR run's receiver levels, in the Receivers card's band.
+  const levels = tcrLevels(report, b);
   const variants = scene?.view.variants ?? [];
   const label = row ? `Run ${row.number} · ${runVariantName(row.variant, variants)}` : selected;
   // EDT's row 37 marks, T30's row 46 mark, STI's MQ3 note: each only while its parameter is shown.
@@ -647,6 +656,51 @@ export function AcousticsPane() {
             </tbody>
           </table>
         </section>
+
+        {levels.length ? (
+          <section className="ac-card ac-tcr-levels" aria-label="TCR receiver levels">
+            <div className="ac-card-head">
+              <span className="ac-card-title">Receiver levels</span>
+              <span className="ac-sub" data-label="tcr-levels-sub">
+                TCR’s own, read from its receiver files, dB · {b === 'sum' ? 'the bands’ energetic sum (TCR’s Global row, not a band)' : <Band report={report} index={b} />} · not checked by the test bed, which checks TCR’s Eyring time only
+              </span>
+            </div>
+            <table className="ac-table" data-part="tcr-levels-table">
+              <thead>
+                <tr>
+                  <th>Receiver</th>
+                  <th title="The direct sound alone, from every source">
+                    <span data-label="level">Direct</span>
+                  </th>
+                  <th title="Direct sound plus Sabine’s diffuse reverberant field">
+                    <span data-label="level">Total, Sabine</span>
+                  </th>
+                  <th title="Direct sound plus Eyring’s diffuse reverberant field">
+                    <span data-label="level">Total, Eyring</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {levels.map((row, i) => (
+                  <tr key={i}>
+                    <td>
+                      <S s={row.receiver} />
+                    </td>
+                    <td>
+                      <N n={row.direct} unit="dB" />
+                    </td>
+                    <td>
+                      <N n={row.sabine} unit="dB" />
+                    </td>
+                    <td>
+                      <N n={row.eyring} unit="dB" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        ) : null}
 
         <section className="ac-card ac-decay" aria-label="Decay">
           <div className="ac-card-head">

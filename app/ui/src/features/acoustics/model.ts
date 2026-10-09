@@ -463,6 +463,34 @@ export function classical(report: Report): ClassicalRow[] {
   return rows.map((r) => ({ band: r.band, cells: kept.map((k) => r.cells[k]) }));
 }
 
+/** R36: one TCR point receiver's levels in a band (or the bands' energetic sum), dB, each a path into the report. */
+export interface TcrLevelRow {
+  receiver: Str;
+  direct: Num | null;
+  sabine: Num | null;
+  eyring: Num | null;
+}
+
+/**
+ * R36: a TCR run's point-receiver levels, as TCR computed them (`Punctual receivers/<lbl>.gabe`):
+ * the direct field, and the total level with Sabine's and with Eyring's reverberant field, in
+ * band `band`, or for `sum` the file's `Global` row, their energetic sum over the bands (an
+ * aggregate, not a band). Empty for an SPPS run. Read only from a report the Acoustics tab shows
+ * at all (results that load, on the Results step), as every other number of it.
+ */
+export function tcrLevels(report: Report, band: BandSel): TcrLevelRow[] {
+  if (report.solver !== 'tcr') return [];
+  return receivers(report).map((_, r) => {
+    const base = band === 'sum' ? `tcr.point_receivers.${r}.global` : `tcr.point_receivers.${r}.bands.${band}`;
+    return {
+      receiver: str(report, `tcr.point_receivers.${r}.label`) as Str,
+      direct: num(report, `${base}.direct_db`, 1),
+      sabine: num(report, `${base}.total_sabine_db`, 1),
+      eyring: num(report, `${base}.total_eyring_db`, 1),
+    };
+  });
+}
+
 /** A receiver's decay curve in one band (or the bands summed), from source `src`'s echogram (null:
  * the sources summed): the report's points, as drawn. */
 export function decay(report: Report, r: number, band: BandSel, src: SourceSel = null): { path: string; t: number[]; db: number[] } | null {

@@ -480,3 +480,35 @@ test('applyConflict: the -Y Apply is held back while the project refines a surfa
   assert.equal(applyConflict(cards[0].apply!, conflicts), null);
   assert.equal(applyConflict(yes, []), null);
 });
+
+// R36: a TCR run's receiver levels.
+import { tcrLevels } from './model.ts';
+
+test('R36: a TCR receiver shows its direct and total levels per band, and the Global row for the bands summed', () => {
+  const band = (freq_hz: number, d: number, s: number | string, e: number) => ({ freq_hz, direct_db: d, total_sabine_db: s, total_eyring_db: e });
+  const rep = {
+    ...report([]),
+    solver: 'tcr',
+    spps: null,
+    tcr: {
+      point_receivers: [
+        { label: 'R1', file: 'Punctual receivers/R1.gabe', bands: [band(500, 61.234, 70.25, 69.96), band(1000, 60.5, 69.1, 68.84)], global: { aggregate: 'energetic_sum', direct_db: 63.9, total_sabine_db: 72.71, total_eyring_db: 72.43 } },
+        { label: 'R2', file: 'Punctual receivers/R2.gabe', bands: [band(500, 55, 'NaN', 64), band(1000, 54, 63, 62)], global: { aggregate: 'energetic_sum', direct_db: 57.5, total_sabine_db: 66.5, total_eyring_db: 66 } },
+      ],
+    },
+  } as unknown as Report;
+  const rows = tcrLevels(rep, 0);
+  assert.deepEqual(
+    rows.map((r) => [r.receiver.text, r.direct?.text, r.sabine?.text, r.eyring?.text]),
+    [
+      ['R1', '61.2', '70.3', '70.0'],
+      ['R2', '55.0', undefined, '64.0'],
+    ],
+  );
+  assert.equal(rows[0].direct?.path, 'tcr.point_receivers.0.bands.0.direct_db', 'a path into the report, for gate (a)');
+  assert.equal(rows[1].sabine, null, 'a value that is not a number is not shown');
+  const sum = tcrLevels(rep, 'sum');
+  assert.equal(sum[0].sabine?.path, 'tcr.point_receivers.0.global.total_sabine_db');
+  assert.equal(sum[0].sabine?.text, '72.7');
+  assert.deepEqual(tcrLevels(report([]), 0), [], 'none for an SPPS run');
+});
