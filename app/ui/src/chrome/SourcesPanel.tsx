@@ -16,7 +16,7 @@ import * as actions from '../actions';
 import type { PointReceiver, SceneState, Source, UiIssue } from '../bindings/ipc';
 import { fieldKey, issuesByEntity, issuesForField } from '../issues';
 import { NOT_A_NUMBER, parseStrictDecimal } from '../numbers';
-import { moveReceiver, moveSource, rename } from '../ops';
+import { moveReceiver, moveSource, rename, replaceReceiver, type Vec3 } from '../ops';
 import { refusalStore, sceneStore, selectionStore, toolStore, useStore } from '../store';
 import { EmissionEditor } from './EmissionEditor';
 import { PlanesSection } from './PlanesSection';
@@ -24,6 +24,7 @@ import { IssueTag, SourceSwitch, toggleRefusals } from './ScenePanel';
 import {
   AXES,
   coord,
+  directionTo,
   exact,
   roomCentre,
   sourceSpot,
@@ -240,6 +241,7 @@ function PointEditor({ scene, kind, point }: { scene: SceneState; kind: Kind; po
   const placed = placement && placement.point.every((v, i) => v === point.position[i]) ? placement : null;
   const errors = worstSeverity(scene.issues.filter((i) => i.entity?.kind === kind && i.entity.id === id)) === 'error';
   const source = kind === 'source' ? (point as Source) : null;
+  const receiver = kind === 'point_receiver' ? (point as PointReceiver) : null;
   // A disabled source is not checked against the room (the validator reads enabled ones only).
   const where = source && !source.enabled ? ' · off' : scene.check?.verdict === 'ok' && !errors ? ' · inside the room' : '';
 
@@ -308,8 +310,120 @@ function PointEditor({ scene, kind, point }: { scene: SceneState; kind: Kind; po
         )}
       </div>
 
+      {receiver && <OrientationSection scene={scene} receiver={receiver} />}
+
       {source && <EmissionEditor scene={scene} source={source} />}
     </>
+  );
+}
+
+/**
+ * M32: a point receiver's orientation, upstream's u, v, w (`e_scene_recepteursp_recepteur_proprietes.h:46-48`:
+ * Direction X, Y, Z, a direction with no unit), each committed on Enter or blur through the checked apply
+ * (`replace_point_receiver`, one undo step), and "Face" a source, upstream's Orientation point: the
+ * direction of length one toward it. Written to the solver as `u`, `v`, `w` as stored; the solver
+ * normalises it. A zero direction is refused by the validator.
+ */
+function OrientationSection({ scene, receiver }: { scene: SceneState; receiver: PointReceiver }) {
+  const refusals = useStore(refusalStore);
+  const kind: Kind = 'point_receiver';
+  const id = receiver.id;
+  const key = fieldKey(kind, id, 'orientation');
+  const [local, setLocal] = useState<Readonly<Record<string, UiIssue>>>({});
+  const [hidden, setHidden] = useState(false);
+  const [faceProblem, setFaceProblem] = useState<string | null>(null);
+  const setLocalIssue = (field: string, issue: UiIssue | null) =>
+    setLocal((l) => {
+      const n = { ...l };
+      if (issue) n[field] = issue;
+      else delete n[field];
+      return n;
+    });
+  const send = async (orientation: Vec3): Promise<boolean> => {
+    const now = current(kind, id) as PointReceiver | undefined;
+    if (!now) return false;
+    if (orientation.every((v, i) => Object.is(v, now.orientation[i]))) return true;
+    const out = await actions.apply(replaceReceiver({ ...now, orientation }), key);
+    setHidden(out.applied);
+    return out.applied;
+  };
+  const commitAxis = (axis: Axis) => async (text: string) => {
+    const field = `orientation.${axis}`;
+    const parsed = parseStrictDecimal(text);
+    if (!parsed.ok) {
+      setLocalIssue(field, notANumber(text, kind, id, field));
+      return false;
+    }
+    setLocalIssue(field, null);
+    const now = current(kind, id) as PointReceiver | undefined;
+    if (!now) return false;
+    return send(withAxis(now.orientation, axis, parsed.value));
+  };
+  const refused = hidden ? [] : (refusals.get(key) ?? []);
+  const issues = issuesForField(scene.issues, kind, id, 'orientation');
+  const localIssues = AXES.map((a) => local[`orientation.${a}`]).filter((x): x is UiIssue => !!x);
+  const sources = scene.view.sources;
+  return (
+    <div className="props-section" data-part="receiver-orientation">
+      <div className="label section-label">Orientation</div>
+      <div className="fact-grid" data-input>
+        {AXES.map((axis, i) => (
+          <label key={axis} className={`fact-cell axis-${axis}`}>
+            <span className="k">{axis.toUpperCase()}</span>
+            <span className="axis-field">
+              <CommitInput
+                field={`orientation.${axis}`}
+                label={`Direction ${axis.toUpperCase()}, no unit`}
+                className="mono"
+                value={exact(receiver.orientation[i])}
+                invalid={refused.length > 0 || !!local[`orientation.${axis}`]}
+                commit={commitAxis(axis)}
+                onRevert={() => {
+                  setLocalIssue(`orientation.${axis}`, null);
+                  setHidden(true);
+                }}
+              />
+            </span>
+          </label>
+        ))}
+      </div>
+      {sources.length > 0 && (
+        <label className="field-row" title="Upstream's Orientation point: the direction toward it, of length one">
+          <span className="label">Face</span>
+          <select
+            data-field="orientation-face"
+            aria-label="Turn the receiver to face a source"
+            value=""
+            onChange={(e) => {
+              const s = sources.find((x) => x.id === e.target.value);
+              const now = current(kind, id) as PointReceiver | undefined;
+              if (!s || !now) return;
+              const d = directionTo(now.position, s.position);
+              if (!d) {
+                setFaceProblem(`${now.name} and ${s.name} are at the same point: there is no direction between them`);
+                return;
+              }
+              setFaceProblem(null);
+              actions.fire(send(d));
+            }}
+          >
+            <option value="">a source…</option>
+            {sources.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {faceProblem && <div className="hint" data-part="orientation-face-problem">{faceProblem}.</div>}
+      <Issues refused={[...localIssues, ...refused]} current={issues} />
+      <div className="hint">
+        A direction, no unit (upstream's u, v, w); the solver makes it length one. It feeds only SPPS's
+        lateral-energy columns (LF, LFC), which this version does not show: no level or parameter shown here
+        depends on it.
+      </div>
+    </div>
   );
 }
 

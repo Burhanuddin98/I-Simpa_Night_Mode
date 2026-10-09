@@ -72,6 +72,8 @@ export const moveSource = (id: string, position: Vec3): Op => ({ op: 'move_sourc
 export const addReceiver = (index: number, receiver: PointReceiver): Op => ({ op: 'add_point_receiver', index, receiver });
 export const addSource = (index: number, source: Source): Op => ({ op: 'add_source', index, source });
 export const removeReceiver = (id: string): Op => ({ op: 'remove_point_receiver', id });
+/** A point receiver replaced whole, by its id (M32: its orientation): one undo step. */
+export const replaceReceiver = (receiver: PointReceiver): Op => ({ op: 'replace_point_receiver', receiver });
 /** A source replaced whole, by its id (C1: its power, spectrum or directivity): one undo step. */
 export const replaceSource = (source: Source): Op => ({ op: 'replace_source', source });
 export const removeSource = (id: string): Op => ({ op: 'remove_source', id });

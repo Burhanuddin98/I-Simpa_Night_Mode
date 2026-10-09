@@ -273,6 +273,19 @@ export function withAxis(position: Vec3, axis: Axis, value: number): Vec3 {
 }
 
 /**
+ * M32: the direction from `from` toward `to`, of length one, as upstream's "Orientation point" sets a
+ * receiver's u, v, w (`e_scene_recepteursp_recepteur.h:198-214`). Null when either point is not
+ * three finite numbers, or the two are the same point (no direction).
+ */
+export function directionTo(from: Vec3, to: Vec3): [number, number, number] | null {
+  const d = [0, 1, 2].map((k) => Number(to[k]) - Number(from[k]));
+  if (!d.every(Number.isFinite)) return null;
+  const len = Math.hypot(d[0], d[1], d[2]);
+  if (!(len > 0)) return null;
+  return [d[0] / len + 0, d[1] / len + 0, d[2] / len + 0];
+}
+
+/**
  * Where + Source and + Receiver put a new point: the centre of the model's bounding box, `lift`
  * metres above its lowest point. Null without a usable bounding box. A point that falls outside
  * the room (an L-shaped hall) is refused by the checked apply, and the project is left unchanged.

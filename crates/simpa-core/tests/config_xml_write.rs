@@ -1228,3 +1228,29 @@ fn upstream_box_triangles_are_build_models_worked_by_hand() {
     // Equal corners build nothing (`:124-125`).
     assert!(simpa_core::config_xml::upstream_box_triangles(None, [1.0; 3], [1.0; 3]).is_empty());
 }
+
+/// Parity M32: a point receiver's orientation, as the properties panel edits it, survives the
+/// project file (`to_json`/`from_json`) and reaches the solver as upstream writes it: `u`, `v`,
+/// `w` on `recepteur_ponctuel`, the direction as stored, not normalised (the solver normalises it,
+/// `base_core_configuration.cpp:248-249`).
+#[test]
+fn a_receiver_orientation_round_trips_and_is_written_as_u_v_w() {
+    let mut p = rich_cube();
+    let last = p.point_receivers.len() - 1;
+    p.point_receivers[0].orientation = simpa_core::schema::Vec3::new(0.0, -0.6, 0.8);
+    let back = schema::from_json(&schema::to_json(&p)).expect("the project reads back");
+    assert_eq!(
+        back.point_receivers[0].orientation.to_array(),
+        [0.0, -0.6, 0.8]
+    );
+    for solver in SOLVERS {
+        let view = solver_view(&wr(&back, solver, None));
+        // Lists are written last item first: receiver 0 is the last element.
+        let attrs = &view[&format!("recepteursp/recepteur_ponctuel[{last}]")].attrs;
+        assert_eq!(
+            [&attrs["u"], &attrs["v"], &attrs["w"]],
+            [&"0".to_string(), &"-0.6".to_string(), &"0.8".to_string()],
+            "{solver:?}"
+        );
+    }
+}

@@ -2,6 +2,7 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import type { CheckSummary, Material, ProjectView, SceneState, UiIssue } from '../bindings/ipc.ts';
 import {
+  directionTo,
   blockerText,
   displayName,
   checkRows,
@@ -342,4 +343,11 @@ test('surface and material names read as words: the import prefix dropped, sente
   assert.equal(displayName('audience'), 'Audience');
   // A name that is all prefix keeps its stored form rather than showing nothing.
   assert.equal(displayName('mat_CR2_'), 'mat_CR2_');
+});
+
+test('M32: the direction toward a point is of length one; none toward the same point or a non-number', () => {
+  assert.deepEqual(directionTo([1, 2, 3], [1, 2, 8]), [0, 0, 1]);
+  assert.deepEqual(directionTo([0, 0, 0], [3, -4, 0]), [0.6, -0.8, 0]);
+  assert.equal(directionTo([1, 1, 1], [1, 1, 1]), null);
+  assert.equal(directionTo([1, 1, 1], ['NaN', 1, 1]), null);
 });
