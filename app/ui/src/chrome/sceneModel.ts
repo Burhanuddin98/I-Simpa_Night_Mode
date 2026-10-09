@@ -407,3 +407,40 @@ export function environmentText(env: { temperature_c: F64; relative_humidity_per
   if (!env) return '—';
   return `${exact(env.temperature_c)} °C · ${exact(env.relative_humidity_percent)} % · ${exact(env.pressure_pa)} Pa`;
 }
+
+// ---- G8: Repair in words -------------------------------------------------------------------------
+
+/** `1 face`, `3 faces`. */
+function count(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+/** G8: what one Repair did, in words: the fixes counted, the file written, the original untouched. */
+export function repairSummary(r: {
+  changed: boolean;
+  file?: string | null;
+  original?: string | null;
+  welded_vertices: number;
+  degenerate_faces: number;
+  duplicate_faces: number;
+  flipped_faces: number;
+  oriented: boolean;
+}): string {
+  if (!r.changed) return 'Repair found nothing to change: no vertex to weld, no face of zero area or repeated, no face to turn. No file was written.';
+  const fixes = [
+    count(r.welded_vertices, 'vertex welded', 'vertices welded'),
+    count(r.degenerate_faces, 'face of zero area removed', 'faces of zero area removed'),
+    count(r.duplicate_faces, 'repeated face removed', 'repeated faces removed'),
+    count(r.flipped_faces, 'face turned out', 'faces turned out'),
+  ].join(', ');
+  const file = r.file ? r.file.split(/[\\/]/).pop() : null;
+  const original = r.original ? r.original.split(/[\\/]/).pop() : null;
+  const wrote = file ? ` Written to ${file}${original ? ` beside ${original}, which is unchanged` : ''}.` : '';
+  const turn = r.oriented ? '' : ' Faces intersect, so which way faces should face was not decided and none was turned.';
+  return `Repaired: ${fixes}.${wrote}${turn}`;
+}
+
+/** G8: the check's reasons Repair does not fix (holes, intersections, ...), by message; empty when every reason is one it fixes. */
+export function unrepairable(check: CheckSummary | null | undefined): string[] {
+  return (check?.reasons ?? []).filter((r) => !r.repairable).map((r) => r.message);
+}

@@ -29,6 +29,7 @@ import type {
   Setting,
   SolversStatus,
   StartupInfo,
+  RepairReport,
 } from './bindings/ipc';
 import type { BandKind, Op } from './bindings/schema';
 import { opText } from './ops';
@@ -52,6 +53,7 @@ export type {
   LibraryMaterial,
   LibrarySpectrum,
   ProjectInfo,
+  RepairReport,
   ResultsState,
   RunEventBatch,
   RunStarted,
@@ -128,6 +130,8 @@ export const backend = {
    * (never over a file) and opens it as `scene_open` does. */
   exampleOpen: (id: string) => invoke<SceneState>('example_open', { id }),
   modelImport: (path: string, unit: Unit, up: Up) => invoke<SceneState>('model_import', { path, unit, up }),
+  /** G8: the core's safe repairs on the open model, written as a new file beside the original, then one checked edit. */
+  modelRepair: () => invoke<RepairReport>('model_repair'),
   /** `null` saves to the project's own path; a path is Save As. */
   projectSave: (path: string | null) => invoke<SceneState>('project_save', { path }),
   /** The checked apply. The op goes as `opText`, never `JSON.stringify` (-0, NaN). */

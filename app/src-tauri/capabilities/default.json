@@ -31,6 +31,7 @@
     "allow-scene-open",
     "allow-example-open",
     "allow-model-import",
+    "allow-model-repair",
     "allow-project-save",
     "allow-edit-apply",
     "allow-advice-apply",

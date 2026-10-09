@@ -26,6 +26,7 @@ fn main() {
         "scene_open",
         "example_open",
         "model_import",
+        "model_repair",
         "project_save",
         "edit_apply",
         "advice_apply",

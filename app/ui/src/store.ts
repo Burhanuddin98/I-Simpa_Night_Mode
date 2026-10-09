@@ -7,6 +7,7 @@ import type {
   LibraryMaterial,
   LibrarySpectrum,
   LineClass,
+  RepairReport,
   ReportView,
   ResultsState,
   RunLineClass,
@@ -96,6 +97,9 @@ export const toolStore = new Store<Tool>('select');
 /** Refusals of the checked apply by field key (issues.ts `fieldKey`); a field's entry is cleared
  * by the next accepted edit filed under the same key. */
 export const refusalStore = new Store<ReadonlyMap<string, UiIssue[]>>(new Map());
+
+/** G8: the last Repair's report for the open project (cleared by any other load), shown in the Geometry panel. */
+export const repairStore = new Store<RepairReport | null>(null);
 
 /** G16: the open project's fitting zones as the scene list shows them (read from the project file on every scene change); null when unknown. */
 export const fittingZonesStore = new Store<{ id: string; name: string; enabled: boolean; kind: 'box' | 'scene' }[] | null>(null);

@@ -3,6 +3,8 @@ import { test } from 'node:test';
 import type { CheckSummary, Material, ProjectView, SceneState, UiIssue } from '../bindings/ipc.ts';
 import {
   directionTo,
+  repairSummary,
+  unrepairable,
   environmentText,
   fittingZonesOf,
   volumeRow,
@@ -383,4 +385,17 @@ test('G16: the volume row is the Geometry panel number, and none for a refused m
 test('G16: the environment row spells the air as stored', () => {
   assert.equal(environmentText({ temperature_c: 20, relative_humidity_percent: 50, pressure_pa: 101325 }), '20 °C · 50 % · 101325 Pa');
   assert.equal(environmentText(null), '—');
+});
+
+test('G8: a repair in words names each fix, the new file and the untouched original', () => {
+  const base = { welded_vertices: 1, degenerate_faces: 0, duplicate_faces: 2, flipped_faces: 3, oriented: true };
+  assert.equal(
+    repairSummary({ ...base, changed: true, file: 'C:\\models\\hall_repaired.obj', original: 'C:\\models\\hall.ply' }),
+    'Repaired: 1 vertex welded, 0 faces of zero area removed, 2 repeated faces removed, 3 faces turned out. Written to hall_repaired.obj beside hall.ply, which is unchanged.',
+  );
+  assert.ok(repairSummary({ ...base, changed: true, file: 'x_repaired.obj', original: 'x.ply', oriented: false }).endsWith('none was turned.'));
+  assert.ok(repairSummary({ ...base, changed: false }).startsWith('Repair found nothing to change'));
+  const check = { reasons: [{ code: 'self_intersections', message: 'Faces intersect', repairable: false, count: 1, faces: 2 }, { code: 'duplicate_faces', message: 'Repeated', repairable: true, count: 1, faces: 1 }] } as unknown as CheckSummary;
+  assert.deepEqual(unrepairable(check), ['Faces intersect']);
+  assert.deepEqual(unrepairable(null), []);
 });

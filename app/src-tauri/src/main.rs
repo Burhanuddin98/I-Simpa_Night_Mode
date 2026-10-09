@@ -255,6 +255,7 @@ fn run(args: GuiArgs) -> ExitCode {
             commands::scene_open,
             commands::example_open,
             commands::model_import,
+            commands::model_repair,
             commands::project_save,
             commands::edit_apply,
             commands::advice_apply,

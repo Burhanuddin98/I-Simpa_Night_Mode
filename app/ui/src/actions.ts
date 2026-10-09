@@ -15,6 +15,7 @@ import {
   type LibraryMaterial,
   type ReportView,
   type ResultsState,
+  type RepairReport,
   type RunStarted,
   type RunStreamBatch,
   type RunsView,
@@ -75,6 +76,7 @@ import {
   deviceStore,
   gpuStatusStore,
   type SppsDevice,
+  repairStore,
   Store,
 } from './store';
 
@@ -170,12 +172,34 @@ export async function openExample(id: string): Promise<SceneState | null> {
   return state;
 }
 
-export async function importModel(path: string, unit: Unit, up: Up): Promise<SceneState> {
+export async function importModel(path: string, unit: Unit, up: Up, repairIfRefused = false): Promise<SceneState> {
   refusalStore.set(new Map());
+  repairStore.set(null);
   const state = await run(`Could not import ${path}`, async () => accept(await backend.modelImport(path, unit, up)));
   forgetRuns();
   fire(refreshRuns());
+  // G8: the import dialog's choice, upstream's "Repair model": only a model the check refuses is repaired.
+  if (repairIfRefused && state.check?.verdict === 'refused') {
+    const r = await repairModel();
+    if (r) return r.outcome.state;
+  }
   return state;
+}
+
+/**
+ * G8: Repair the open model: the core's safe fixes (weld vertices within 1 um, remove faces of zero area and
+ * repeated faces, turn inward faces out; never holes or intersections). When it changes anything, the
+ * repaired mesh is written as a new OBJ beside the original, never over it, and the project takes the
+ * repaired geometry as one undo step, checked again. Null while a run is active.
+ */
+export async function repairModel(): Promise<RepairReport | null> {
+  if (refuseDuringRun('Repair')) return null;
+  return run('Could not repair the model', async () => {
+    const r = await backend.modelRepair();
+    await accept(r.outcome.state);
+    repairStore.set(r);
+    return r;
+  });
 }
 
 const MESH_EXTENSIONS = ['ply', 'obj', 'stl'];

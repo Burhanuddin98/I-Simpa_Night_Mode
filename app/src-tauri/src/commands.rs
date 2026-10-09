@@ -28,7 +28,7 @@ use crate::runs::{
     self, GpuCache, GpuStatus, LibraryMaterial, LibrarySpectrum, ResultsState, RunSlot, RunStarted,
     RunStreamBatch, RunsView, SolversCache, SolversStatus,
 };
-use crate::scene::{EditOutcome, SceneState};
+use crate::scene::{EditOutcome, RepairReport, SceneState};
 use crate::selftest::Selftest;
 use crate::webview2::{self, WebviewInfo};
 
@@ -392,6 +392,21 @@ pub async fn model_import(
         let mut s = lock(&session, "project")?;
         runs::refuse_while_running(&slot, "Import")?;
         s.model_import(&PathBuf::from(path), &unit, &up)
+    })
+    .await
+}
+
+/// Parity G8: repairs the open model (`simpa_core::geometry::repair`: weld, degenerate and
+/// duplicate faces, orientation), writes the repaired mesh as a new OBJ beside the imported file,
+/// never over it, and puts the repaired geometry in the project through the checked apply (one
+/// undo step), which checks the model again.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn model_repair(state: State<'_, AppState>) -> CmdResult<RepairReport> {
+    let (session, slot) = (state.session.clone(), state.run.clone());
+    guard::blocking("model_repair", move || {
+        let mut s = lock(&session, "project")?;
+        runs::refuse_while_running(&slot, "Repair")?;
+        s.model_repair()
     })
     .await
 }

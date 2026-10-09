@@ -27,8 +27,8 @@ use simpa_core::validate::{self, Context};
 use crate::events::LineClass;
 use crate::guard::{CmdError, CmdResult};
 use crate::scene::{
-    self, CheckSummary, EditOutcome, IssueKey, IssueSeverity, LogLine, SceneState, SolverIssues,
-    UiIssue,
+    self, CheckSummary, EditOutcome, IssueKey, IssueSeverity, LogLine, RepairReport, SceneState,
+    SolverIssues, UiIssue,
 };
 
 /// What the chrome shows about the open project: names and counts, never an acoustic value.
@@ -104,6 +104,9 @@ pub struct Session {
     /// The open project was imported, just now, from a mesh file that declares no groups
     /// (`ImportReport::ungrouped`, C1): the Geometry step says so. Cleared by any other load.
     imported_ungrouped: bool,
+    /// The mesh file the open project was imported from this session (parity G8: Repair writes
+    /// its repaired copy beside it). Cleared by any other load.
+    import_source: Option<PathBuf>,
     check: Option<CheckCache>,
     /// The validator's issues on the current state, with their UI codes.
     issues: Vec<UiIssue>,
@@ -262,6 +265,7 @@ impl Session {
         self.geometry_rev += 1;
         self.model_name = model_name;
         self.imported_ungrouped = false;
+        self.import_source = None;
         self.check = None;
         self.refresh();
         self.info().expect("a project was just set")
@@ -500,8 +504,152 @@ impl Session {
         let report = scene::import_lines(&file, unit, up, &model.report, model.group_names.len());
         self.replace(model.to_project(&stem), None, file);
         self.imported_ungrouped = model.report.ungrouped;
+        self.import_source = Some(path.to_path_buf());
         self.lines.extend(report);
         self.state()
+    }
+
+    /// Parity G8, upstream's "Repair model" at import (`loadingSceneDialog.cpp:128-131`), here the
+    /// core's safe fixes (`repair::repair`: welding within 1 um, degenerate and duplicate faces
+    /// removed, inverted faces flipped; holes and intersections are never "fixed"). When it changes
+    /// anything, the repaired mesh is written as a **new** OBJ beside the file the model came from
+    /// (`<stem>_repaired.obj`, then `_repaired-2.obj`, ...; never over an existing file, the
+    /// original least of all), then put in the project through the checked apply as one undo step,
+    /// which checks the model again. With nothing to change, nothing is written or edited.
+    pub fn model_repair(&mut self) -> CmdResult<RepairReport> {
+        use simpa_core::geometry::export;
+        use simpa_core::geometry::repair::{self, RepairOptions};
+        let project = self.project.as_ref().ok_or_else(no_project)?;
+        if project.geometry.faces.is_empty() {
+            return Err(CmdError::new(
+                "REPAIR_NO_MODEL",
+                "the project has no model to repair",
+            ));
+        }
+        let outcome =
+            repair::repair(&project.geometry, &RepairOptions::default()).map_err(|e| {
+                CmdError::new(
+                    format!("REPAIR_{}", e.code().to_ascii_uppercase()),
+                    e.to_string(),
+                )
+            })?;
+        let count = |kind: &str| outcome.changes.iter().filter(|c| c.kind() == kind).count() as u32;
+        let (welded, degenerate, duplicate, flipped) = (
+            count("weld_vertex"),
+            count("remove_degenerate_face"),
+            count("remove_duplicate_face"),
+            count("flip_face"),
+        );
+        let base = self.import_source.clone().or_else(|| self.path.clone());
+        let original = base.as_deref().map(|p| p.display().to_string());
+        let what = format!(
+            "{}, {}, {}, {}",
+            plural_n(welded, "vertex welded", "vertices welded"),
+            plural_n(
+                degenerate,
+                "degenerate face removed",
+                "degenerate faces removed"
+            ),
+            plural_n(
+                duplicate,
+                "duplicate face removed",
+                "duplicate faces removed"
+            ),
+            plural_n(flipped, "face flipped", "faces flipped")
+        );
+        let still = |o: &repair::RepairOutcome| {
+            o.refusals
+                .iter()
+                .map(|r| r.message.clone())
+                .collect::<Vec<_>>()
+                .join("; ")
+        };
+        if outcome.changes.is_empty() {
+            let mut text = "Repair: nothing to change (no vertex to weld, no degenerate or \
+                            duplicate face, no face to flip); no file written"
+                .to_string();
+            if !outcome.is_ok() {
+                text.push_str(&format!(
+                    ". The model check still refuses it, and repair does not fix this: {}",
+                    still(&outcome)
+                ));
+            }
+            self.lines.push(LogLine::new(LineClass::Info, text));
+            let state = self.state()?;
+            return Ok(RepairReport {
+                changed: false,
+                file: None,
+                original,
+                welded_vertices: 0,
+                degenerate_faces: 0,
+                duplicate_faces: 0,
+                flipped_faces: 0,
+                oriented: outcome.oriented,
+                passes: outcome.is_ok(),
+                outcome: EditOutcome {
+                    applied: false,
+                    refusals: Vec::new(),
+                    state,
+                },
+            });
+        }
+        let base = base.ok_or_else(|| {
+            CmdError::new(
+                "REPAIR_NO_FOLDER",
+                "this project has no file yet: save it first, and Repair writes the repaired \
+                 model beside it",
+            )
+        })?;
+        let mut repaired = project.clone();
+        repaired.geometry = outcome.geometry.clone();
+        let header = [format!(
+            "{} repaired by I-Simpa Night Mode: {what}",
+            file_name(&base)
+        )];
+        let text = export::obj_text(&repaired, &header);
+        let target = write_new_beside(&base, "_repaired", "obj", text.as_bytes())?;
+        self.lines.push(LogLine::new(
+            LineClass::Ok,
+            format!(
+                "Repair: {what}; wrote {} (metres, Z up); {} is unchanged",
+                target.display(),
+                file_name(&base)
+            ),
+        ));
+        if !outcome.oriented {
+            self.lines.push(LogLine::new(
+                LineClass::Warn,
+                "Repair: faces intersect, so which way each face should face was not decided and \
+                 none was flipped"
+                    .to_string(),
+            ));
+        }
+        if !outcome.is_ok() {
+            self.lines.push(LogLine::new(
+                LineClass::Warn,
+                format!(
+                    "Repair: the model check still refuses the repaired model, and repair does not \
+                     fix this: {}",
+                    still(&outcome)
+                ),
+            ));
+        }
+        let op = Op::SetGeometry {
+            geometry: outcome.geometry.clone(),
+        };
+        let edit = self.edit_apply(&op.to_json())?;
+        Ok(RepairReport {
+            changed: true,
+            file: Some(target.display().to_string()),
+            original,
+            welded_vertices: welded,
+            degenerate_faces: degenerate,
+            duplicate_faces: duplicate,
+            flipped_faces: flipped,
+            oriented: outcome.oriented,
+            passes: outcome.is_ok(),
+            outcome: edit,
+        })
     }
 
     /// Opens an upstream I-Simpa `.proj` as a new, unsaved project (`import_proj_file`: the same
@@ -752,6 +900,67 @@ impl Session {
         let p = self.project.as_ref().ok_or_else(no_project)?;
         Ok(scene::mesh_bytes(p, self.geometry_rev))
     }
+}
+
+/// `1 vertex welded`, `3 vertices welded`.
+fn plural_n(n: u32, one: &str, many: &str) -> String {
+    if n == 1 {
+        format!("1 {one}")
+    } else {
+        format!("{n} {many}")
+    }
+}
+
+/// Writes `bytes` to a new file beside `base`: `<stem><suffix>.<ext>`, or `<stem><suffix>-2.<ext>`
+/// and on when that exists. Opened with `create_new`, so no existing file, `base` included, is
+/// ever written over.
+fn write_new_beside(base: &Path, suffix: &str, ext: &str, bytes: &[u8]) -> CmdResult<PathBuf> {
+    use std::io::Write;
+    let dir = base.parent().unwrap_or_else(|| Path::new("."));
+    let stem = base
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "model".to_string());
+    for n in 1..1000 {
+        let name = if n == 1 {
+            format!("{stem}{suffix}.{ext}")
+        } else {
+            format!("{stem}{suffix}-{n}.{ext}")
+        };
+        let target = dir.join(name);
+        if target == base {
+            continue;
+        }
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&target)
+        {
+            Ok(mut f) => {
+                f.write_all(bytes).and_then(|_| f.sync_all()).map_err(|e| {
+                    CmdError::new(
+                        "REPAIR_WRITE",
+                        format!("could not write {}: {e}", target.display()),
+                    )
+                })?;
+                return Ok(target);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => {
+                return Err(CmdError::new(
+                    "REPAIR_WRITE",
+                    format!("could not create {}: {e}", target.display()),
+                ));
+            }
+        }
+    }
+    Err(CmdError::new(
+        "REPAIR_WRITE",
+        format!(
+            "no free name beside {} for the repaired model",
+            base.display()
+        ),
+    ))
 }
 
 /// `Group <n>` with the first n no surface group's name takes, compared as the core compares
@@ -1297,6 +1506,127 @@ mod m10_tests {
 
         let mesh = s.mesh().unwrap();
         assert_eq!(mesh.len(), 24 + 24 * 3926 + 16 * 7860);
+    }
+
+    /// The teaching room's box as an OBJ, with face 4 turned inward and face 0 repeated: the
+    /// check refuses it (an inverted face, a duplicate), and the core's repair can fix both.
+    fn damaged_box_obj() -> String {
+        let v = [
+            [0, 0, 0],
+            [10, 0, 0],
+            [10, 6, 0],
+            [0, 6, 0],
+            [0, 0, 3],
+            [10, 0, 3],
+            [10, 6, 3],
+            [0, 6, 3],
+        ];
+        let mut f = vec![
+            [0, 2, 1],
+            [0, 3, 2],
+            [4, 5, 6],
+            [4, 6, 7],
+            [3, 7, 6],
+            [3, 6, 2],
+            [0, 1, 5],
+            [0, 5, 4],
+            [0, 4, 7],
+            [0, 7, 3],
+            [1, 2, 6],
+            [1, 6, 5],
+        ];
+        f[4].swap(1, 2);
+        f.push(f[0]);
+        let mut out = String::new();
+        for p in v {
+            out.push_str(&format!("v {} {} {}\n", p[0], p[1], p[2]));
+        }
+        out.push_str("g Room\n");
+        for t in f {
+            out.push_str(&format!("f {} {} {}\n", t[0] + 1, t[1] + 1, t[2] + 1));
+        }
+        out
+    }
+
+    /// Parity G8: Repair writes a new file beside the imported one (never over it, nor over an
+    /// earlier repair), puts the repaired geometry in the project as one undo step and checks it
+    /// again; with nothing left to change it writes nothing.
+    #[test]
+    fn repair_writes_a_new_file_beside_the_original_and_checks_again() {
+        let dir = scratch("repair");
+        let original = dir.join("box.obj");
+        let text = damaged_box_obj();
+        std::fs::write(&original, &text).unwrap();
+        // A file of the first name already there is not written over.
+        std::fs::write(dir.join("box_repaired.obj"), "keep me").unwrap();
+
+        let mut s = Session::default();
+        let st = s.model_import(&original, "m", "z").unwrap();
+        assert_eq!(
+            st.check.as_ref().unwrap().verdict,
+            scene::CheckVerdict::Refused
+        );
+        assert!(st.run_blockers.contains(&GEOMETRY_REFUSED.to_string()));
+        let rev = st.info.geometry_rev;
+
+        let r = s.model_repair().unwrap();
+        assert!(r.changed && r.passes && r.oriented, "{r:?}");
+        assert_eq!((r.duplicate_faces, r.flipped_faces), (1, 1), "{r:?}");
+        let written = PathBuf::from(r.file.as_deref().unwrap());
+        assert_eq!(written, dir.join("box_repaired-2.obj"));
+        assert_eq!(
+            std::fs::read_to_string(&original).unwrap(),
+            text,
+            "the original is untouched"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.join("box_repaired.obj")).unwrap(),
+            "keep me"
+        );
+        assert!(r.outcome.applied, "{:?}", r.outcome.refusals);
+        let st = &r.outcome.state;
+        assert_eq!(st.info.geometry_rev, rev + 1);
+        assert_eq!(st.check.as_ref().unwrap().verdict, scene::CheckVerdict::Ok);
+        assert!(!st.run_blockers.contains(&GEOMETRY_REFUSED.to_string()));
+        assert!(
+            st.lines.iter().any(|l| l.text.starts_with(CHECK_OK_PREFIX)),
+            "checked again: {:?}",
+            st.lines
+        );
+        assert_eq!(project(&s).geometry.faces.len(), 12);
+
+        // The written file imports as the model now in the project.
+        let mut again = Session::default();
+        let st2 = again.model_import(&written, "m", "z").unwrap();
+        assert_eq!(st2.check.unwrap().verdict, scene::CheckVerdict::Ok);
+        assert_eq!(
+            again
+                .project
+                .as_ref()
+                .unwrap()
+                .geometry
+                .faces
+                .iter()
+                .map(|f| f.vertices)
+                .collect::<Vec<_>>(),
+            project(&s)
+                .geometry
+                .faces
+                .iter()
+                .map(|f| f.vertices)
+                .collect::<Vec<_>>()
+        );
+
+        // Nothing left to change: no file, no edit.
+        let before = std::fs::read_dir(&dir).unwrap().count();
+        let r2 = s.model_repair().unwrap();
+        assert!(!r2.changed && r2.file.is_none() && !r2.outcome.applied);
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), before);
+
+        // Undo puts the imported (refused) geometry back.
+        let st = s.edit_undo().unwrap();
+        assert_eq!(st.check.unwrap().verdict, scene::CheckVerdict::Refused);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

@@ -2727,6 +2727,7 @@ export interface IpcBindings {
   library_spectrum: LibrarySpectrum;
   prepared: Prepared;
   project_info: ProjectInfo;
+  repair_report: RepairReport;
   report_view: ReportView;
   results_state: ResultsState;
   run_data_index: RunDataIndex;
@@ -3523,6 +3524,69 @@ export interface Prepared {
   checksum: number;
   prepare_ms: number;
   token: number;
+}
+/**
+ * What Repair (parity G8, `model_repair`) did: the core's safe fixes counted, the new file it
+ * wrote, and the edit that put the repaired geometry in the project.
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "RepairReport".
+ */
+export interface RepairReport {
+  /**
+   * False when repair found nothing to change: no file is written and the project is as it was.
+   */
+  changed: boolean;
+  /**
+   * Faces of zero area removed.
+   */
+  degenerate_faces: number;
+  /**
+   * Faces repeating another removed.
+   */
+  duplicate_faces: number;
+  /**
+   * The repaired mesh written beside the original (OBJ, metres, Z up), never over it; `None`
+   * when nothing changed.
+   */
+  file?: string | null;
+  /**
+   * Faces turned to face out of the room.
+   */
+  flipped_faces: number;
+  /**
+   * False when the check found the topology unreliable (faces intersect): which way faces
+   * should face was not decided, and nothing was flipped.
+   */
+  oriented: boolean;
+  /**
+   * The file the model came from, left untouched; `None` for a project not imported this session.
+   */
+  original?: string | null;
+  outcome: EditOutcome1;
+  /**
+   * Whether the repaired model passes the model check.
+   */
+  passes: boolean;
+  /**
+   * Vertices merged into one within the welding tolerance.
+   */
+  welded_vertices: number;
+}
+/**
+ * The checked apply of the repaired geometry (one undo step); `applied: false` with no
+ * refusals when nothing changed.
+ */
+export interface EditOutcome1 {
+  /**
+   * False when the validator refused the edit: the project and its history are unchanged.
+   */
+  applied: boolean;
+  /**
+   * The new errors the edit would have introduced.
+   */
+  refusals: UiIssue[];
+  state: SceneState;
 }
 /**
  * `run_report`: the run's results state (as `run_results` answers it) and, when its results load,

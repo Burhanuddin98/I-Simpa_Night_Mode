@@ -4593,6 +4593,76 @@
       ],
       "type": "object"
     },
+    "RepairReport": {
+      "description": "What Repair (parity G8, `model_repair`) did: the core's safe fixes counted, the new file it\nwrote, and the edit that put the repaired geometry in the project.",
+      "properties": {
+        "changed": {
+          "description": "False when repair found nothing to change: no file is written and the project is as it was.",
+          "type": "boolean"
+        },
+        "degenerate_faces": {
+          "description": "Faces of zero area removed.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "duplicate_faces": {
+          "description": "Faces repeating another removed.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "file": {
+          "description": "The repaired mesh written beside the original (OBJ, metres, Z up), never over it; `None`\nwhen nothing changed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "flipped_faces": {
+          "description": "Faces turned to face out of the room.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "oriented": {
+          "description": "False when the check found the topology unreliable (faces intersect): which way faces\nshould face was not decided, and nothing was flipped.",
+          "type": "boolean"
+        },
+        "original": {
+          "description": "The file the model came from, left untouched; `None` for a project not imported this session.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "outcome": {
+          "$ref": "#/$defs/EditOutcome",
+          "description": "The checked apply of the repaired geometry (one undo step); `applied: false` with no\nrefusals when nothing changed."
+        },
+        "passes": {
+          "description": "Whether the repaired model passes the model check.",
+          "type": "boolean"
+        },
+        "welded_vertices": {
+          "description": "Vertices merged into one within the welding tolerance.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "changed",
+        "welded_vertices",
+        "degenerate_faces",
+        "duplicate_faces",
+        "flipped_faces",
+        "oriented",
+        "passes",
+        "outcome"
+      ],
+      "type": "object"
+    },
     "Report": {
       "description": "What `simpa results <run> --json` prints.",
       "properties": {
@@ -7373,6 +7443,9 @@
     "project_info": {
       "$ref": "#/$defs/ProjectInfo"
     },
+    "repair_report": {
+      "$ref": "#/$defs/RepairReport"
+    },
     "report_view": {
       "$ref": "#/$defs/ReportView"
     },
@@ -7416,6 +7489,7 @@
     "library_spectrum",
     "prepared",
     "project_info",
+    "repair_report",
     "report_view",
     "results_state",
     "run_data_index",

@@ -12,10 +12,11 @@
 // - The volume is the air's (backlog 85), labelled so: the inside of a closed obstacle is not in
 //   it. When the faces enclose more, the row's title says how much more and why.
 // - Import model… waits while a run is active (PQ4), saying why.
+import { useState } from 'react';
 import * as actions from '../actions';
-import { runStore, sceneStore, useStore } from '../store';
+import { repairStore, runStore, sceneStore, useStore } from '../store';
 import { RUN_ACTIVE_TITLE } from './MenuBar';
-import { checkRows, fact, fileLabel, unitsText } from './sceneModel';
+import { checkRows, fact, fileLabel, repairSummary, unitsText, unrepairable } from './sceneModel';
 
 /** Decimals of every dimension (the design's "10.00 m"). */
 const DIMENSION_DECIMALS = 2;
@@ -23,6 +24,61 @@ const DIMENSION_DECIMALS = 2;
 /** A dimension with exactly `DIMENSION_DECIMALS` decimals; an em dash when not a finite number. */
 function dimension(v: number | null | undefined): string {
   return typeof v === 'number' && Number.isFinite(v) ? v.toFixed(DIMENSION_DECIMALS) : '—';
+}
+
+/**
+ * G8: Repair, offered while the check refuses the model (upstream's "Repair model" at import): what it
+ * fixes and what it never does, where the new file goes, then the last repair's result while the
+ * project still holds the geometry it made.
+ */
+function RepairBlock({ ok }: { ok: boolean }) {
+  const scene = useStore(sceneStore);
+  const report = useStore(repairStore);
+  const running = useStore(runStore) !== null;
+  const [busy, setBusy] = useState(false);
+  const rev = scene?.info.geometry_rev;
+  const shown = report && report.outcome.state.info.geometry_rev === rev ? report : null;
+  if (ok && !shown) return null;
+  const not = unrepairable(scene?.check);
+  return (
+    <div className="props-section" data-part="repair">
+      <div className="label section-label">Repair model</div>
+      {shown && (
+        <div className="hint" data-part="repair-result" data-changed={shown.changed} data-passes={shown.passes}>
+          {repairSummary(shown)} {shown.passes ? 'The model check passes.' : 'The model check still refuses it.'}
+        </div>
+      )}
+      {!ok && (
+        <>
+          <div className="hint">
+            Repair welds vertices closer than 1 µm, removes faces of zero area and repeated faces, and turns faces that point
+            into the room outward. It never closes a hole or separates faces that intersect. The repaired model is written to
+            a new file beside the original (name_repaired.obj, metres, Z up); the original is not touched. One undo step.
+          </div>
+          {not.length > 0 && (
+            <div className="hint" data-part="repair-cannot">
+              Repair does not fix: {not.join('; ')}.
+            </div>
+          )}
+          <button
+            className="wide-button"
+            data-part="repair-model"
+            disabled={running || busy}
+            title={running ? RUN_ACTIVE_TITLE : 'Repair, write the new file beside the original, and check the model again'}
+            onClick={() => {
+              setBusy(true);
+              actions
+                .repairModel()
+                .catch(() => {})
+                .finally(() => setBusy(false));
+            }}
+          >
+            Repair and check again
+          </button>
+        </>
+      )}
+    </div>
+  );
 }
 
 function ImportBlock() {
@@ -156,6 +212,8 @@ export function GeometryPanel() {
           </span>
         </div>
       </div>
+
+      <RepairBlock ok={ok} />
 
       {info.imported_ungrouped && (
         <div className="props-section" data-part="ungrouped-note">

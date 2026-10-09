@@ -13,6 +13,13 @@ import { RUN_ACTIVE_TITLE } from './MenuBar';
 const UNITS: readonly Unit[] = ['m', 'cm', 'mm', 'ft', 'in'];
 const UPS: readonly Up[] = ['z', 'y'];
 const UNIT_NAMES: Record<Unit, string> = { m: 'metres', cm: 'centimetres', mm: 'millimetres', ft: 'feet', in: 'inches' };
+type RepairChoice = 'leave' | 'repair';
+const REPAIR_CHOICES: readonly RepairChoice[] = ['leave', 'repair'];
+const REPAIR_LABELS: Record<RepairChoice, string> = { leave: 'Leave it', repair: 'Repair' };
+const REPAIR_TITLES: Record<RepairChoice, string> = {
+  leave: 'Load it as it is: the faces the check names are highlighted and Run waits',
+  repair: 'Weld vertices, remove faces of zero area and repeated faces, turn inward faces out; written to a new file beside this one, never over it',
+};
 
 function Choice<T extends string>(props: {
   field: string;
@@ -21,8 +28,9 @@ function Choice<T extends string>(props: {
   value: T;
   onChange: (v: T) => void;
   titles?: Record<T, string>;
+  labels?: Record<T, string>;
 }) {
-  const { field, label, options, value, onChange, titles } = props;
+  const { field, label, options, value, onChange, titles, labels } = props;
   return (
     <div className="dialog-row">
       <span id={`import-${field}`}>{label}</span>
@@ -37,7 +45,7 @@ function Choice<T extends string>(props: {
             title={titles?.[o]}
             onClick={() => onChange(o)}
           >
-            {o}
+            {labels?.[o] ?? o}
           </button>
         ))}
       </div>
@@ -48,6 +56,8 @@ function Choice<T extends string>(props: {
 function Dialog({ path }: { path: string }) {
   const [unit, setUnit] = useState<Unit>('m');
   const [up, setUp] = useState<Up>('z');
+  // G8: upstream's "Repair model" at import, as a plain choice; leaving the model as it is stays the default.
+  const [repair, setRepair] = useState<RepairChoice>('leave');
   // A run that started while the dialog was open (F5) belongs to the project the import would
   // replace: Import waits for it (M11 PQ4), as New and Open do.
   const running = useStore(runStore) !== null;
@@ -57,7 +67,7 @@ function Dialog({ path }: { path: string }) {
   const go = () => {
     if (runStore.get() !== null) return;
     close();
-    actions.fire(actions.importModel(path, unit, up));
+    actions.fire(actions.importModel(path, unit, up, repair === 'repair'));
   };
   const file = path.split(/[\\/]/).pop();
   return (
@@ -86,6 +96,7 @@ function Dialog({ path }: { path: string }) {
         <div className="dialog-note empty">
           The file's numbers are read in this unit, and this axis becomes vertical. Nothing is guessed from the model.
         </div>
+        <Choice field="repair" label="If the check refuses it" options={REPAIR_CHOICES} value={repair} onChange={setRepair} titles={REPAIR_TITLES} labels={REPAIR_LABELS} />
         <div className="dialog-actions">
           <button onClick={close} data-part="import-cancel">
             Cancel

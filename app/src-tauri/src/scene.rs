@@ -235,6 +235,35 @@ pub struct EditOutcome {
     pub state: SceneState,
 }
 
+/// What Repair (parity G8, `model_repair`) did: the core's safe fixes counted, the new file it
+/// wrote, and the edit that put the repaired geometry in the project.
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+pub struct RepairReport {
+    /// False when repair found nothing to change: no file is written and the project is as it was.
+    pub changed: bool,
+    /// The repaired mesh written beside the original (OBJ, metres, Z up), never over it; `None`
+    /// when nothing changed.
+    pub file: Option<String>,
+    /// The file the model came from, left untouched; `None` for a project not imported this session.
+    pub original: Option<String>,
+    /// Vertices merged into one within the welding tolerance.
+    pub welded_vertices: u32,
+    /// Faces of zero area removed.
+    pub degenerate_faces: u32,
+    /// Faces repeating another removed.
+    pub duplicate_faces: u32,
+    /// Faces turned to face out of the room.
+    pub flipped_faces: u32,
+    /// False when the check found the topology unreliable (faces intersect): which way faces
+    /// should face was not decided, and nothing was flipped.
+    pub oriented: bool,
+    /// Whether the repaired model passes the model check.
+    pub passes: bool,
+    /// The checked apply of the repaired geometry (one undo step); `applied: false` with no
+    /// refusals when nothing changed.
+    pub outcome: EditOutcome,
+}
+
 // ---- UI codes ---------------------------------------------------------------------------------
 
 /// Run blockers only the app produces.

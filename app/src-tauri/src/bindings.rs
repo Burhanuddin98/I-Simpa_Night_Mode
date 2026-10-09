@@ -22,7 +22,7 @@ use crate::runs::{
     GpuStatus, LibraryMaterial, LibrarySpectrum, ResultsState, RunStarted, RunStreamBatch,
     RunsView, SolversStatus,
 };
-use crate::scene::{EditOutcome, SceneState};
+use crate::scene::{EditOutcome, RepairReport, SceneState};
 
 struct Dump {
     file: &'static str,
@@ -85,6 +85,12 @@ fn dumps() -> Vec<Dump> {
                     "edit_outcome",
                     "EditOutcome",
                     schema_for!(EditOutcome).to_value(),
+                ),
+                // Parity G8: Repair's report.
+                (
+                    "repair_report",
+                    "RepairReport",
+                    schema_for!(RepairReport).to_value(),
                 ),
                 // M11 (docs/investigations/2026-09-29-m11/PLAN.md 2.3).
                 (
