@@ -114,8 +114,7 @@ button:focus-visible {
 }
 /* Fields: the position fields, the materials grid, the dialogs. */
 input,
-select,
-textarea {
+select {
   font: inherit;
   color: var(--text);
   background: var(--raised);
@@ -125,13 +124,11 @@ textarea {
   user-select: text;
 }
 input:focus-visible,
-select:focus-visible,
-textarea:focus-visible {
+select:focus-visible {
   outline: 2px solid var(--red);
   outline-offset: -1px;
 }
-input[aria-invalid='true'],
-textarea[aria-invalid='true'] {
+input[aria-invalid='true'] {
   border-color: var(--red-hi);
 }
 

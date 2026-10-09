@@ -578,6 +578,19 @@
   min-height: 58px;
   resize: vertical;
   line-height: 1.45;
+  /* theme.css is frozen since the M10 foundation (m10 lint) and styles input and select only: the
+     description's textarea takes the same look here. */
+  font: inherit;
+  color: var(--text);
+  background: var(--raised);
+  border: 1px solid var(--edge);
+  border-radius: 5px;
+  box-sizing: border-box;
+  user-select: text;
+}
+.project-field textarea:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: -1px;
 }
 .hint {
   margin-top: 10px;
