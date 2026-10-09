@@ -146,20 +146,29 @@ export const CHART_HEADING_PX = 52;
 export async function encodeChartPng(chart: { width: number; height: number; rgba: Uint8ClampedArray }, heading: ChartHeading, scale: number, colours: { bg: string; text: string; dim: string; font: string }): Promise<Uint8Array> {
   const k = Math.max(1, scale);
   const extra = Math.round(CHART_HEADING_PX * k);
+  const titleFont = `${Math.round(13 * k)}px ${colours.font}`;
+  const subFont = `${Math.round(11.5 * k)}px ${colours.font}`;
   const c = document.createElement('canvas');
-  c.width = chart.width;
+  let g = c.getContext('2d');
+  if (!g) throw new Error('no 2D canvas to encode the image');
+  // The image is as wide as the chart, or as its heading when that is wider: never a cut word.
+  g.font = titleFont;
+  const titleW = g.measureText(heading.title).width;
+  g.font = subFont;
+  const subW = g.measureText(heading.sub).width + heading.keys.reduce((w, key) => w + Math.round(36 * k) + g!.measureText(key.label).width, Math.round(24 * k));
+  c.width = Math.max(chart.width, Math.ceil(Math.max(titleW, subW) + Math.round(24 * k)));
   c.height = chart.height + extra;
-  const g = c.getContext('2d');
+  g = c.getContext('2d');
   if (!g) throw new Error('no 2D canvas to encode the image');
   g.fillStyle = colours.bg;
-  g.fillRect(0, 0, c.width, extra);
+  g.fillRect(0, 0, c.width, c.height);
   g.putImageData(new ImageData(new Uint8ClampedArray(chart.rgba), chart.width, chart.height), 0, extra);
   g.textBaseline = 'top';
   g.fillStyle = colours.text;
-  g.font = `${Math.round(13 * k)}px ${colours.font}`;
+  g.font = titleFont;
   g.fillText(heading.title, Math.round(12 * k), Math.round(8 * k));
   g.fillStyle = colours.dim;
-  g.font = `${Math.round(11.5 * k)}px ${colours.font}`;
+  g.font = subFont;
   g.fillText(heading.sub, Math.round(12 * k), Math.round(28 * k));
   // The key, right of the sub line: a swatch and its label each.
   let x = Math.round(12 * k) + g.measureText(heading.sub).width + Math.round(24 * k);

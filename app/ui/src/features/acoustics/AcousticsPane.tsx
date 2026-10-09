@@ -318,6 +318,7 @@ function Chart({ opts: own, data, part, hidden = [], hand }: { opts: Omit<uPlot.
     zoom.current = {};
     const u = new uPlot({ cursor: ZOOM_CURSOR, ...opts, ...size() }, data, el);
     plot.current = u;
+    plots.set(part, u);
     show(u, hiddenNow.current);
     // Double-click: the whole chart again (the chart's own ranges, or the axes set by hand).
     const whole = () => {
@@ -328,12 +329,13 @@ function Chart({ opts: own, data, part, hidden = [], hand }: { opts: Omit<uPlot.
     const ro = new ResizeObserver(() => plot.current?.setSize(size()));
     ro.observe(el);
     return () => {
+      if (plots.get(part) === u) plots.delete(part);
       u.over.removeEventListener('dblclick', whole);
       ro.disconnect();
       plot.current?.destroy();
       plot.current = null;
     };
-  }, [opts, data]);
+  }, [opts, data, part]);
   useEffect(() => {
     if (plot.current) show(plot.current, hidden);
   }, [hidden]);
@@ -345,12 +347,31 @@ function Chart({ opts: own, data, part, hidden = [], hand }: { opts: Omit<uPlot.
 const chartHeadings = new Map<string, () => ChartHeading>();
 const CHART_NAMES: Record<string, string> = { 'rt-chart': 'reverberation time', 'spectrum-chart': 'spectrum', 'decay-chart': 'decay' };
 
-/** R63: writes chart `part` (on the page now) as a PNG to `path`, or where the dialog says. */
-function saveChart(part: string, path?: string) {
-  const canvas = document.querySelector<HTMLCanvasElement>(`[data-acoustics] [data-part="${part}"] canvas`);
+/** R63: the charts on the page, by `data-part`, for their images. */
+const plots = new Map<string, uPlot>();
+/** R63: the smallest image of a chart, CSS px: a chart in a short dock is drawn this large for its image. */
+const IMAGE_MIN = { width: 960, height: 440 } as const;
+
+/** R63: writes chart `part` (on the page now) as a PNG to `path`, or where the dialog says. A chart
+ * smaller than `IMAGE_MIN` is drawn at that size for the image (the same chart: its zoom, axes and
+ * series), then given its size back. */
+async function saveChart(part: string, path?: string) {
+  const u = plots.get(part);
   const heading = chartHeadings.get(part);
-  if (!canvas || !heading) return Promise.reject({ code: 'EXPORT_NOTHING', message: `no ${CHART_NAMES[part] ?? part} chart is shown` });
-  return exportChart(canvas, heading(), CHART_NAMES[part] ?? part, path);
+  if (!u || !heading) throw { code: 'EXPORT_NOTHING', message: `no ${CHART_NAMES[part] ?? part} chart is shown` };
+  const was = { width: u.width, height: u.height };
+  const big = { width: Math.max(was.width, IMAGE_MIN.width), height: Math.max(was.height, IMAGE_MIN.height) };
+  const frame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
+  try {
+    if (big.width !== was.width || big.height !== was.height) {
+      u.setSize(big);
+      await frame();
+      await frame();
+    }
+    return await exportChart(u.ctx.canvas, heading(), CHART_NAMES[part] ?? part, path);
+  } finally {
+    if (u.width !== was.width || u.height !== was.height) u.setSize(was);
+  }
 }
 
 /** R63: "Image…" on a chart's card: the chart as a PNG, saved where the person picks. */
