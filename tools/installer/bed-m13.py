@@ -17,8 +17,8 @@ usage: python tools/installer/bed-m13.py <setup.exe> <payload-dir> <out-dir> [po
    copy (decision 85).
 5. Silent uninstall: the install folder gone, the shortcut, ProgID, uninstall entry gone, .simpa as it
    was before, the scratch project and its runs untouched.
-6. A second install and uninstall with a user's project and run planted inside the install folder:
-   they survive, and only they.
+6. A second install, a third over it (the old uninstaller runs first), and an uninstall with a user's
+   project and run planted inside the install folder: they survive, and only they.
 Receipt: <out>\\bed-m13.json and bed-m13.log. Needs websocket-client (do not run with python -I).
 """
 import ctypes, hashlib, json, os, shutil, subprocess, sys, time, urllib.request, winreg
@@ -352,6 +352,10 @@ try:
 
     # ---- 6. a user's project and run inside the install folder survive an uninstall
     rc = install("second")
+    # Over an install already there: its own uninstaller runs first, then the same file set again.
+    rc2 = install("over the second")
+    check("install-over-existing", rc == 0 and rc2 == 0 and tree_files(instdir) == sorted(want + ["uninstall.exe"]) and reg_key(UNINST),
+          {"exit": [rc, rc2], "files": len(tree_files(instdir))})
     planted = [os.path.join("tutorials", "my room.simpa"), os.path.join("tutorials", "runs", "run-1", "run.json")]
     for f in planted:
         os.makedirs(os.path.dirname(os.path.join(instdir, f)), exist_ok=True)

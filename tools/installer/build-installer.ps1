@@ -34,7 +34,7 @@ $version = $Matches[1]
 $tauri = (Get-Content "$repo\app\src-tauri\tauri.conf.json" -Raw | ConvertFrom-Json).version
 if ($tauri -ne $version) { throw "tauri.conf.json says $tauri, Cargo.toml $version" }
 $exeVersion = (Get-Item $App).VersionInfo.ProductVersion
-if ($exeVersion -ne $version) { throw "app.exe's version resource says '$exeVersion', Cargo.toml $version: rebuild app.exe" }
+if ($exeVersion -ne $version) { throw "app.exe's version resource says '$exeVersion', Cargo.toml ${version}: rebuild app.exe" }
 $commit = (& git -C $repo rev-parse --short=12 HEAD).Trim()
 if (& git -C $repo status --porcelain --untracked-files=no) { $commit = "$commit with uncommitted changes" }
 # About's commit is compiled in (SIMPA_BUILD_COMMIT): the exe must hold this one.
