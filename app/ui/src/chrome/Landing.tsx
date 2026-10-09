@@ -1,6 +1,7 @@
 // The landing page (Burhan, 2026-10-06 01:24): while no project is open it stands in for the
 // empty window, a card over the 3D view's background with the shipped examples (landingModel.ts), New
-// project, New box room (G11, BoxRoomDialog.tsx) and Open. Each action is the one File › New project, File › Open… and the examples
+// project, New box room (G11, BoxRoomDialog.tsx) and Open, and above them the recent projects (A7,
+// recent.ts). Each action is the one File › New project, File › Open… and the examples
 // command run (actions.ts), so the save prompt and the run guard hold here too. A failure is
 // shown on the card, since the Console is behind it. The menu bar stays above it and the status
 // bar beside it; App.tsx makes the regions behind it inert, so Tab moves only through the card.
@@ -9,9 +10,12 @@ import * as actions from '../actions';
 import { boxRoomRequestStore, runStore, sceneStore, useStore } from '../store';
 import { EXAMPLES, EXAMPLES_HEAD, EXAMPLES_NOTE, exampleLine, LANDING_LEAD, LANDING_TITLE, landingShown } from './landingModel';
 import { RUN_ACTIVE_TITLE } from './MenuBar';
+import { forgetRecent, recentStore } from './recent';
+import { recentLabel } from './recentModel';
 
 export function Landing() {
   const scene = useStore(sceneStore);
+  const recent = useStore(recentStore);
   const running = useStore(runStore) !== null;
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +41,36 @@ export function Landing() {
           {LANDING_TITLE}
         </h1>
         <p className="landing-lead">{LANDING_LEAD}</p>
+
+        {recent.length > 0 && (
+          <>
+            <h2 className="landing-head">Recent</h2>
+            <ul className="landing-recent" data-part="landing-recent">
+              {recent.map((p) => {
+                const { name, folder } = recentLabel(p);
+                return (
+                  <li key={p}>
+                    <button
+                      className="landing-recent-open"
+                      data-recent={p}
+                      disabled={blocked}
+                      title={title ?? p}
+                      aria-busy={busy === p}
+                      onClick={() => go(p, () => actions.openPath(p))}
+                    >
+                      <span className="name">{name}</span>
+                      <span className="folder mono">{folder}</span>
+                      {busy === p && <span className="opening">Opening…</span>}
+                    </button>
+                    <button className="landing-recent-forget" data-recent-forget={p} aria-label={`Take ${name} off the recent list`} title="Take it off this list (the file stays)" onClick={() => forgetRecent(p)}>
+                      ×
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
 
         <h2 className="landing-head">{EXAMPLES_HEAD}</h2>
         <ul className="landing-examples">

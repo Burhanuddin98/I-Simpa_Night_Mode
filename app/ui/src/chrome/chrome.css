@@ -1193,6 +1193,66 @@
   font-size: 12px;
   color: var(--text-3);
 }
+/* A7: the recent projects, one line each, above the examples. */
+.landing-recent {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 20px;
+  padding: 0;
+  list-style: none;
+}
+.landing-recent li {
+  display: flex;
+  gap: 4px;
+}
+.landing-recent-open {
+  flex-grow: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--edge);
+  background: var(--raised);
+  text-align: left;
+}
+.landing-recent-open:not(:disabled):hover {
+  background: var(--raised-2);
+  border-color: #34343c;
+}
+.landing-recent-open .name {
+  flex-shrink: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.landing-recent-open .folder {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.landing-recent-open .opening {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.landing-recent-forget {
+  width: 30px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-3);
+}
+.landing-recent-forget:hover {
+  border-color: var(--edge);
+  color: var(--text);
+}
 .landing-actions {
   display: flex;
   gap: 8px;

@@ -26,6 +26,8 @@ import { boxRoomRequestStore, groupRenameStore, reportStore, runStore, sceneStor
 import { ADD_GROUP_LABEL, DELETE_GROUP_LABEL, MERGE_LABEL, mergePlan, RENAME_GROUP_LABEL, renameTarget } from './groupsModel';
 import { clipboardStore, copySelected, deleteGroup, pasteCopied } from './sceneUi';
 import { Search } from './icons';
+import { recentStore } from './recent';
+import { recentLabel } from './recentModel';
 import { RunButton } from './RunButton';
 import { closingProps, usePresence } from './usePresence';
 import { REGROUP_LABEL, regroupFaces, runTooltip } from './sceneModel';
@@ -50,6 +52,7 @@ export function MenuBar() {
   const selection = useStore(selectionStore);
   const hidden = useStore(hideStore);
   const copied = useStore(clipboardStore);
+  const recent = useStore(recentStore);
   // W9: what the export items say depends on the step, the run and its report, and the view.
   useStore(stepStore);
   useStore(selectedRunStore);
@@ -107,6 +110,14 @@ export function MenuBar() {
         disabled: running,
         title: running ? RUN_ACTIVE_TITLE : OPEN_TITLE,
       },
+      // A7: upstream's Recent projects, five, newest first, numbered as upstream's file history.
+      ...recent.map((p, i) => ({
+        id: `recent-${i}`,
+        label: `${i + 1}  ${recentLabel(p).name}`,
+        run: () => actions.fire(actions.openPath(p)),
+        disabled: running,
+        title: running ? RUN_ACTIVE_TITLE : p,
+      })),
       { id: 'save', label: 'Save', keys: 'Ctrl+S', run: () => actions.fire(actions.save()), disabled: !info },
       { id: 'save-as', label: 'Save as…', keys: 'Ctrl+Shift+S', run: () => actions.fire(actions.saveAs()), disabled: !info },
       {

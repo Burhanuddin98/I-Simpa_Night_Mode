@@ -28,6 +28,7 @@ import {
 import type { Setting, UiIssue } from './bindings/ipc';
 import type { BandKind, Op, ReflectionLaw } from './bindings/schema';
 import { regroupFaces } from './chrome/sceneModel';
+import { noteRecent } from './chrome/recent';
 import { mapOfGroup, surfaceMapPlan } from './chrome/groupsModel';
 import { newBoxZone } from './chrome/zones';
 import { emptyLog, endLine, foldEvent, needsSavePrompt, progressText } from './flow';
@@ -127,7 +128,10 @@ async function run<T>(what: string, call: () => Promise<T>): Promise<T> {
 /** The state after startup: a `--project` opened at launch, with its check lines. */
 export async function loadInitialState(): Promise<void> {
   const state = await run('Reading the project', () => backend.sceneState());
-  if (state) await accept(state);
+  if (state) {
+    await accept(state);
+    noteRecent(state.info.path);
+  }
 }
 
 /** A new, empty project, after the save prompt (row 22, A9); `null` when the user cancelled or
@@ -178,6 +182,7 @@ function folderOf(path: string | null | undefined): string | null {
 export async function openProject(path: string): Promise<SceneState> {
   refusalStore.set(new Map());
   const state = await run(`Could not open ${path}`, async () => accept(await backend.sceneOpen(path)));
+  noteRecent(state.info.path);
   forgetRuns();
   fire(refreshRuns());
   return state;
@@ -191,6 +196,7 @@ export async function openExample(id: string): Promise<SceneState | null> {
   if (!(await confirmDiscard())) return null;
   refusalStore.set(new Map());
   const state = await run('Could not open the example', async () => accept(await backend.exampleOpen(id)));
+  noteRecent(state.info.path);
   forgetRuns();
   fire(refreshRuns());
   return state;
@@ -306,6 +312,7 @@ export async function saveAs(path?: string): Promise<SceneState | null> {
   if (typeof target !== 'string') return null;
   const before = folderOf(sceneStore.get()?.info.path);
   const state = await run(`Could not save ${target}`, async () => accept(await backend.projectSave(target)));
+  noteRecent(state.info.path);
   // Another folder is another runs root.
   if (folderOf(state.info.path) !== before) forgetRuns();
   fire(refreshRuns());
