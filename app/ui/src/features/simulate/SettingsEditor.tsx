@@ -8,7 +8,8 @@
 // radius, the particle extinction and "Preserve walls when meshing (-Y)" (backlog 80: every value
 // the run-quality advisor's Apply sets has its field), the method (C12),
 // sound maps per band (C21), echogram per source (C22), the bands it computes (C25) and the band
-// presets (C26), and the air (C27). TCR: its method as drawn, its bands and the air.
+// presets (C26), and the air (C27) with the switch that lets it absorb (C14). TCR: its method as
+// drawn, its bands and the air.
 // Under the particles (and TCR's method), the run-time forecast (runTime.ts, Burhan's 10-05 UI
 // list item 5): this project's last run of the solver, scaled to the field as typed, and the
 // finish as a clock time; or that there is no measurement yet.
@@ -47,6 +48,8 @@ import {
   withAir,
   withMeshing,
   withSpps,
+  withSppsSwitch,
+  type SppsSwitch,
 } from './settings';
 
 /** What a field accepts: a value, or why the text is not one. */
@@ -318,9 +321,21 @@ function airPatch(key: AirKey, v: number) {
   return key === 'pressure_pa' ? { pressure_pa: v } : { relative_humidity_percent: v };
 }
 
-/** The air (C27): temperature, humidity and pressure, which both solvers use. */
-function AirEditor({ scene, s }: { scene: SceneState; s: ProjectSettings }) {
+/**
+ * The air (C27): temperature, humidity and pressure, which both solvers use; and, for SPPS, the
+ * switch that lets the air absorb at all (C14, `simulation@abs_atmo_calc`).
+ */
+function AirEditor({ scene, s, solver }: { scene: SceneState; s: ProjectSettings; solver: SolverName }) {
+  const refusals = useStore(refusalStore);
   const env = s.environment;
+  const airKey = keyOf(solver, 'air_absorption');
+  const setAirAbsorption = (on: boolean) =>
+    actions.fire(
+      edit(airKey, (now) => {
+        const next = withSppsSwitch(now.solvers, 'air_absorption', on);
+        return next ? setSolverSettings(next) : null;
+      }),
+    );
   const fields = [
     { field: 'temperature', label: 'Temperature', unit: '°C', key: 'temperature_c', value: env.temperature_c },
     { field: 'humidity', label: 'Relative humidity', unit: '%', key: 'relative_humidity_percent', value: env.relative_humidity_percent },
@@ -343,6 +358,16 @@ function AirEditor({ scene, s }: { scene: SceneState; s: ProjectSettings }) {
         />
       ))}
       <Issues refused={[]} current={range} />
+      {solver === 'spps' && (
+        <>
+          <Toggle field="air_absorption" label="Air absorption" checked={s.solvers.spps.air_absorption} onChange={setAirAbsorption} />
+          <div className="sim-hint" data-part="air-absorption-hint">
+            Off, the air takes no energy from the sound and only the surfaces absorb it, so the sound dies away more slowly, most
+            in the high bands. The air above still sets the speed of sound. On is upstream's default.
+          </div>
+          <Issues refused={refusals.get(airKey) ?? []} current={issuesAt(scene.issues, [`/solvers/${solver}/air_absorption`])} />
+        </>
+      )}
     </>
   );
 }
@@ -382,7 +407,7 @@ export function SettingsEditor({ scene, settings, solver }: { scene: SceneState 
           <BandsEditor scene={scene} s={s} solver="tcr" />
         </div>
         <div className="sim-setting sim-block" data-setting="air">
-          <AirEditor scene={scene} s={s} />
+          <AirEditor scene={scene} s={s} solver="tcr" />
         </div>
       </div>
     );
@@ -410,13 +435,12 @@ export function SettingsEditor({ scene, settings, solver }: { scene: SceneState 
       pbin = `particle file about ${sizeText(perBand)} per band, ${sizeText(perBand * BigInt(bandsOn))} for ${bandsOn} bands`;
     }
   }
-  const toggle = (field: 'sound_maps_per_band' | 'echogram_per_source') => (on: boolean) =>
+  const toggle = (field: SppsSwitch) => (on: boolean) =>
     actions.fire(
-      edit(keyOf('spps', field), (now) =>
-        now.solvers.spps[field] === on
-          ? null
-          : setSolverSettings(withSpps(now.solvers, field === 'sound_maps_per_band' ? { sound_maps_per_band: on } : { echogram_per_source: on })),
-      ),
+      edit(keyOf('spps', field), (now) => {
+        const next = withSppsSwitch(now.solvers, field, on);
+        return next ? setSolverSettings(next) : null;
+      }),
     );
   const setPreserve = (on: boolean) =>
     actions.fire(
@@ -570,7 +594,7 @@ export function SettingsEditor({ scene, settings, solver }: { scene: SceneState 
         <BandsEditor scene={scene} s={s} solver="spps" />
       </div>
       <div className="sim-setting sim-block" data-setting="air">
-        <AirEditor scene={scene} s={s} />
+        <AirEditor scene={scene} s={s} solver="spps" />
       </div>
     </div>
   );

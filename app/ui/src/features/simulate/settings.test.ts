@@ -180,3 +180,18 @@ test('withMeshing replaces the meshing fields only, and travels as one set_solve
   const r = withSpps(s, { receiver_radius_m: 0.6, extinction_exponent: 7 });
   assert.deepEqual([r.spps.receiver_radius_m, r.spps.extinction_exponent], [0.6, 7]);
 });
+
+// M12c P1 (C14): a switch the user does not touch sends nothing; a touched one changes only itself.
+import { withSppsSwitch } from './settings.ts';
+
+test('withSppsSwitch: the value already stored is no op; another sets that one field only', () => {
+  const s = solvers();
+  assert.equal(withSppsSwitch(s, 'air_absorption', true), null, 'unchanged: no op, no undo step');
+  const off = withSppsSwitch(s, 'air_absorption', false);
+  assert.ok(off);
+  assert.equal(off.spps.air_absorption, false);
+  assert.deepEqual({ ...off, spps: { ...off.spps, air_absorption: true } }, s, 'nothing else moves');
+  assert.equal(s.spps.air_absorption, true, 'the input is not changed');
+  assert.match(opText(setSolverSettings(off)), /"air_absorption":false/);
+  assert.equal(withSppsSwitch(off, 'air_absorption', false), null);
+});

@@ -201,6 +201,21 @@ export function withSpps(s: SolverSettings, patch: Partial<SppsSettings>): Solve
   return { ...s, spps: { ...s.spps, ...patch } };
 }
 
+/** An SPPS on/off setting the editor shows as a checkbox. */
+export type SppsSwitch = 'air_absorption' | 'sound_maps_per_band' | 'echogram_per_source';
+
+/**
+ * The solver settings with one SPPS switch set, everything else as stored; null when it already
+ * is, so an untouched control sends no op and the project's solver input stays byte for byte as
+ * it was (C14: `abs_atmo_calc`).
+ */
+export function withSppsSwitch(s: SolverSettings, field: SppsSwitch, on: boolean): SolverSettings | null {
+  if (s.spps[field] === on) return null;
+  const patch: Partial<SppsSettings> = {};
+  patch[field] = on;
+  return withSpps(s, patch);
+}
+
 /** The solver settings with meshing fields replaced (`-Y`, backlog 80); everything else as stored. */
 export function withMeshing(s: SolverSettings, patch: Partial<MeshSettings>): SolverSettings {
   return { ...s, meshing: { ...s.meshing, ...patch } };
