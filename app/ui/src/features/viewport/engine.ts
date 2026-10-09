@@ -89,6 +89,7 @@ import { bgraToRgba, flipRows, unpadRows } from './snapshot';
 import { animatorStore } from './animator';
 import { firstFace, modelGeometry, pickingBvh } from './pick';
 import { ARC_MS, arcPose, easeInOut, type Pose } from './arc';
+import { groupNamesOf, indexOf, leftOut, roofFaces, shownPerVertex } from './hide';
 import { facePlan, faceShowOf, type FacePlan, type FaceShow } from './faces';
 import { ResultsLayer, type MapMeta, type ParticleMeta } from './resultsLayer';
 import { faceBounds, faceCentroid, fitOrtho, gizmoAxes, isFloorLike, placementPoint, planDimensions, rayOnFacePlane, type Box, type Vec } from './geometry';
@@ -105,7 +106,7 @@ import type { ParticleLook } from './rays';
 import { planeCells, roomBox } from '../../chrome/planes';
 import { dimensionLines } from './dims';
 
-const { acesFilmicToneMapping, clamp, Fn, max, screenUV, texture, float, instancedBufferAttribute, materialOpacity, mix, output, positionGeometry, sRGBTransferOETF, uniform, uniformArray, vec3, vec4 } = T;
+const { acesFilmicToneMapping, attribute, clamp, Fn, max, screenUV, texture, float, instancedBufferAttribute, materialOpacity, mix, output, positionGeometry, sRGBTransferOETF, uniform, uniformArray, vec3, vec4 } = T;
 
 export type ViewMode = 'perspective' | 'plan';
 
@@ -144,6 +145,17 @@ export const mapPointerStore = new Store<{ face: number; x: number; y: number } 
 
 /** Round 2: the presentation view (no panels) and its turntable camera. */
 export const presentStore = new Store<{ on: boolean; turntable: boolean }>({ on: false, turntable: false });
+/**
+ * Items 7 and 8 (hide.ts): Roof off and Isolate, view states only. What the view leaves out, as the chip and
+ * the menus say it: the roof's faces and their groups, and the isolated selection's faces and groups.
+ */
+export interface HideState {
+  roof: boolean;
+  roofFaces: number;
+  roofGroups: string[];
+  isolate: { faces: number; groups: string[] } | null;
+}
+export const hideStore = new Store<HideState>({ roof: false, roofFaces: 0, roofGroups: [], isolate: null });
 /** The benchmark's replication in force (the card says so in words), or null: the real saved particles. */
 export const replicaStore = new Store<{ saved: number; copies: number } | null>(null);
 /** The turntable's speed, degrees a second. */
@@ -436,7 +448,8 @@ function stillMotion(): boolean {
  * did; fragments above the build-up's cut are discarded.
  */
 function shaded<M extends { maskNode: unknown; outputNode: unknown; opacityNode: unknown }>(m: M, u: Shared): M {
-  m.maskNode = buildKeep(u.nmBuildZ);
+  // Items 7 and 8: a face the view leaves out (Roof off, Isolate) has `nmShow` 0 on its three vertices.
+  m.maskNode = buildKeep(u.nmBuildZ).and(attribute('nmShow', 'float').greaterThan(0.5));
   // Ghosted while the light plays (engine.setGhosted makes the surfaces see-through): 10 % at full dim.
   m.opacityNode = materialOpacity.mul(float(1).sub(u.nmDim.mul(0.9)));
   const lit = output.rgb
@@ -488,6 +501,7 @@ function emptyTint(): BufferGeometry {
   const g = emptyGeometry();
   g.setAttribute('color', new Float32BufferAttribute(new Float32Array(0), 3));
   g.setAttribute('nmAo', new Float32BufferAttribute(new Float32Array(0), 1));
+  g.setAttribute('nmShow', new Float32BufferAttribute(new Float32Array(0), 1));
   return g;
 }
 
@@ -563,8 +577,19 @@ class ViewportEngine {
   private readonly facesBoth: Material;
   private readonly washBack: Material;
   private readonly washBoth: Material;
+  /** The edges drawn: the model's (`allEdges`), or those of the faces drawn while some are left out. */
   private triangleEdges: BufferGeometry = emptyGeometry();
   private featureEdges: BufferGeometry = emptyGeometry();
+  private allEdges: { triangle: BufferGeometry; feature: BufferGeometry } | null = null;
+  /** The model's indexed geometry (the BVH's), and the one drawn: the same, or the faces not left out. */
+  private modelGeom: BufferGeometry | null = null;
+  private drawnGeom: BufferGeometry | null = null;
+  /** Items 7 and 8 (hide.ts): the faces left out (1), or null; the roof as last found for this model; the isolated faces. */
+  private out: Uint8Array | null = null;
+  private roofCache: { rev: number | null; faces: number[] } | null = null;
+  private isolated: number[] | null = null;
+  /** The left-out faces' outlines, faint, so what Roof off or Isolate took away still shows where it was. */
+  private readonly hiddenLines: LineSegments;
   private readonly edges: LineSegments;
   private readonly highlight: Mesh;
   private readonly selectionWash: Mesh;
@@ -663,6 +688,7 @@ class ViewportEngine {
     // The glass case (glass.ts): the see-through layer's opacity by view angle.
     ghostMaterial.opacityNode = glassOpacity(materialOpacity);
     this.edges = new LineSegments(emptyGeometry(), fadingLines(new LineBasicNodeMaterial({ color: LINE, transparent: true, opacity: 0.3, depthWrite: false }), this.shared));
+    this.hiddenLines = new LineSegments(emptyGeometry(), inSrgb(new LineBasicNodeMaterial({ color: LINE, transparent: true, opacity: 0.12, depthWrite: false })));
     this.highlight = new Mesh(
       emptyGeometry(),
       inSrgb(new MeshBasicNodeMaterial({ color: WARN, transparent: true, opacity: 0.55, side: DoubleSide, depthWrite: false })),
@@ -713,6 +739,7 @@ class ViewportEngine {
       [this.highlight, 1],
       [this.selectionWash, 2],
       [this.edges, 3],
+      [this.hiddenLines, 3],
       [this.selectionEdges, 4],
       [this.sourceStems, 5],
       [this.receiverStems, 5],
@@ -730,6 +757,7 @@ class ViewportEngine {
       this.highlight,
       this.selectionWash,
       this.edges,
+      this.hiddenLines,
       this.selectionEdges,
       this.sourceStems,
       this.receiverStems,
@@ -810,6 +838,12 @@ class ViewportEngine {
       registerHook('highlightPixels', () => this.highlightPixels()),
       // W1: the cutting planes the view draws (outline corners, cells, grid lines drawn).
       registerHook('planeOutlines', () => this.planeSummary),
+      // Items 7 and 8: the faces the view leaves out now (Roof off, Isolate), in project face numbering.
+      registerHook('viewHidden', () => ({ ...hideStore.get(), faces: this.out ? [...this.out.keys()].filter((f) => this.out?.[f]) : [] })),
+      registerHook('setRoofOff', (on: boolean) => {
+        this.setRoofOff(on);
+        return hideStore.get();
+      }),
       // Decision 68 (b): which backend draws the view, once it has started (null while it starts).
       registerHook('gpuBackend', () => this.backend),
       // The device the view runs on: its limits and features as granted (the WebGL2 fallback: its texture limit).
@@ -1495,6 +1529,8 @@ class ViewportEngine {
     const previousRev = this.mesh?.geometryRev ?? null;
     this.mesh = mesh;
     this.disposeModel();
+    // Isolate names faces of the geometry it was made on (as a face selection does).
+    if (previousRev !== (mesh?.geometryRev ?? null)) this.isolated = null;
     if (mesh && mesh.faceCount > 0) {
       const geometry = modelGeometry(mesh.positions, mesh.indices);
       this.positions32 = geometry.getAttribute('position').array as Float32Array;
@@ -1505,17 +1541,20 @@ class ViewportEngine {
       this.topo = buildTopology(mesh.positions, mesh.indices);
       this.bounds = faceBounds(mesh.positions, mesh.indices);
       if (this.bounds) this.layoutGround(this.bounds);
+      this.modelGeom = geometry;
       this.faces.geometry = geometry;
       this.fxDepth.geometry = geometry;
       this.tint.geometry = geometry.toNonIndexed();
+      this.tint.geometry.setAttribute('nmShow', new Float32BufferAttribute(shownPerVertex(mesh.faceCount, null), 1));
       this.ghost.geometry = this.tint.geometry;
       this.bakeCorners(mesh);
       this.recolor();
-      this.triangleEdges = new EdgesGeometry(geometry, 1);
-      this.featureEdges = new EdgesGeometry(geometry, 20);
-      this.applyStyle();
+      this.allEdges = { triangle: new EdgesGeometry(geometry, 1), feature: new EdgesGeometry(geometry, 20) };
+      this.triangleEdges = this.allEdges.triangle;
+      this.featureEdges = this.allEdges.feature;
     }
     this.builtRev = mesh?.geometryRev ?? null;
+    this.applyHidden();
     // A face selection names faces of the geometry it was made on.
     if (previousRev !== this.builtRev && selectionStore.get().kind === 'faces') selectionStore.set({ kind: 'none' });
     this.frame();
@@ -1619,18 +1658,29 @@ class ViewportEngine {
   private disposeModel(): void {
     if (this.aoFrame) cancelAnimationFrame(this.aoFrame);
     this.aoFrame = 0;
-    for (const o of [this.faces, this.tint, this.highlight, this.selectionWash]) {
+    if (this.drawnGeom && this.drawnGeom !== this.modelGeom) this.drawnGeom.dispose();
+    this.modelGeom?.dispose();
+    this.modelGeom = null;
+    this.drawnGeom = null;
+    for (const o of [this.tint, this.highlight, this.selectionWash]) {
       o.geometry.dispose();
       o.geometry = emptyGeometry();
     }
+    this.faces.geometry = emptyGeometry();
     this.tint.geometry = emptyTint();
     this.ghost.geometry = this.tint.geometry;
     this.fxDepth.geometry = emptyGeometry();
-    this.triangleEdges.dispose();
-    this.featureEdges.dispose();
+    this.disposeDrawnEdges();
+    this.allEdges?.triangle.dispose();
+    this.allEdges?.feature.dispose();
+    this.allEdges = null;
     this.triangleEdges = emptyGeometry();
     this.featureEdges = emptyGeometry();
     this.edges.geometry = this.triangleEdges;
+    this.hiddenLines.geometry.dispose();
+    this.hiddenLines.geometry = emptyGeometry();
+    this.out = null;
+    this.roofCache = null;
     this.selectionEdges.geometry.dispose();
     this.selectionEdges.geometry = emptyFat();
     this.bvh = null;
@@ -1657,6 +1707,106 @@ class ViewportEngine {
     g.setAttribute('position', new BufferAttribute(this.positions32, 3));
     g.setIndex(new BufferAttribute(index.subarray(0, 3 * n), 1));
     return g;
+  }
+
+  /** The edges drawn for the faces not left out, unless they are the model's own. */
+  private disposeDrawnEdges(): void {
+    if (this.triangleEdges !== this.allEdges?.triangle) this.triangleEdges.dispose();
+    if (this.featureEdges !== this.allEdges?.feature) this.featureEdges.dispose();
+  }
+
+  /**
+   * Items 7 and 8 (hide.ts): leaves out the roof's faces (Roof off) and every face but the isolated ones
+   * (Isolate), as a view state. The depth mesh and the light's depth draw only the faces kept, the surfaces
+   * mask the rest (`nmShow`), the edges are rebuilt for the faces kept, the left-out faces keep a faint
+   * outline, and picks pass through them (`out`). The model, its BVH and its numbers are not touched.
+   */
+  private applyHidden(): void {
+    const mesh = this.mesh;
+    const g = this.modelGeom;
+    const st = hideStore.get();
+    const roof = st.roof && mesh && g ? this.roofOf(mesh) : null;
+    const out = mesh && g ? leftOut(mesh.faceCount, roof, this.isolated) : null;
+    this.out = out;
+    if (this.drawnGeom && this.drawnGeom !== g) this.drawnGeom.dispose();
+    this.disposeDrawnEdges();
+    this.hiddenLines.geometry.dispose();
+    this.hiddenLines.geometry = emptyGeometry();
+    if (!mesh || !g || !out) {
+      this.drawnGeom = g;
+      this.triangleEdges = this.allEdges?.triangle ?? emptyGeometry();
+      this.featureEdges = this.allEdges?.feature ?? emptyGeometry();
+    } else {
+      const part = (want: 0 | 1) => {
+        const d = new BufferGeometry();
+        d.setAttribute('position', g.getAttribute('position'));
+        d.setAttribute('normal', g.getAttribute('normal'));
+        d.setIndex(new BufferAttribute(indexOf(mesh.indices, out, want), 1));
+        return d;
+      };
+      this.drawnGeom = part(0);
+      this.triangleEdges = new EdgesGeometry(this.drawnGeom, 1);
+      this.featureEdges = new EdgesGeometry(this.drawnGeom, 20);
+      const gone = part(1);
+      this.hiddenLines.geometry = new EdgesGeometry(gone, 20);
+      gone.dispose();
+    }
+    if (g) {
+      this.faces.geometry = this.drawnGeom ?? g;
+      this.fxDepth.geometry = this.drawnGeom ?? g;
+      const shown = this.tint.geometry.getAttribute('nmShow');
+      const want = shownPerVertex(mesh?.faceCount ?? 0, out);
+      if (shown && shown.count === want.length) {
+        (shown.array as Float32Array).set(want);
+        shown.needsUpdate = true;
+      } else {
+        this.tint.geometry.setAttribute('nmShow', new Float32BufferAttribute(want, 1));
+      }
+    }
+    this.publishHidden(roof);
+    this.updateSelection();
+    this.applyStyle();
+  }
+
+  /** What the chip and the menus say is left out: the roof's faces and the isolated ones, with their groups' names as they are now. */
+  private publishHidden(roof: number[] | null = hideStore.get().roof ? (this.roofCache?.faces ?? null) : null): void {
+    const mesh = this.mesh;
+    const names = (sceneStore.get()?.view.surface_groups ?? []).map((x) => x.name);
+    const groupsOf = (faces: number[]) => (mesh ? groupNamesOf(faces, mesh.groups, names) : []);
+    hideStore.set({
+      roof: hideStore.get().roof,
+      roofFaces: roof?.length ?? 0,
+      roofGroups: roof ? groupsOf(roof) : [],
+      isolate: this.isolated ? { faces: this.isolated.length, groups: groupsOf(this.isolated) } : null,
+    });
+  }
+
+  /** Item 7: the roof's faces of this model (hide.ts), found once per geometry: rays straight up from each candidate's centroid. */
+  private roofOf(mesh: SceneMesh): number[] {
+    if (this.roofCache && this.roofCache.rev === mesh.geometryRev) return this.roofCache.faces;
+    const bvh = this.bvh;
+    const topo = this.topo;
+    const b = this.bounds;
+    if (!bvh || !topo || !b) return [];
+    const lift = 1e-6 * Math.max(1, Math.hypot(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]));
+    const ray = new Ray(new Vector3(), new Vector3(0, 0, 1));
+    const faces = roofFaces(
+      mesh.faceCount,
+      (f) => topo.normals[3 * f + 2],
+      (f, out) => {
+        const c = faceCentroid(mesh.positions, mesh.indices, f);
+        ray.origin.set(c[0], c[1], c[2] + lift);
+        return bvh.raycast(ray, DoubleSide).some((h) => typeof h.faceIndex === 'number' && h.faceIndex !== f && !out[h.faceIndex]);
+      },
+    );
+    this.roofCache = { rev: mesh.geometryRev, faces };
+    return faces;
+  }
+
+  /** Item 7: Roof off on or off. */
+  setRoofOff(on: boolean): void {
+    hideStore.set({ ...hideStore.get(), roof: on });
+    this.applyHidden();
   }
 
   /** G43: how a pass draws and picks the faces, as View style > Faces is set; `plan` for the plan camera. */
@@ -1729,6 +1879,8 @@ class ViewportEngine {
 
   private onScene(): void {
     this.recolor();
+    // A renamed or regrouped group: the chip names what is left out as the scene names it now.
+    if (this.out) this.publishHidden();
     this.updateHighlight();
     this.updateSelection();
     this.updateMarkers();
@@ -1761,7 +1913,9 @@ class ViewportEngine {
   }
 
   private updateSelection(): void {
-    const faces = this.selectedFaces();
+    // A picked face the view leaves out (Roof off, Isolate) is not drawn, nor is its wash.
+    const out = this.out;
+    const faces = out ? this.selectedFaces().filter((f) => !out[f]) : this.selectedFaces();
     this.selectionWash.geometry.dispose();
     this.selectionEdges.geometry.dispose();
     const g = this.overlay(faces);
@@ -2224,7 +2378,7 @@ class ViewportEngine {
     if (!this.bvh) return null;
     const ray = this.rayAt(clientX, clientY);
     if (!ray) return null;
-    const hit = firstFace(this.bvh, ray, this.pickSide());
+    const hit = firstFace(this.bvh, ray, this.pickSide(), this.out);
     if (!hit) return null;
     return {
       face: hit.face,
@@ -2257,7 +2411,7 @@ class ViewportEngine {
       const ray = this.rayAt(q.x, q.y);
       if (!ray) continue;
       const along = m.p.clone().sub(ray.origin).dot(ray.direction);
-      const hit = this.bvh && this.mainFacePlan().occludes ? firstFace(this.bvh, ray, this.pickSide()) : null;
+      const hit = this.bvh && this.mainFacePlan().occludes ? firstFace(this.bvh, ray, this.pickSide(), this.out) : null;
       if (hit && hit.distance < along - 1e-3) continue;
       best = m;
       bestD = d;
@@ -2280,7 +2434,7 @@ class ViewportEngine {
     if (!ray) return null;
     const hit = this.results.pickMap(ray);
     if (!hit) return null;
-    const wall = this.bvh && this.mainFacePlan().occludes ? firstFace(this.bvh, ray, this.pickSide()) : null;
+    const wall = this.bvh && this.mainFacePlan().occludes ? firstFace(this.bvh, ray, this.pickSide(), this.out) : null;
     // A surface receiver's map lies on the model's own faces: the same distance is not in front.
     if (wall && wall.distance < hit.distance - (1e-3 + 1e-4 * hit.distance)) return null;
     return hit.face;
@@ -2671,6 +2825,11 @@ export function setTurntable(on: boolean): void {
 /** Frames the model in the perspective view, flown on the arc (View › Frame model, the tools' button, Home). */
 export function frameModel(): void {
   engine.frameAnimated();
+}
+
+/** Item 7: Roof off (hide.ts), a view state. */
+export function setRoofOff(on: boolean): void {
+  engine.setRoofOff(on);
 }
 
 /** Item 6: the model framed from a preset direction, flown on the arc (View menu). */

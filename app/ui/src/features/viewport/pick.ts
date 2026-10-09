@@ -8,6 +8,7 @@
 //   reorders the index in place and a pick names the wrong face (and the wrong group).
 // - Picks honour the side the faces are drawn on: BackSide by default, a face hit only from the
 //   room's side; DoubleSide when the view draws every face (View style > Faces > Outside, G43).
+// - Faces the view leaves out (Roof off, Isolate: hide.ts) are passed through by a pick.
 import { BackSide, BufferAttribute, BufferGeometry, type Ray, type Side, type Vector3 } from 'three';
 import { MeshBVH } from 'three-mesh-bvh';
 
@@ -25,9 +26,18 @@ export function pickingBvh(geometry: BufferGeometry): MeshBVH {
 }
 
 /** The first face a ray meets from the room's side (BackSide), or from either side (`side`
- * DoubleSide), in project face numbering. */
-export function firstFace(bvh: MeshBVH, ray: Ray, side: Side = BackSide): { face: number; distance: number; point: Vector3 } | null {
-  const hit = bvh.raycastFirst(ray, side);
-  if (!hit || typeof hit.faceIndex !== 'number') return null;
-  return { face: hit.faceIndex, distance: hit.distance, point: hit.point };
+ * DoubleSide), in project face numbering; faces `out` leaves out (1, hide.ts: Roof off, Isolate) are
+ * not drawn, so they are passed through. */
+export function firstFace(bvh: MeshBVH, ray: Ray, side: Side = BackSide, out: Uint8Array | null = null): { face: number; distance: number; point: Vector3 } | null {
+  if (!out) {
+    const hit = bvh.raycastFirst(ray, side);
+    if (!hit || typeof hit.faceIndex !== 'number') return null;
+    return { face: hit.faceIndex, distance: hit.distance, point: hit.point };
+  }
+  let best: { face: number; distance: number; point: Vector3 } | null = null;
+  for (const h of bvh.raycast(ray, side)) {
+    if (typeof h.faceIndex !== 'number' || out[h.faceIndex] || (best && h.distance >= best.distance)) continue;
+    best = { face: h.faceIndex, distance: h.distance, point: h.point };
+  }
+  return best;
 }

@@ -20,7 +20,7 @@ import { blockersWithSize, settingsStore } from '../features/simulate/runSize';
 import { useEffect, useRef, useState } from 'react';
 import * as actions from '../actions';
 import { exportParams, exportView, paramsRefusal, viewRefusal } from '../features/export/exportActions';
-import { focusSelection, frameModel, setView, viewFrom } from '../features/viewport/engine';
+import { focusSelection, frameModel, hideStore, setRoofOff, setView, viewFrom } from '../features/viewport/engine';
 import { joinBlockers } from '../flow';
 import { groupRenameStore, reportStore, runStore, sceneStore, selectedRunStore, selectionStore, solversStatusStore, solverStore, stepStore, useStore, viewportStore } from '../store';
 import { ADD_GROUP_LABEL, DELETE_GROUP_LABEL, MERGE_LABEL, mergePlan, RENAME_GROUP_LABEL, renameTarget } from './groupsModel';
@@ -48,6 +48,7 @@ export function MenuBar() {
   const solvers = useStore(solversStatusStore);
   const solver = useStore(solverStore);
   const selection = useStore(selectionStore);
+  const hidden = useStore(hideStore);
   // W9: what the export items say depends on the step, the run and its report, and the view.
   useStore(stepStore);
   useStore(selectedRunStore);
@@ -182,6 +183,8 @@ export function MenuBar() {
       { id: 'view-side', label: 'View from the side', run: () => viewFrom('side'), disabled: !hasModel },
       { id: 'view-top', label: 'View from above', run: () => viewFrom('top'), disabled: !hasModel },
       { id: 'view-corner', label: 'View from the corner', run: () => viewFrom('corner'), disabled: !hasModel },
+      // Item 7: a view state, the model untouched.
+      { id: 'roof-off', label: hidden.roof ? 'Put the roof back' : 'Roof off', keys: 'R', run: () => setRoofOff(!hidden.roof), disabled: !hasModel, title: 'Leave out the faces that close the room from above, so you can look in from above' },
     ],
     Simulate: [
       {

@@ -6,10 +6,13 @@
 // Parity G43: Faces, upstream's View > Faces (faces.ts): Inside (the near walls drop away, the
 // default), Outside (every face, the room as a closed shell) or None (the edges only). See-through
 // is glass over the near walls the inside view removes, so it is offered with Inside only.
+//
+// Item 7: Hide > Roof off (R): the faces that close the room from above left out of the view (hide.ts),
+// a view state; the chip over the view says how many and which groups.
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../../store';
 import { closingProps, usePresence } from '../../chrome/usePresence';
-import { viewStyle, type EdgeStyle, type SurfaceStyle } from './engine';
+import { hideStore, setRoofOff, viewStyle, type EdgeStyle, type SurfaceStyle } from './engine';
 import { FACE_SHOWS } from './faces';
 
 const SURFACES: { key: SurfaceStyle; label: string; hint: string }[] = [
@@ -25,6 +28,7 @@ const EDGES: { key: EdgeStyle; label: string; hint: string }[] = [
 
 export function ViewStyleMenu() {
   const style = useStore(viewStyle);
+  const hidden = useStore(hideStore);
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const listed = usePresence(open);
@@ -153,6 +157,16 @@ export function ViewStyleMenu() {
             onClick={() => set({ dims: !style.dims })}
           >
             Dimensions
+          </button>
+          <div className="view-style-head">Hide</div>
+          <button
+            role="menuitemcheckbox"
+            aria-checked={hidden.roof}
+            data-roof-off=""
+            title="Leave out the faces that close the room from above, so you can look in from above; the model is not changed"
+            onClick={() => setRoofOff(!hidden.roof)}
+          >
+            Roof off<span className="view-style-key">R</span>
           </button>
         </div>
       )}

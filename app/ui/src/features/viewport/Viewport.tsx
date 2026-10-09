@@ -20,7 +20,8 @@ import { MOVE_TO_LABEL, moveTargets } from '../../chrome/groupsModel';
 import { displayName, REGROUP_LABEL, regroupFaces } from '../../chrome/sceneModel';
 import { onWindowEntityKey } from '../../chrome/sceneUi';
 import { sceneStore, selectionStore, stepStore, toolStore, useStore, type Tool } from '../../store';
-import { attachViewport, frameModel, presentStore, setPresent, setTurntable, setView, viewportUi, type ViewMode } from './engine';
+import { attachViewport, frameModel, hideStore, presentStore, setPresent, setRoofOff, setTurntable, setView, viewportUi, type ViewMode } from './engine';
+import { groupList } from './hide';
 import { VIEWPORT_LIBRARIES } from './libraries';
 import { liveStore, setLiveLook } from './liveView';
 import { PARTICLE_LOOKS } from './rays';
@@ -64,6 +65,14 @@ function onPresentKey(e: KeyboardEvent): void {
   if (e.key === 'h' || e.key === 'H') setPresent(!p.on);
   else if (e.key === 'Escape' && p.on) setPresent(false);
   else if ((e.key === 'o' || e.key === 'O') && p.on) setTurntable(!p.turntable);
+}
+
+/** Item 7: R puts the roof off and back (View style > Hide > Roof off). Not while typing, and only with a model. */
+function onHideKey(e: KeyboardEvent): void {
+  if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey || !viewportUi.get().hasModel) return;
+  const t = e.target;
+  if (t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return;
+  if (e.key === 'r' || e.key === 'R') setRoofOff(!hideStore.get().roof);
 }
 
 /** Frame model: the model's box inside four corner marks, in the toolbar's line style. */
@@ -111,6 +120,7 @@ export function Viewport() {
   const live = useStore(liveStore);
   const step = useStore(stepStore);
   const rightDown = useRef<{ x: number; y: number } | null>(null);
+  const hidden = useStore(hideStore);
 
   useEffect(() => {
     if (!menu) return;
@@ -127,6 +137,11 @@ export function Viewport() {
   useEffect(() => {
     window.addEventListener('keydown', onPresentKey);
     return () => window.removeEventListener('keydown', onPresentKey);
+  }, []);
+  // Item 7: Roof off's key.
+  useEffect(() => {
+    window.addEventListener('keydown', onHideKey);
+    return () => window.removeEventListener('keydown', onHideKey);
   }, []);
   // Del and F2 on a source or receiver picked in the view (the panels handle their own).
   useEffect(() => {
@@ -272,6 +287,20 @@ export function Viewport() {
           </div>
         )}
       </div>
+
+      {/* Items 7 and 8: what the view leaves out, under the view bar (a long list would run under it at the top). */}
+      {ui.hasModel && hidden.roof && (
+        <div className={`vp-hide-chips${live && step === 'simulate' ? ' under-live' : ''}`}>
+          <div className="vp-chip hidden-faces" data-part="roof-off-chip" role="status" title={hidden.roofGroups.join(', ')}>
+            <span>
+              Roof off · {hidden.roofFaces === 0 ? 'no face closes this room from above' : `${hidden.roofFaces} ${hidden.roofFaces === 1 ? 'face' : 'faces'} hidden: ${groupList(hidden.roofGroups)}`}
+            </span>
+            <button className="vp-chip-btn" data-action="roof-on" title="Put the roof back (R)" onClick={() => setRoofOff(false)}>
+              Show
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="overlay-tl view-bar">
       <div className="segmented view float-panel" role="tablist" aria-label="View">
