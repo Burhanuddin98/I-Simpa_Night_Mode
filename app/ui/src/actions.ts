@@ -92,6 +92,9 @@ import {
   repairStore,
   meshNowStore,
   fittingZonesStore,
+  groupRenameStore,
+  stepStore,
+  toolStore,
   Store,
 } from './store';
 
@@ -164,6 +167,36 @@ export async function newBoxRoom(width: number, length: number, height: number, 
   forgetRuns();
   fire(refreshRuns());
   return state;
+}
+
+/**
+ * Close project (File › Close project, Ctrl+W, the menu bar's Home; Burhan, 2026-10-10 01:27): after
+ * the save prompt, as New and Open, the core drops the project and the landing page shows. Nothing of
+ * it is kept on this side: the model drawn, the selection, the refusals, the Repair and Mesh now
+ * reports, the runs and the run shown (which closes the response and listening windows, the maps and
+ * the playback), the placements, a rename in progress, the tool and the step. The session's own
+ * choices stay: the solver, the device, the recent list, the job list and a copied source or receiver.
+ * `false` when nothing is open, the user cancelled, or a run is active.
+ */
+export async function closeProject(): Promise<boolean> {
+  if (!sceneStore.get()) return false;
+  if (refuseDuringRun('Close project')) return false;
+  if (!(await confirmDiscard())) return false;
+  const name = await run('Could not close the project', () => backend.sceneClose());
+  sceneStore.set(null);
+  meshStore.set(null);
+  selectionStore.set({ kind: 'none' });
+  refusalStore.set(new Map());
+  repairStore.set(null);
+  meshNowStore.set(null);
+  forgetRuns();
+  runsStore.set(null);
+  placementStore.set(new Map());
+  groupRenameStore.set(null);
+  toolStore.set('select');
+  stepStore.set('geometry');
+  log('INFO', `Closed ${name}`);
+  return true;
 }
 
 /**
@@ -628,8 +661,8 @@ let nextRunId = 1;
  */
 let starting = false;
 
-/** New, Open, Import and Run wait while a run is starting or active (PQ4): the run would be
- * orphaned from the project the Runs tab lists. The backend refuses New, Open and Import during
+/** New, Open, Close, Import and Run wait while a run is starting or active (PQ4): the run would be
+ * orphaned from the project the Runs tab lists. The backend refuses New, Open, Close and Import during
  * a run too, since this page's memory is lost when it is reloaded. */
 function refuseDuringRun(what: string): boolean {
   if (runStore.get() !== null) {
@@ -644,7 +677,7 @@ function refuseDuringRun(what: string): boolean {
 }
 
 /**
- * Before New, Open and Exit (row 22, A9): when the project holds something to lose, asks
+ * Before New, Open, Close project and Exit (row 22, A9): when the project holds something to lose, asks
  * "Save changes to <name>?" through `promptStore` (the dialog answers). Save runs Save, or Save
  * as for a project never saved, and goes on only if that saved; Don't save goes on; Cancel stops.
  * `true` when the caller may go on.

@@ -100,6 +100,9 @@ class Backend {
       case 'scene_new':
         this.scene = scene(String(args.name), null, true);
         return this.scene;
+      case 'scene_close':
+        if (this.slot) throw { code: 'RUN_ACTIVE', message: 'Close project: a run is active: cancel it first' };
+        return this.scene.info.name;
       case 'proj_import':
         this.scene = scene('tutorial_1', null, true);
         return this.scene;
@@ -323,6 +326,60 @@ test('a runs_list answer from before the end of a run this page streamed does no
     store.runStore.set(null);
     (globalThis as Record<string, unknown>).__TAURI_TEST_IPC__ = ipc;
   }
+});
+
+test('Close project asks first, then leaves no project, model, selection, run or step of it; a run or a cancelled prompt keeps it open', async () => {
+  // A run is active: refused in the page, with a sentence, and the core is not asked.
+  store.runStore.set({ id: 1, run: 'R-live', status: 'running' } as unknown as NonNullable<ReturnType<typeof store.runStore.get>>);
+  assert.equal(await actions.closeProject(), false);
+  assert.ok(infoLines().includes('Close project: a run is active: cancel it first'), JSON.stringify(infoLines()));
+  assert.equal(backend.count('scene_close'), 0);
+  store.runStore.set(null);
+
+  // Unsaved changes: the save prompt; Cancel keeps the project.
+  backend.scene = scene('room', 'C:/p/room.simpa', true);
+  store.sceneStore.set(backend.scene);
+  const cancelled = actions.closeProject();
+  await until('the save prompt is up', () => store.promptStore.get()?.name === 'room');
+  store.promptStore.get()!.resolve('cancel');
+  assert.equal(await cancelled, false);
+  assert.equal(backend.count('scene_close'), 0);
+  assert.equal(store.sceneStore.get()?.info.name, 'room');
+
+  // Don't save: closed, and nothing of the project is left on this side.
+  store.selectionStore.set({ kind: 'group', id: 'g1' });
+  store.selectedRunStore.set('R-old');
+  store.resultsStore.set(new Map([['R-old', { run: 'R-old', verified: true, refusal: null } as never]]));
+  store.runsStore.set({ root: 'C:/p/runs', rows: [row('R-old', 'OK')], other_projects: 0, active: null } as never);
+  store.refusalStore.set(new Map([['source:new:position', []]]));
+  store.stepStore.set('results');
+  store.toolStore.set('place-receiver');
+  const closing = actions.closeProject();
+  await until('the save prompt is up', () => store.promptStore.get() !== null);
+  store.promptStore.get()!.resolve('discard');
+  assert.equal(await closing, true);
+  assert.equal(backend.count('scene_close'), 1);
+  assert.equal(backend.count('project_save'), 0, "Don't save writes nothing");
+  assert.equal(store.sceneStore.get(), null, 'no project: the landing page shows');
+  assert.equal(store.meshStore.get(), null, 'no model is drawn');
+  assert.deepEqual(store.selectionStore.get(), { kind: 'none' });
+  assert.equal(store.selectedRunStore.get(), null, 'no run shown: its windows close');
+  assert.equal(store.resultsStore.get().size, 0);
+  assert.equal(store.runsStore.get(), null);
+  assert.equal(store.refusalStore.get().size, 0);
+  assert.equal(store.stepStore.get(), 'geometry');
+  assert.equal(store.toolStore.get(), 'select');
+  assert.ok(infoLines().includes('Closed room'), JSON.stringify(infoLines()));
+
+  // Nothing open: nothing to close, and the core is not asked.
+  assert.equal(await actions.closeProject(), false);
+  assert.equal(backend.count('scene_close'), 1);
+
+  // A clean project closes with no prompt.
+  backend.scene = scene('clean', 'C:/p/clean.simpa', false);
+  store.sceneStore.set(backend.scene);
+  assert.equal(await actions.closeProject(), true);
+  assert.equal(store.sceneStore.get(), null);
 });
 
 test('an example opens through example_open after the save prompt, and forgets the previous run; a run or a cancelled prompt stops it', async () => {

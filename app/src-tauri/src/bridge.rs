@@ -556,6 +556,21 @@ impl Session {
         self.state()
     }
 
+    /// Close project (Burhan, 2026-10-10 01:27: the landing page while a project is open): the
+    /// project, its file, its undo history, its check, issues and advice, and any Console lines
+    /// not yet sent about it are dropped, as at a start with no `--project`. The serials and the
+    /// geometry revision keep counting, so nothing kept from the closed project can match the
+    /// next one. Answers the closed project's name; `NO_PROJECT` with none open.
+    pub fn scene_close(&mut self) -> CmdResult<String> {
+        let name = self.project.as_ref().ok_or_else(no_project)?.name.clone();
+        *self = Session {
+            next_serial: self.next_serial,
+            geometry_rev: self.geometry_rev + 1,
+            ..Session::default()
+        };
+        Ok(name)
+    }
+
     /// Imports a mesh file as a new project named after the file. A geometry the check refuses
     /// is loaded, not rejected: its faces are highlighted and Run is blocked.
     pub fn model_import(&mut self, path: &Path, unit: &str, up: &str) -> CmdResult<SceneState> {
@@ -1638,6 +1653,36 @@ mod m10_tests {
             "NO_PROJECT"
         );
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// Close project: nothing of the project is left (no state, no history, no lines waiting),
+    /// the geometry revision moves on, and the next project opens as after a start.
+    #[test]
+    fn close_drops_the_project_its_history_and_its_lines() {
+        let mut s = opened("tests/fixtures/rooms/tutorial1_box.simpa");
+        let _ = s.scene_state();
+        let r1 = project(&s).point_receivers[0].id;
+        assert!(
+            s.edit_apply(&move_receiver(r1, [4.0, 2.0, 1.8]))
+                .unwrap()
+                .applied
+        );
+        let (rev, name) = (s.info().unwrap().geometry_rev, project(&s).name.clone());
+        s.log(LineClass::Info, "a line about the closed project");
+        assert_eq!(s.scene_close().unwrap(), name);
+        assert!(s.scene_state().is_none() && s.info().is_none() && s.path().is_none());
+        assert_eq!(s.project_blockers(), None);
+        assert_eq!(s.json().unwrap_err().code, "NO_PROJECT");
+        assert_eq!(s.edit_undo().unwrap_err().code, "NO_PROJECT");
+        assert_eq!(s.scene_close().unwrap_err().code, "NO_PROJECT");
+        let st = s.scene_new("Untitled").unwrap();
+        assert!(st.info.geometry_rev > rev, "the revision keeps counting");
+        assert!(!st.info.can_undo && !st.info.can_redo);
+        assert!(
+            st.lines.iter().all(|l| !l.text.contains("closed project")),
+            "{:?}",
+            st.lines
+        );
     }
 
     /// G11: a box room is a new, unsaved project whose model the check takes, its three groups

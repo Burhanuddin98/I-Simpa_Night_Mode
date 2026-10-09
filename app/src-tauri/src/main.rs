@@ -273,6 +273,7 @@ fn run(args: GuiArgs) -> ExitCode {
             commands::scene_state,
             commands::scene_new,
             commands::scene_new_box,
+            commands::scene_close,
             commands::scene_open,
             commands::example_open,
             commands::model_import,

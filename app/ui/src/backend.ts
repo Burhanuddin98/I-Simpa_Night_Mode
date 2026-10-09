@@ -136,6 +136,8 @@ export const backend = {
   /** G11: a new project holding a box room of `width` (x) by `length` (y) by `height` (z) metres. */
   sceneNewBox: (name: string, width: number, length: number, height: number) => invoke<SceneState>('scene_new_box', { name, width, length, height }),
   sceneOpen: (path: string) => invoke<SceneState>('scene_open', { path }),
+  /** Close project: the open project dropped (no project open after it); answers its name. */
+  sceneClose: () => invoke<string>('scene_close'),
   /** The landing page's example `id`: the core writes a fresh copy into Documents\Night Mode\Examples
    * (never over a file) and opens it as `scene_open` does. */
   exampleOpen: (id: string) => invoke<SceneState>('example_open', { id }),

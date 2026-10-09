@@ -29,6 +29,7 @@ fn main() {
         "scene_state",
         "scene_new",
         "scene_new_box",
+        "scene_close",
         "scene_open",
         "example_open",
         "model_import",

@@ -270,6 +270,12 @@ function runHooks(): Record<string, Hook> {
       await actions.newProject();
       return idle();
     },
+    // File › Close project: the save prompt first; whether it closed.
+    closeProject: async () => {
+      const closed = await actions.closeProject();
+      await idle();
+      return closed;
+    },
     promptOpen: () => {
       const p = promptStore.get();
       return p ? { name: p.name } : null;

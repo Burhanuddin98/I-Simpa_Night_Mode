@@ -369,6 +369,27 @@ pub async fn scene_new_box(
     .await
 }
 
+/// Close project (File › Close project, Ctrl+W, the menu bar's Home), after the UI's save prompt:
+/// the open project is dropped (`Session::scene_close`) and the window shows the landing page.
+/// Refused while a run is active, as New and Open are. A34: the prompt answered, this instance's
+/// crash-recovery copy is removed, as at a quit. Answers the closed project's name.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn scene_close(state: State<'_, AppState>) -> CmdResult<String> {
+    let (session, slot, recovery) = (
+        state.session.clone(),
+        state.run.clone(),
+        state.recovery.clone(),
+    );
+    guard::blocking("scene_close", move || {
+        let mut s = lock(&session, "project")?;
+        runs::refuse_while_running(&slot, "Close project")?;
+        let name = s.scene_close()?;
+        lock(&recovery, "recovery")?.clear_own();
+        Ok(name)
+    })
+    .await
+}
+
 /// Opens a `.simpa` file (`schema::load`), then runs the model check and the validator.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn scene_open(state: State<'_, AppState>, path: String) -> CmdResult<SceneState> {

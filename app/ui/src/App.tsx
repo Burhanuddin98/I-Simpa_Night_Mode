@@ -27,7 +27,7 @@ import { projectAtStart } from './chrome/recentModel';
 import { StatusBar } from './chrome/StatusBar';
 import { StepBar } from './chrome/StepBar';
 import { Dock } from './features/dock/Dock';
-import { focusSelection, frameModel } from './features/viewport/engine';
+import { focusSelection, frameModel, presentStore, setPresent } from './features/viewport/engine';
 import { Viewport } from './features/viewport/Viewport';
 import { isReloadKey, joinBlockers } from './flow';
 import { probeWebGL } from './gpu';
@@ -96,6 +96,8 @@ async function boot(): Promise<void> {
 // them again on every scene change, so Run's blockers and the Simulate step see the cube as set now.
 sceneStore.subscribe(() => {
   if (!sceneStore.get()) {
+    // Close project: the presentation view hides the menu bar, which the landing page keeps.
+    if (presentStore.get().on) setPresent(false);
     fittingZonesStore.set(null);
     return void settingsStore.set(null);
   }
@@ -148,7 +150,8 @@ function onContextMenu(e: MouseEvent): void {
 }
 
 /** The named verbs' keys (PLAN.md 7.5, point 3): undo, redo, save, save as, open; A39, upstream's
- * Ctrl+N (new project) and Ctrl+C / Ctrl+V on a source or receiver (copy, paste a copy). The
+ * Ctrl+N (new project) and Ctrl+C / Ctrl+V on a source or receiver (copy, paste a copy); Ctrl+W,
+ * Close project (back to the landing page, after the save prompt). The
  * webview's reload keys never reload the page, in a text field or not; a text field keeps its own
  * Ctrl+C and Ctrl+V, and Ctrl+C with no source or receiver picked copies what the page has
  * selected, as it always did. */
@@ -164,6 +167,7 @@ function onKey(e: KeyboardEvent): void {
   else if (key === 's' && e.shiftKey) action = () => actions.saveAs();
   else if (key === 'o' && !e.shiftKey) action = actions.openDialog;
   else if (key === 'n' && !e.shiftKey) action = () => actions.newProject();
+  else if (key === 'w' && !e.shiftKey) action = actions.closeProject;
   else if (key === 'c' && !e.shiftKey) {
     if (copySelected()) e.preventDefault();
     return;

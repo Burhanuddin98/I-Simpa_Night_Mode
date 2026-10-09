@@ -9,6 +9,8 @@
 //   no unit dialog, since a `.proj` carries its own units) or a room model. New and Open go
 //   through the save prompt (A9, actions.confirmDiscard).
 // - While a run is active, New and Open are disabled, saying why (PQ4).
+// - File › Close project (Ctrl+W) (Burhan, 2026-10-10 01:27): back to the landing page, after the
+//   save prompt; disabled during a run, as New is.
 // - Simulate › Run and Simulate › Cancel run (PQ2), the same actions as the Run button, F5 and
 //   the Simulate step's Cancel.
 // - Edit › New group from selection (scope row 15 (1), G19), the viewport's context menu entry.
@@ -44,6 +46,17 @@ export const RUN_ACTIVE_TITLE = 'A run is active: cancel it first';
 
 const OPEN_TITLE =
   'Open a Night Mode project (.simpa), an I-Simpa project (.proj, no unit to choose: it carries its own) or a room model (PLY, OBJ, STL)';
+
+/** Close project (Burhan, 2026-10-10 01:27): the save prompt first. */
+export const CLOSE_LABEL = 'Close project';
+export const CLOSE_TITLE = 'Close this project and go back to the landing page; unsaved changes are asked about first';
+const NO_PROJECT_TITLE = 'No project is open: this is the landing page';
+
+/** Why Close project waits, or null when it may go. */
+export function closeWhyNot(open: boolean, running: boolean): string | null {
+  if (!open) return NO_PROJECT_TITLE;
+  return running ? RUN_ACTIVE_TITLE : null;
+}
 
 export function MenuBar() {
   const scene = useStore(sceneStore);
@@ -87,6 +100,7 @@ export function MenuBar() {
   const hasModel = !!scene?.check;
   const running = active !== null;
   const blockers = joinBlockers(blockersWithSize(scene, solver, useStore(settingsStore)), solvers, running);
+  const closeWhy = closeWhyNot(!!scene, running);
   const items: Partial<Record<MenuName, Item[]>> = {
     File: [
       {
@@ -128,6 +142,14 @@ export function MenuBar() {
         title: reopen
           ? 'Night Mode now opens the last project when it starts; choose this to start on the landing page again'
           : 'Open the last project when Night Mode starts, as upstream does',
+      },
+      {
+        id: 'close-project',
+        label: CLOSE_LABEL,
+        keys: 'Ctrl+W',
+        run: () => actions.fire(actions.closeProject()),
+        disabled: closeWhy !== null,
+        title: closeWhy ?? CLOSE_TITLE,
       },
       { id: 'save', label: 'Save', keys: 'Ctrl+S', run: () => actions.fire(actions.save()), disabled: !info },
       { id: 'save-as', label: 'Save as…', keys: 'Ctrl+Shift+S', run: () => actions.fire(actions.saveAs()), disabled: !info },

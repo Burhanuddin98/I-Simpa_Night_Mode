@@ -409,6 +409,27 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
+    /// Close project, the save prompt answered: the copy goes as at a quit (`scene_close`), and a
+    /// session with nothing open keeps none.
+    #[test]
+    fn a_project_closed_keeps_no_copy() {
+        let dir = scratch("close");
+        std::fs::create_dir_all(&dir).unwrap();
+        let (mut s, _) = edited(&dir);
+        let rdir = dir.join("recovery");
+        let (mut r, _) = Recovery::new(Some(rdir.clone()));
+        assert_eq!(r.autosave(&s).unwrap(), AutosaveStatus::Written);
+        let copy = rdir.join(format!("{}.simpa", r.key));
+        assert!(copy.is_file());
+        s.scene_close().unwrap();
+        r.clear_own();
+        assert!(!copy.exists(), "closed: the copy is gone");
+        assert_eq!(r.autosave(&s).unwrap(), AutosaveStatus::Clean);
+        assert!(!copy.exists());
+        drop(r);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
     #[test]
     fn a_copy_left_by_an_instance_that_ended_is_offered_restored_as_unsaved_changes_and_removed() {
         let dir = scratch("restore");
