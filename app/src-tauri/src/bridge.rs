@@ -334,6 +334,11 @@ impl Session {
         self.path.as_deref()
     }
 
+    /// A Console line, sent with the next scene state.
+    pub fn log(&mut self, class: LineClass, text: impl Into<String>) {
+        self.lines.push(LogLine::new(class, text));
+    }
+
     /// Why the project may not run, as `SceneState::run_blockers` has it, without taking the
     /// pending Console lines. `None` with no project open.
     pub fn project_blockers(&self) -> Option<Vec<String>> {

@@ -29,6 +29,7 @@ import type {
   Setting,
   SolversStatus,
   StartupInfo,
+  MeshNowReport,
   RepairReport,
 } from './bindings/ipc';
 import type { BandKind, Op } from './bindings/schema';
@@ -53,6 +54,7 @@ export type {
   LibraryMaterial,
   LibrarySpectrum,
   ProjectInfo,
+  MeshNowReport,
   RepairReport,
   ResultsState,
   RunEventBatch,
@@ -132,6 +134,8 @@ export const backend = {
   modelImport: (path: string, unit: Unit, up: Up) => invoke<SceneState>('model_import', { path, unit, up }),
   /** G8: the core's safe repairs on the open model, written as a new file beside the original, then one checked edit. */
   modelRepair: () => invoke<RepairReport>('model_repair'),
+  /** G32: TetGen on the open project now, as a run would mesh it, into a scratch folder; a run still meshes again. */
+  meshNow: () => invoke<MeshNowReport>('mesh_now'),
   /** `null` saves to the project's own path; a path is Save As. */
   projectSave: (path: string | null) => invoke<SceneState>('project_save', { path }),
   /** The checked apply. The op goes as `opText`, never `JSON.stringify` (-0, NaN). */

@@ -508,6 +508,14 @@
   text-align: right;
   line-height: 1.35;
 }
+/* G32: the last Mesh now, its headline in the text colour; a mesh that failed in the fail colour, with its word. */
+.sim-hint[data-part='mesh-now-result'] {
+  margin-top: 6px;
+  color: var(--text-2);
+}
+.sim-hint[data-part='mesh-now-result'] .fail {
+  color: var(--fail-text);
+}
 .sim-field-line[data-part='results-cube'].fail .v {
   color: var(--fail-text);
 }

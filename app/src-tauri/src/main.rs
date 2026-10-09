@@ -40,6 +40,7 @@ mod examples;
 mod export;
 mod guard;
 mod live;
+mod mesh_now;
 mod results_data;
 mod runs;
 mod scene;
@@ -256,6 +257,7 @@ fn run(args: GuiArgs) -> ExitCode {
             commands::example_open,
             commands::model_import,
             commands::model_repair,
+            commands::mesh_now,
             commands::project_save,
             commands::edit_apply,
             commands::advice_apply,

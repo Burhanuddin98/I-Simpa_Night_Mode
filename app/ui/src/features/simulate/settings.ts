@@ -7,6 +7,7 @@
 // a time step typed in milliseconds becomes seconds by moving the decimal point in the text, never
 // by dividing a float: `2.1 / 1000` is 0.0021000000000000003, not the 0.0021 the user wrote.
 import type { BandKind, BandSet, Environment, MeshSettings, SolverSettings, SoundMapQuantity, SppsSettings } from '../../bindings/schema.ts';
+import type { MeshNowReport } from '../../bindings/ipc.ts';
 import { NOT_A_NUMBER, parseStrictDecimal, type Parsed } from '../../numbers.ts';
 
 /** A number as the schema stores it: finite values as numbers, non-finite ones as strings. */
@@ -272,6 +273,29 @@ export function withReceiverFaceArea(s: SolverSettings, area: number | null): So
  */
 export function withPreprocess(s: SolverSettings, on: boolean): SolverSettings | null {
   return s.meshing.preprocess === on ? null : withMeshing(s, { preprocess: on });
+}
+
+// ---- Mesh now (G32) ---------------------------------------------------------------------------------
+
+/**
+ * What a Mesh now report was made on: the project, its model (`geometry_rev`) and its mesh settings.
+ * The panel shows a report only while the project still has this basis, so a size is never shown
+ * for a model or settings it was not made with. (A surface receiver's groups also feed the `.var`;
+ * a change there is not caught, and the next Mesh now or run says what it gives.)
+ */
+export function meshNowBasis(projectId: string, geometryRev: number, meshing: MeshSettings): string {
+  return JSON.stringify([projectId, geometryRev, meshing]);
+}
+
+/** The report in words: how large the mesh is, or that the model did not mesh. Never an acoustic number. */
+export function meshNowHeadline(r: Pick<MeshNowReport, 'status' | 'tetrahedra' | 'nodes' | 'preprocessed' | 'refined_faces'>): string {
+  const after = r.preprocessed ? ', after the scene correction' : '';
+  if (r.status === 'OK' && r.tetrahedra != null && r.nodes != null) {
+    const refined = r.refined_faces > 0 ? `; ${grouped(r.refined_faces)} receiver faces held to the face size` : '';
+    return `Meshed${after}: ${grouped(r.tetrahedra)} tetrahedra, ${grouped(r.nodes)} nodes${refined}`;
+  }
+  if (r.status === 'CANCELLED') return `Not meshed${after}: the mesher was stopped`;
+  return `Not meshed${after}: TetGen could not mesh the model as it is`;
 }
 
 /** The environment with the air's fields replaced; everything else as stored. */

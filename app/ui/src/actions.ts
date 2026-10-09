@@ -13,6 +13,7 @@ import {
   type AppEvent,
   type EditOutcome,
   type LibraryMaterial,
+  type MeshNowReport,
   type ReportView,
   type ResultsState,
   type RepairReport,
@@ -77,6 +78,7 @@ import {
   gpuStatusStore,
   type SppsDevice,
   repairStore,
+  meshNowStore,
   Store,
 } from './store';
 
@@ -198,6 +200,21 @@ export async function repairModel(): Promise<RepairReport | null> {
     const r = await backend.modelRepair();
     await accept(r.outcome.state);
     repairStore.set(r);
+    return r;
+  });
+}
+
+/**
+ * G32: Mesh now: TetGen on the open project with its own mesh settings, as a run would mesh it, into a scratch
+ * folder on the temp drive. The report is kept with `basis` (the model and mesh settings it was made on) so the
+ * panel shows it only while they still hold. Null while a run is active.
+ */
+export async function meshNow(basis: string): Promise<MeshNowReport | null> {
+  if (refuseDuringRun('Mesh now')) return null;
+  return run('Could not mesh the model', async () => {
+    const r = await backend.meshNow();
+    await accept(r.state);
+    meshNowStore.set({ report: r, basis });
     return r;
   });
 }

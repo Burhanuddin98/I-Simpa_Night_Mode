@@ -36,6 +36,7 @@ fn main() {
         "edit_undo",
         "edit_redo",
         "scene_mesh",
+        "mesh_now",
         "run_start",
         "run_cancel",
         "runs_list",

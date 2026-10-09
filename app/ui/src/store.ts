@@ -7,6 +7,7 @@ import type {
   LibraryMaterial,
   LibrarySpectrum,
   LineClass,
+  MeshNowReport,
   RepairReport,
   ReportView,
   ResultsState,
@@ -100,6 +101,9 @@ export const refusalStore = new Store<ReadonlyMap<string, UiIssue[]>>(new Map())
 
 /** G8: the last Repair's report for the open project (cleared by any other load), shown in the Geometry panel. */
 export const repairStore = new Store<RepairReport | null>(null);
+
+/** G32: the last Mesh now, with the basis it was made on (`meshNowBasis`): shown while the project still has that basis. */
+export const meshNowStore = new Store<{ report: MeshNowReport; basis: string } | null>(null);
 
 /** G16: the open project's fitting zones as the scene list shows them (read from the project file on every scene change); null when unknown. */
 export const fittingZonesStore = new Store<{ id: string; name: string; enabled: boolean; kind: 'box' | 'scene' }[] | null>(null);

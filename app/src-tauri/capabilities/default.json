@@ -32,6 +32,7 @@
     "allow-example-open",
     "allow-model-import",
     "allow-model-repair",
+    "allow-mesh-now",
     "allow-project-save",
     "allow-edit-apply",
     "allow-advice-apply",

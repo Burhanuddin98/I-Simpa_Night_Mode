@@ -23,6 +23,7 @@ use crate::events::{
 };
 use crate::examples;
 use crate::guard::{self, CmdError, CmdResult, lock};
+use crate::mesh_now::{self, MeshNowReport};
 use crate::results_data::{self, EchogramView, ReportView, RunDataIndex};
 use crate::runs::{
     self, GpuCache, GpuStatus, LibraryMaterial, LibrarySpectrum, ResultsState, RunSlot, RunStarted,
@@ -407,6 +408,22 @@ pub async fn model_repair(state: State<'_, AppState>) -> CmdResult<RepairReport>
         let mut s = lock(&session, "project")?;
         runs::refuse_while_running(&slot, "Repair")?;
         s.model_repair()
+    })
+    .await
+}
+
+/// Parity G32: meshes the open project now, as a run would mesh it (the same verified TetGen and
+/// `preprocess.exe`, the project's own mesh settings), into a scratch folder on the temp drive,
+/// and reports whether it meshed and how large the mesh is. A run still meshes again itself.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn mesh_now(state: State<'_, AppState>) -> CmdResult<MeshNowReport> {
+    let (session, slot, solvers) = (
+        state.session.clone(),
+        state.run.clone(),
+        state.solvers.clone(),
+    );
+    guard::blocking("mesh_now", move || {
+        mesh_now::mesh_now(&session, &slot, &solvers)
     })
     .await
 }

@@ -272,3 +272,27 @@ test('withPreprocess: no op when stored; otherwise meshing.preprocess only', () 
   assert.deepEqual({ ...off, meshing: s.meshing }, s);
   assert.match(opText(setSolverSettings(off)), /"preprocess":false/);
 });
+
+// G32: Mesh now's report in words, and the basis it is shown on.
+import { meshNowBasis, meshNowHeadline } from './settings.ts';
+
+test('meshNowHeadline: the size in words when it meshed, why not otherwise; no unit, no acoustic number', () => {
+  const ok = { status: 'OK', tetrahedra: 123456, nodes: 23456, preprocessed: false, refined_faces: 0 };
+  assert.equal(meshNowHeadline(ok), 'Meshed: 123,456 tetrahedra, 23,456 nodes');
+  assert.equal(
+    meshNowHeadline({ ...ok, preprocessed: true, refined_faces: 2 }),
+    'Meshed, after the scene correction: 123,456 tetrahedra, 23,456 nodes; 2 receiver faces held to the face size',
+  );
+  assert.equal(meshNowHeadline({ ...ok, status: 'FAIL', tetrahedra: null, nodes: null }), 'Not meshed: TetGen could not mesh the model as it is');
+  assert.equal(meshNowHeadline({ ...ok, status: 'CANCELLED' }), 'Not meshed: the mesher was stopped');
+});
+
+test('meshNowBasis: another model, other mesh settings or another project is another basis', () => {
+  const m = solvers().meshing;
+  const b = meshNowBasis('p', 3, m);
+  assert.equal(meshNowBasis('p', 3, { ...m }), b);
+  assert.notEqual(meshNowBasis('p', 4, m), b);
+  assert.notEqual(meshNowBasis('q', 3, m), b);
+  assert.notEqual(meshNowBasis('p', 3, { ...m, preprocess: !m.preprocess }), b);
+  assert.notEqual(meshNowBasis('p', 3, { ...m, surface_receiver_max_area_m2: 2.5 }), b);
+});

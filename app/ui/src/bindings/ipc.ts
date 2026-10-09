@@ -2725,6 +2725,7 @@ export interface IpcBindings {
   gpu_status: GpuStatus;
   library_material: LibraryMaterial;
   library_spectrum: LibrarySpectrum;
+  mesh_now_report: MeshNowReport;
   prepared: Prepared;
   project_info: ProjectInfo;
   repair_report: RepairReport;
@@ -3512,6 +3513,93 @@ export interface LibrarySpectrum {
    */
   reference_id: number;
   shape: SpectrumShape;
+}
+/**
+ * What a mesh on demand gave (`mesh_now`).
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "MeshNowReport".
+ */
+export interface MeshNowReport {
+  /**
+   * The mesher's reason codes (`simpa_core::mesh::codes`), empty exactly when `OK`.
+   */
+  codes: string[];
+  /**
+   * The scratch folder, on the temp drive; the next mesh on demand of this project replaces it.
+   */
+  folder: string;
+  /**
+   * The mesh input hash of the project meshed: the UI shows the report only while the
+   * project still has it.
+   */
+  mesh_input_hash?: string | null;
+  /**
+   * What went wrong, in words, and the mesher's remarks.
+   */
+  messages: string[];
+  nodes?: number | null;
+  /**
+   * `preprocess.exe` ran first (the project's scene correction is on).
+   */
+  preprocessed: boolean;
+  /**
+   * Faces of surface receivers TetGen was asked to split (the `.var`); 0 without a face size.
+   */
+  refined_faces: number;
+  state: SceneState1;
+  /**
+   * The mesh manifest's status: `OK`, `FAIL` or `CANCELLED`.
+   */
+  status: string;
+  /**
+   * Tetrahedra and nodes of the mesh built; `None` when TetGen's output was not read.
+   */
+  tetrahedra?: number | null;
+}
+/**
+ * The state of the open project as the M10 UI shows it. Returned by every M10 command.
+ */
+export interface SceneState1 {
+  /**
+   * The run-quality advisor before a run (backlog 80, `simpa_core::advise::before`): meshing
+   * that splits the walls, receivers small for the room, a run shorter than its decay, fewer
+   * particles than the noise model was measured with. Never a run blocker; each item names a
+   * setting and the value "Apply" sets (`advice_apply`).
+   */
+  advice: Advice[];
+  /**
+   * The Applies the project as it is now would refuse, with why in plain words
+   * (`simpa_core::advise::apply_conflicts`): the Results step offers no Apply for them, even
+   * when the run's own meshing allowed it (a surface-receiver refinement added since, Q3).
+   */
+  advice_conflicts: ApplyConflict[];
+  /**
+   * The model check of the current geometry; `None` when the project has no faces.
+   */
+  check?: CheckSummary | null;
+  /**
+   * One per surface group, in project order.
+   */
+  groups: GroupStats[];
+  info: ProjectInfo;
+  /**
+   * The validator's issues on the current project, with their UI codes.
+   */
+  issues: UiIssue[];
+  /**
+   * Console lines produced since the last state was returned.
+   */
+  lines: LogLine[];
+  /**
+   * Why Run is disabled by the project itself, as UI codes; empty when the project may run.
+   * The UI adds the app's own blockers beside them: `SOLVER_NOT_FOUND` and
+   * `SOLVER_UNVERIFIED` (`solvers_status`) and `RUN_ACTIVE` (the run slot), and the chosen
+   * solver's own errors from `solver_issues`.
+   */
+  run_blockers: string[];
+  solver_issues: SolverIssues;
+  view: ProjectView;
 }
 /**
  * A prepared buffer: take it with `token`; `checksum` is [`checksum`] of its bytes.

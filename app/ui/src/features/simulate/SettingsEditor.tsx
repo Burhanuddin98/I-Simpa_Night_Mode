@@ -7,7 +7,7 @@
 // file's size (C8), duration (C10), time step in ms with the step count (C11), the receiver
 // radius, the particle extinction and "Preserve walls when meshing (-Y)" (backlog 80: every value
 // the run-quality advisor's Apply sets has its field), upstream's scene correction before meshing
-// (G36), the surface-receiver face size TetGen refines to (G34), the method (C12),
+// (G36), the surface-receiver face size TetGen refines to (G34), Mesh now (G32), the method (C12),
 // sound maps per band (C21) and what they show (C20), echogram per source (C22), transmission
 // through walls (C17), the bands it computes (C25) and the band
 // presets (C26), and the air (C27) with the switch that lets it absorb (C14). TCR: its method as
@@ -30,7 +30,9 @@ import { CommitInput, Issues } from '../../chrome/SourcesPanel';
 import { fieldKey } from '../../issues';
 import { parseStrictDecimal } from '../../numbers';
 import { setBandComputed, setEnvironment, setSolverSettings } from '../../ops';
-import { deviceStore, refusalStore, runsStore, type SolverName, useStore } from '../../store';
+import { RUN_ACTIVE_TITLE } from '../../chrome/MenuBar';
+import { deviceStore, meshNowStore, refusalStore, runStore, runsStore, type SolverName, useStore } from '../../store';
+import { reasonWords } from './reasonWords';
 import { EDT_MARKS } from '../acoustics/model';
 import { bandsText, hzText, projectSettings, type ProjectSettings, settingsRows } from './model';
 import { cubeText, mapStepRatio, REFUSE_GB, resultCube, WARN_GB } from './runSize';
@@ -40,6 +42,8 @@ import {
   bandPresetOf,
   NOT_A_COUNT,
   NOT_ABOVE_ZERO,
+  meshNowBasis,
+  meshNowHeadline,
   parseFaceArea,
   parseCount,
   pbinBytes,
@@ -386,6 +390,60 @@ function AirEditor({ scene, s, solver }: { scene: SceneState; s: ProjectSettings
   );
 }
 
+/**
+ * G32, mesh on demand: TetGen on the model now with the mesh settings above, as a run would mesh it,
+ * to learn whether it meshes and how large the mesh is before a run. A run still meshes again
+ * itself. The last report stays while the model and the mesh settings are the ones it was made on.
+ */
+function MeshNowBlock({ scene, s }: { scene: SceneState; s: ProjectSettings }) {
+  const last = useStore(meshNowStore);
+  const running = useStore(runStore) !== null;
+  const [busy, setBusy] = useState(false);
+  const basis = meshNowBasis(scene.info.id, scene.info.geometry_rev, s.solvers.meshing);
+  const shown = last && last.basis === basis ? last.report : null;
+  const noModel = scene.info.faces === 0;
+  const go = async () => {
+    setBusy(true);
+    try {
+      await actions.meshNow(basis);
+    } catch {
+      // A command error is already a FAIL line in the Console.
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="sim-setting sim-block" data-setting="mesh_now">
+      <div className="sim-field-line">
+        <span className="k">Volume mesh</span>
+        <button
+          className="small-button"
+          data-part="mesh-now"
+          disabled={busy || running || noModel}
+          title={running ? RUN_ACTIVE_TITLE : noModel ? 'The project has no model to mesh' : undefined}
+          onClick={() => actions.fire(go())}
+        >
+          {busy ? 'Meshing…' : 'Mesh now'}
+        </button>
+      </div>
+      <div className="sim-hint" data-part="mesh-now-hint">
+        Runs TetGen on the model now with the settings above, as a run would, to see whether it meshes and how large the mesh
+        is. A run still meshes again itself; this changes nothing in the project.
+      </div>
+      {shown && (
+        <div className="sim-hint" data-part="mesh-now-result" data-status={shown.status}>
+          <div className={shown.status === 'OK' ? '' : 'fail'}>{meshNowHeadline(shown)}</div>
+          {shown.codes.map((c) => (
+            <div key={c} data-reason={c}>
+              {reasonWords(c)} <span className="mono">{c}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SettingsEditor({ scene, settings, solver }: { scene: SceneState | null; settings: ProjectSettings | null; solver: SolverName }) {
   const [savedDraft, setSavedDraft] = useState<string | null>(null);
   const [stepDraft, setStepDraft] = useState<string | null>(null);
@@ -624,6 +682,7 @@ export function SettingsEditor({ scene, settings, solver }: { scene: SceneState 
           that switch as it is. Empty: faces as modelled, upstream's default.
         </div>
       </div>
+      <MeshNowBlock scene={scene} s={s} />
       <div className="sim-setting sim-block" data-setting="method">
         <div className="sim-field-line">
           <span className="k">Method</span>

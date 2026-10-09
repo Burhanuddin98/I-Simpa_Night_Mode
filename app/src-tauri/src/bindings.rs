@@ -17,6 +17,7 @@ use crate::bridge::{FloatProbe, ProjectInfo};
 use crate::commands::{EventsProbeReport, StartupInfo};
 use crate::events::{AppEvent, RunEventBatch};
 use crate::guard::CmdError;
+use crate::mesh_now::MeshNowReport;
 use crate::results_data::{EchogramView, ReportView, RunDataIndex};
 use crate::runs::{
     GpuStatus, LibraryMaterial, LibrarySpectrum, ResultsState, RunStarted, RunStreamBatch,
@@ -91,6 +92,12 @@ fn dumps() -> Vec<Dump> {
                     "repair_report",
                     "RepairReport",
                     schema_for!(RepairReport).to_value(),
+                ),
+                // Parity G32: a mesh on demand's report.
+                (
+                    "mesh_now_report",
+                    "MeshNowReport",
+                    schema_for!(MeshNowReport).to_value(),
                 ),
                 // M11 (docs/investigations/2026-09-29-m11/PLAN.md 2.3).
                 (

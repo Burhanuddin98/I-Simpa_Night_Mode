@@ -1123,28 +1123,15 @@ fn plan(
     };
     let tetgen = find(TETGEN_EXE_NAME)?;
     let preprocess = find(PREPROCESS_EXE_NAME)?;
-    {
-        let mut c = lock(cache, "solvers")?;
-        for (name, path) in [
+    verify_exes(
+        cache,
+        &manifest,
+        &[
             (solver_name_checked, &solver_exe),
             (TETGEN_EXE_NAME, &tetgen),
             (PREPROCESS_EXE_NAME, &preprocess),
-        ] {
-            let check = c.check(name, path, &manifest);
-            if !check.matches {
-                return Err(CmdError::new(
-                    SOLVER_UNVERIFIED,
-                    format!(
-                        "{} is not the verified build: code sha256 {}, the manifest's {} ({})",
-                        path.display(),
-                        check.code_sha256.as_deref().unwrap_or("unreadable"),
-                        check.manifest_code_sha256.as_deref().unwrap_or("none"),
-                        check.detail.as_deref().unwrap_or("")
-                    ),
-                ));
-            }
-        }
-    }
+        ],
+    )?;
     Ok(Planned {
         project,
         variant,
@@ -1155,6 +1142,55 @@ fn plan(
         preprocess,
         manifest,
     })
+}
+
+/// Each of `exes` against `manifest`, through the session's cache; refused `SOLVER_UNVERIFIED`
+/// at the first that is not the verified build.
+fn verify_exes(
+    cache: &Mutex<SolversCache>,
+    manifest: &SolverManifest,
+    exes: &[(&str, &PathBuf)],
+) -> CmdResult<()> {
+    let mut c = lock(cache, "solvers")?;
+    for &(name, path) in exes {
+        let check = c.check(name, path, manifest);
+        if !check.matches {
+            return Err(CmdError::new(
+                SOLVER_UNVERIFIED,
+                format!(
+                    "{} is not the verified build: code sha256 {}, the manifest's {} ({})",
+                    path.display(),
+                    check.code_sha256.as_deref().unwrap_or("unreadable"),
+                    check.manifest_code_sha256.as_deref().unwrap_or("none"),
+                    check.detail.as_deref().unwrap_or("")
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Parity G32: `tetgen.exe` and `preprocess.exe` found and verified exactly as a run finds and
+/// verifies them, for meshing on demand (`mesh_now.rs`).
+pub fn mesh_exes(cache: &Mutex<SolversCache>) -> CmdResult<(PathBuf, PathBuf)> {
+    let manifest = manifest()?;
+    let search = ExeSearch::from_env(None);
+    let find = |name: &str| {
+        search
+            .find(name)
+            .map_err(|e| CmdError::new(SOLVER_NOT_FOUND, e.to_string()))
+    };
+    let tetgen = find(TETGEN_EXE_NAME)?;
+    let preprocess = find(PREPROCESS_EXE_NAME)?;
+    verify_exes(
+        cache,
+        &manifest,
+        &[
+            (TETGEN_EXE_NAME, &tetgen),
+            (PREPROCESS_EXE_NAME, &preprocess),
+        ],
+    )?;
+    Ok((tetgen, preprocess))
 }
 
 /// Where the live particles of a run go (B3): one LIVE v1 batch at a time (`live.rs`); `false`
