@@ -26,18 +26,12 @@ import { runsStore, sceneStore, selectedRunStore, stepStore, Store } from '../..
 import { Animator } from './animator';
 import { resultsLayer, renderNow, setGlow, setMapOpacity, setMapWhilePlaying, showMap, showParticles, type Glow } from './engine';
 import { cumulativeRange, cumulativeRefusal } from './cumulative';
-import { diffRange, legendGradient, legendLabels, levelRange, paramLabels, paramRange, surfaceMismatch, type Range } from './mapData';
+import { diffRange, legendGradient, legendLabels, levelRange, mapQuantities, paramLabels, paramRange, surfaceMismatch, type Range } from './mapData';
 import { emissionStep, noParticlesText } from './particles';
 import type { ParticleLook } from './rays';
 import { DEFAULT_WINDOW_MS, windowChoice, WINDOW_CUMULATIVE_REFUSAL, windowLabel } from './window';
 
-/** Parity R42/R73: what a map can show besides the level: the four parameters, each behind its bed (`map_<name>`). */
-export const MAP_QUANTITIES: readonly { key: MapParameter; label: string }[] = [
-  { key: 't30_s', label: 'T30' },
-  { key: 'edt_s', label: 'EDT' },
-  { key: 'c80_db', label: 'C80' },
-  { key: 'd50', label: 'D50' },
-];
+export { MAP_QUANTITIES } from './mapData';
 
 /** A parameter map's values for the probe and the legend: core's JSON, per face in SMAP order. */
 export interface ParamShown {
@@ -256,11 +250,7 @@ async function loadIndex(run: string, g: number): Promise<void> {
     if (data.solver === 'spps') {
       const rep = await actions.reportFor(run).catch(() => null);
       if (!fresh(g)) return;
-      const bed = rep?.report?.bed?.parameters as unknown as Record<string, { status?: string; reasons?: string[] } | undefined> | undefined;
-      quantities = MAP_QUANTITIES.map((q) => {
-        const b = bed?.[`map_${q.key}`];
-        return { ...q, withheld: b?.status === 'PASS' ? null : `its test bed has not passed${b?.reasons?.length ? `: ${b.reasons[0]}` : ''}` };
-      });
+      quantities = mapQuantities(rep?.report?.bed?.parameters as unknown as Record<string, { status?: string; reasons?: string[] } | undefined> | undefined);
     }
     set({ status: 'ready', data, groups, group, bands, bandHz: defaultBand(bands), baseline: defaultBaseline(run), quantities });
   } catch (e) {

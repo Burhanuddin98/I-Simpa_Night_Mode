@@ -587,3 +587,41 @@ test('Acoustics R27: the Schroeder table is the report decay curve, point by poi
   assert.equal(t.rows.length, 2);
   assert.equal(decayTable(r, 0, 1), null, 'no curve in that band');
 });
+
+// Gate (b) for each bed entry M12c added, with a FAIL planted: the element is withheld and says why.
+// (The e2e gate sweeps only the Acoustics tab's fixed parameters; these are the only cover here.)
+const planted = (r: Report, entries: Record<string, 'PASS' | 'FAIL'>) => {
+  for (const [name, status] of Object.entries(entries)) {
+    (r.bed.parameters as unknown as Record<string, unknown>)[name] = { status, reasons: status === 'FAIL' ? [`${name}: a case did not hold`] : [], notes: [] };
+  }
+  return r;
+};
+
+test('Acoustics R15: a FAIL planted on decay_custom withholds the chosen decay ranges, with the reason', () => {
+  const r = planted(report(), { decay_custom: 'FAIL', clarity_custom: 'PASS', definition_custom: 'PASS' }) as unknown as Record<string, unknown>;
+  r.custom = [{ kind: 'decay', span_db: 40 }, { kind: 'clarity', te_ms: 30 }];
+  const cols = customColumns(r as unknown as Report);
+  assert.deepEqual(cols.map((c) => [c.spec.name, c.shown, c.withheld]), [
+    ['t40_s', false, 'withheld: its test bed has not passed (decay_custom: a case did not hold)'],
+    ['c30_db', true, null],
+  ]);
+});
+
+test('Acoustics R20: a FAIL planted on clarity_custom or definition_custom withholds that kind only, with the reason', () => {
+  for (const [failed, kept] of [['clarity_custom', 'd80'], ['definition_custom', 'c30_db']] as const) {
+    const other = failed === 'clarity_custom' ? 'definition_custom' : 'clarity_custom';
+    const r = planted(report(), { [failed]: 'FAIL', [other]: 'PASS', decay_custom: 'PASS' }) as unknown as Record<string, unknown>;
+    r.custom = [{ kind: 'clarity', te_ms: 30 }, { kind: 'definition', te_ms: 80 }];
+    const cols = customColumns(r as unknown as Report);
+    const hidden = cols.filter((c) => !c.shown);
+    assert.equal(hidden.length, 1, failed);
+    assert.equal(hidden[0].withheld, `withheld: its test bed has not passed (${failed}: a case did not hold)`);
+    assert.deepEqual(cols.filter((c) => c.shown).map((c) => c.spec.name), [kept]);
+  }
+});
+
+test('Acoustics R27: a FAIL planted on schroeder_table withholds the Schroeder table, with the reason', () => {
+  const r = planted(report(), { schroeder_table: 'FAIL' });
+  assert.deepEqual(decayTable(r, 0, 0), { withheld: 'withheld: its test bed has not passed (schroeder_table: a case did not hold)' });
+  assert.deepEqual(decayTable(r, 0, 'sum'), { withheld: 'withheld: its test bed has not passed (schroeder_table: a case did not hold)' });
+});

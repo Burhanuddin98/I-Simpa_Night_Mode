@@ -12,7 +12,27 @@
 //   even step (CIELAB L* 3 to 98, steps 9 to 13; picked at even OKLab lightness), so a louder cell always
 //   reads brighter. A difference from the baseline runs through black at 0, the cool ramp (the approved
 //   design's COOL) where this run is quieter and the hot ramp where it is louder.
+import type { MapParameter } from '../../bindings/ipc.ts';
 import type { SurfaceMap } from '../../resultsData.ts';
+
+/** Parity R42/R73: what a map can show besides the level: the four parameters, each behind its bed (`map_<name>`). */
+export const MAP_QUANTITIES: readonly { key: MapParameter; label: string }[] = [
+  { key: 't30_s', label: 'T30' },
+  { key: 'edt_s', label: 'EDT' },
+  { key: 'c80_db', label: 'C80' },
+  { key: 'd50', label: 'D50' },
+];
+
+/** The parameter maps offered for a run, read from its report's bed (`report.bed.parameters`): each
+ * withheld, with the reason, unless its `map_<name>` entry is PASS (gate (b)); no bed withholds all. */
+export function mapQuantities(
+  bed: Record<string, { status?: string; reasons?: string[] } | undefined> | undefined,
+): { key: MapParameter; label: string; withheld: string | null }[] {
+  return MAP_QUANTITIES.map((q) => {
+    const b = bed?.[`map_${q.key}`];
+    return { ...q, withheld: b?.status === 'PASS' ? null : `its test bed has not passed${b?.reasons?.length ? `: ${b.reasons[0]}` : ''}` };
+  });
+}
 
 export const HOT: readonly string[] = ['#0B0B0E', '#420C12', '#72111A', '#A31823', '#D81F2D', '#EF5F5A', '#FD938B', '#FFC5BE', '#FFF7F2'];
 export const COOL: readonly string[] = ['#0E1116', '#15212C', '#1C3446', '#264B63', '#356683', '#4A84A5', '#6AA6C6', '#A3CDE3'];

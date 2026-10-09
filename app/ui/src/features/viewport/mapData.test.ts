@@ -9,6 +9,7 @@ import {
   legendLabels,
   levelDb,
   levelRange,
+  mapQuantities,
   paramLabels,
   paramRange,
   mapLayout,
@@ -173,4 +174,17 @@ test('R42/R73: a parameter map is drawn over its own range in its unit, in whole
   assert.deepEqual(paramLabels({ lo: 0.9, hi: 1.05 }, 's'), { lo: '0.90', mid: '0.98', hi: '1.05 s' });
   assert.deepEqual(paramLabels({ lo: -2, hi: 7.5 }, 'dB'), { lo: '−2.0', mid: '2.8', hi: '7.5 dB' });
   assert.deepEqual(paramLabels({ lo: 0.65, hi: 0.75 }, ''), { lo: '65', mid: '70', hi: '75 %' });
+});
+
+test('R42: a FAIL planted on one map bed withholds that map only, with the reason; no bed withholds all', () => {
+  const pass = { status: 'PASS', reasons: [] };
+  for (const key of ['t30_s', 'edt_s', 'c80_db', 'd50']) {
+    const bed: Record<string, { status: string; reasons: string[] }> = { map_t30_s: pass, map_edt_s: pass, map_c80_db: pass, map_d50: pass };
+    bed[`map_${key}`] = { status: 'FAIL', reasons: [`map_${key}: a face did not hold`] };
+    const q = mapQuantities(bed);
+    assert.deepEqual(q.filter((x) => x.withheld).map((x) => [x.key, x.withheld]), [[key, `its test bed has not passed: map_${key}: a face did not hold`]]);
+    assert.equal(q.filter((x) => !x.withheld).length, 3, key);
+  }
+  assert.ok(mapQuantities(undefined).every((x) => x.withheld === 'its test bed has not passed'));
+  assert.ok(mapQuantities({ map_t30_s: { status: 'pass' } }).every((x) => x.withheld), 'only PASS shows');
 });
