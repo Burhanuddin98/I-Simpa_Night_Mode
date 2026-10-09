@@ -137,6 +137,33 @@ function SettingValueView({ n, word, unit }: { n: AdviceCard['from']; word: stri
   return <N n={n} unit={unit || undefined} />;
 }
 
+/** The cards' names, each a jump to its card (GUI audit 2026-10-09, A2): the dock shows two or three cards side by
+ * side, and the rest were found only by scrolling sideways. "Why values are missing" comes last, after the numbers. */
+const CARDS: readonly { label: string; card: string }[] = [
+  { label: 'Reverberation time', card: 'Reverberation time against DIN 18041' },
+  { label: 'Receivers', card: 'Receivers' },
+  { label: 'Decay', card: 'Decay' },
+  { label: 'Sabine / Eyring', card: 'Sabine and Eyring' },
+  { label: 'Absorption', card: 'Absorption by surface group' },
+];
+const ADVICE_CARD = { label: 'Why values are missing', card: 'Why values are missing' };
+
+function CardJumps({ advice }: { advice: boolean }) {
+  const jump = (e: React.MouseEvent<HTMLButtonElement>, card: string) => {
+    const el = e.currentTarget.closest('.ac')?.querySelector<HTMLElement>(`.ac-body > section[aria-label="${card}"]`);
+    el?.scrollIntoView({ inline: 'start', block: 'nearest', behavior: 'smooth' });
+  };
+  return (
+    <nav className="ac-jumps" aria-label="Cards" data-part="card-jumps">
+      {(advice ? [...CARDS, ADVICE_CARD] : CARDS).map((c) => (
+        <button key={c.card} type="button" className={c === ADVICE_CARD ? 'ac-jump warn' : 'ac-jump'} data-jump={c.card} onClick={(e) => jump(e, c.card)}>
+          {c.label}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
 /** "Why values are missing" (backlog 80): the run-quality advisor's items for this run, each its
  * cause, the setting that addresses it and, where the core offers one, "Apply and re-run" (one
  * checked edit, one undo step, then a run of the same solver). */
@@ -460,7 +487,7 @@ export function AcousticsPane() {
         <span className="ac-solver" data-run-label data-part="run-solver" title={row?.gpu_device ?? undefined}>
           {runSolverText(report.solver === 'tcr' ? 'tcr' : 'spps', row?.gpu_device)}
         </span>
-        <span className="ac-wording" data-label="wording" data-part="wording">
+        <span className="ac-wording" data-label="wording" data-part="wording" title={MQ2_WORDING}>
           {MQ2_WORDING}
         </span>
         {view?.state.unverified ? <span className="ac-tag warn">UNVERIFIED solver build</span> : null}
@@ -477,6 +504,7 @@ export function AcousticsPane() {
             </select>
           </label>
         ) : null}
+        <CardJumps advice={adviceCards(report).length > 0} />
       </div>
       {note ? (
         <div className="ac-note block" data-part="source-note" data-label="note">
@@ -484,7 +512,6 @@ export function AcousticsPane() {
         </div>
       ) : null}
       <div className="ac-body">
-        <AdviceCardView cards={adviceCards(report)} solver={report.solver === 'tcr' ? 'tcr' : 'spps'} conflicts={scene?.advice_conflicts ?? []} />
         <section className="ac-card ac-rt" aria-label="Reverberation time against DIN 18041">
           <div className="ac-card-head">
             <span className="ac-card-title">Reverberation time</span>
@@ -752,6 +779,7 @@ export function AcousticsPane() {
             <div className="ac-none">The room was not read: no absorption.</div>
           )}
         </section>
+        <AdviceCardView cards={adviceCards(report)} solver={report.solver === 'tcr' ? 'tcr' : 'spps'} conflicts={scene?.advice_conflicts ?? []} />
       </div>
     </div>
   );

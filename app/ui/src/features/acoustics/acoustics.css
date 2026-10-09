@@ -26,13 +26,45 @@
 }
 /* C2: the wording takes the rest of the line, or a line of its own below 360 px, never a narrow
    column of wrapped words beside the run's name (.out55-results-gpu.png). */
+/* GUI audit 2026-10-09 A2: one line, cut with an ellipsis, the whole sentence in its tooltip; in a 250 px dock its
+   three wrapped lines and the cards' names had left the numbers about 70 px. */
 .ac-wording {
-  flex: 1 1 360px;
+  order: 10;
+  flex: 1 1 100%;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   color: var(--text-3);
   font-size: 11.5px;
   line-height: 1.3;
 }
+/* The cards' names on the head's line, each a jump to its card (AcousticsPane.tsx CardJumps; GUI audit 2026-10-09 A2). */
+.ac-jumps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: auto;
+  align-self: center;
+}
+.ac-jump {
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 5px;
+  border: 1px solid var(--edge);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.ac-jump:hover {
+  color: var(--text);
+  border-color: var(--text-3);
+}
+.ac-jump.warn {
+  color: var(--warn);
+}
 .ac-body {
+  scroll-behavior: smooth;
   flex-grow: 1;
   min-height: 0;
   display: flex;
