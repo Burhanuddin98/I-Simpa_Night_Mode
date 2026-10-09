@@ -93,6 +93,7 @@ import { animatorStore } from './animator';
 import { firstFace, modelGeometry, pickingBvh } from './pick';
 import { ARC_MS, arcPose, easeInOut, type Pose } from './arc';
 import { groupNamesOf, indexOf, isolateRefusal, leftOut, roofFaces, shownPerVertex } from './hide';
+import { boxSamples, combineFaces, inRect, pickMode, rectOf, type PickMode, type Rect } from './faceSelect';
 import { insideBox, NO_REVEAL, revealRadius, rimOpacity, speedOfSound, SPREAD_MAX, wavefrontInRoom, wavefrontRadius } from './spread';
 import { settingsStore } from '../simulate/runSize';
 import { facePlan, faceShowOf, type FacePlan, type FaceShow } from './faces';
@@ -643,6 +644,8 @@ class ViewportEngine {
 
   // The pointer between down and up.
   private down = { x: 0, y: 0, moved: false };
+  /** G47: the selection box being dragged (Shift+drag with the Select tool), from its first corner. */
+  private box: { x: number; y: number; el: HTMLDivElement | null } | null = null;
 
   /** The Results step's surface map and particles (M12 P3). */
   readonly results = new ResultsLayer();
@@ -978,19 +981,36 @@ class ViewportEngine {
       log('INFO', 'The 3D view has its WebGL context back');
       this.invalidate();
     });
-    canvas.addEventListener('pointerdown', (e) => {
-      this.down = { x: e.clientX, y: e.clientY, moved: false };
-    });
+    // Capture, so it runs before the orbit controls' own listener: Shift+drag with the Select tool
+    // is the selection box (G47), not the controls' pan.
+    canvas.addEventListener(
+      'pointerdown',
+      (e) => {
+        this.down = { x: e.clientX, y: e.clientY, moved: false };
+        if (e.button === 0 && e.shiftKey && !e.ctrlKey && !e.metaKey && toolStore.get() === 'select' && this.bvh) {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+          canvas.setPointerCapture(e.pointerId);
+          this.box = { x: e.clientX, y: e.clientY, el: null };
+        }
+      },
+      { capture: true },
+    );
     canvas.addEventListener('pointermove', (e) => {
       if (e.buttons !== 0 && Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y) > CLICK_SLOP_PX) this.down.moved = true;
+      if (this.box) this.drawBox(e.clientX, e.clientY);
       this.probeAt(e.buttons === 0 ? e.clientX : null, e.clientY);
     });
+    canvas.addEventListener('pointerup', (e) => {
+      if (this.box) this.endBox(this.down.moved ? { x: e.clientX, y: e.clientY } : null);
+    });
+    canvas.addEventListener('pointercancel', () => this.endBox(null));
     canvas.addEventListener('pointerleave', () => this.probeAt(null, 0));
     canvas.addEventListener('click', (e) => {
-      if (!this.down.moved) this.onClick(e.clientX, e.clientY);
+      if (!this.down.moved) this.onClick(e.clientX, e.clientY, pickMode(e));
     });
     canvas.addEventListener('dblclick', (e) => {
-      if (!this.down.moved) this.onDoubleClick(e.clientX, e.clientY);
+      if (!this.down.moved) this.onDoubleClick(e.clientX, e.clientY, pickMode(e));
     });
 
     const controls = new OrbitControls(this.persp, canvas);
@@ -2703,7 +2723,7 @@ class ViewportEngine {
     return { drawn: drawn.rgba, bare: bare.rgba };
   }
 
-  private onClick(x: number, y: number): void {
+  private onClick(x: number, y: number, mode: PickMode = 'replace'): void {
     const tool = toolStore.get();
     if (tool === 'orbit') return;
     if (tool === 'place-receiver' || tool === 'place-source') {
@@ -2712,16 +2732,85 @@ class ViewportEngine {
     }
     const pick = this.pickAt(x, y);
     if (pick.kind === 'marker') selectionStore.set({ kind: pick.marker.kind, id: pick.marker.id });
-    else if (pick.kind === 'face') selectionStore.set(this.facesSelection([pick.face]));
-    else selectionStore.set({ kind: 'none' });
+    else if (pick.kind === 'face') this.pickFaces([pick.face], mode);
+    // A click with Ctrl or Shift that meets nothing keeps what is picked.
+    else if (mode === 'replace') selectionStore.set({ kind: 'none' });
   }
 
-  /** Double-click: the clicked face's whole flat surface (upstream's coplanar fill). */
-  private onDoubleClick(x: number, y: number): void {
+  /** Double-click: the clicked face's whole flat surface (upstream's coplanar fill); added with Ctrl or Shift. */
+  private onDoubleClick(x: number, y: number, mode: PickMode = 'replace'): void {
     if (toolStore.get() !== 'select' || !this.topo) return;
     const pick = this.pickAt(x, y);
     if (pick.kind !== 'face') return;
-    selectionStore.set(this.facesSelection(coplanarFaces(this.topo, pick.face)));
+    // The click before a double-click has toggled the face already: the surface is added, not toggled.
+    this.pickFaces(coplanarFaces(this.topo, pick.face), mode === 'replace' ? 'replace' : 'add');
+  }
+
+  /** G47: `faces` picked in `mode`, from the faces picked now (none when the selection is not faces). */
+  private pickFaces(faces: number[], mode: PickMode): void {
+    const s = selectionStore.get();
+    const current = s.kind === 'faces' ? s.faces : [];
+    const next = combineFaces(current, faces, mode);
+    selectionStore.set(next.length ? this.facesSelection(next) : { kind: 'none' });
+  }
+
+  /** G47: the selection box drawn from its first corner to the pointer, over the canvas. */
+  private drawBox(x: number, y: number): void {
+    const b = this.box;
+    const root = this.dom?.root;
+    if (!b || !root) return;
+    if (!b.el) {
+      b.el = document.createElement('div');
+      b.el.className = 'vp-box';
+      b.el.dataset.part = 'select-box';
+      root.appendChild(b.el);
+    }
+    const o = root.getBoundingClientRect();
+    const r = rectOf(b, { x, y });
+    Object.assign(b.el.style, { left: `${r.left - o.left}px`, top: `${r.top - o.top}px`, width: `${r.right - r.left}px`, height: `${r.bottom - r.top}px` });
+  }
+
+  /**
+   * G47: the box let go at `to` adds every face seen inside it to the picked faces; null (no drag, a
+   * cancelled pointer) takes nothing, and a Shift+click without a drag then adds its one face.
+   */
+  private endBox(to: { x: number; y: number } | null): void {
+    const b = this.box;
+    this.box = null;
+    b?.el?.remove();
+    if (!b || !to) return;
+    const faces = this.facesInBox(rectOf(b, to));
+    if (faces.length) this.pickFaces(faces, 'add');
+  }
+
+  /**
+   * G47: the faces seen inside a client box: the first face drawn under each of a grid of points,
+   * and under each face's centroid that projects into the box (a face smaller than the grid's
+   * spacing). A face hidden behind another, or left out by Roof off or Isolate, is not taken.
+   */
+  private facesInBox(box: Rect): number[] {
+    const mesh = this.mesh;
+    const bvh = this.bvh;
+    const c = this.canvas;
+    if (!mesh || !bvh || !c) return [];
+    const cr = c.getBoundingClientRect();
+    const r: Rect = { left: Math.max(box.left, cr.left), top: Math.max(box.top, cr.top), right: Math.min(box.right, cr.right), bottom: Math.min(box.bottom, cr.bottom) };
+    if (r.right < r.left || r.bottom < r.top) return [];
+    const side = this.pickSide();
+    const out = this.out;
+    const found = new Set<number>();
+    const cast = (x: number, y: number) => {
+      const ray = this.rayAt(x, y);
+      const hit = ray ? firstFace(bvh, ray, side, out) : null;
+      if (hit) found.add(hit.face);
+    };
+    for (const p of boxSamples(r)) cast(p.x, p.y);
+    for (let f = 0; f < mesh.faceCount; f++) {
+      if (found.has(f) || out?.[f]) continue;
+      const q = this.clientOf(new Vector3(...faceCentroid(mesh.positions, mesh.indices, f)));
+      if (q && inRect(r, q.x, q.y)) cast(q.x, q.y);
+    }
+    return [...found];
   }
 
   private place(kind: MarkerKind, x: number, y: number): void {

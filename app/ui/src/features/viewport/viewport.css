@@ -719,3 +719,13 @@ html.present .viewport > :not(.viewport-host) {
 .vp-dock[data-play-folded='true'] .vp-particles-none.float-panel {
   display: none;
 }
+
+/* G47: the selection box, Shift+drag with the Select tool; the faces seen inside it join the picked faces. */
+.vp-box {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+  border: 1px solid var(--red-hi);
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+  border-radius: 1px;
+}

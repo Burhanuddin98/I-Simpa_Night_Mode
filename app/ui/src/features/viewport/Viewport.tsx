@@ -86,7 +86,7 @@ const FrameTool = () => (
 );
 
 const TOOLS: { key: Tool; label: string; title: string; Icon: () => JSX.Element; needsModel: boolean }[] = [
-  { key: 'select', label: 'Select', title: 'Select: click a face; double-click takes its whole flat surface', Icon: SelectTool, needsModel: false },
+  { key: 'select', label: 'Select', title: 'Select: click a face; Ctrl+click adds or removes one, Shift+click adds; Shift+drag a box adds every face seen in it; double-click takes its whole flat surface', Icon: SelectTool, needsModel: false },
   { key: 'orbit', label: 'Orbit', title: 'Orbit: drag to turn the view; clicks select nothing', Icon: OrbitTool, needsModel: false },
   { key: 'place-receiver', label: 'Place receiver', title: 'Place receiver: click a floor', Icon: ReceiverTool, needsModel: true },
   { key: 'place-source', label: 'Place source', title: 'Place source: click a floor', Icon: SourceTool, needsModel: true },

@@ -32,7 +32,7 @@ export function MaterialsPanel() {
     <div className="mat-panel" data-part="materials">
       <GroupSection />
       <LibrarySection />
-      <div className="mat-hint empty">Double-click a face to take its whole flat surface.</div>
+      <div className="mat-hint empty">Double-click a face to take its whole flat surface; Ctrl+click adds or removes a face, Shift+drag a box adds every face seen in it.</div>
     </div>
   );
 }
