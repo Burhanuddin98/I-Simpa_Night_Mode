@@ -543,6 +543,8 @@ class ViewportEngine {
   private dimAt = 0;
   private ghosted = false;
   private mapFullWhilePlaying = false;
+  /** R45: the map's opacity the person chose (1: opaque, as measured); playback fades from it. */
+  private mapOpacity = 1;
   private turnFrame = 0;
   /** Item 6: the camera's flight on the arc in progress (arc.ts), or null. */
   private flight: { frame: number; resolve: (arrived: boolean) => void } | null = null;
@@ -1285,7 +1287,7 @@ class ViewportEngine {
     u.value = Math.abs(next - target) < 0.004 ? target : next;
     if (u.value !== target) this.invalidate();
     this.setGhosted((u.value as number) > 0);
-    this.results.setMapFade(this.mapFullWhilePlaying ? 1 : 1 - 0.75 * (u.value as number));
+    this.results.setMapFade(this.mapOpacity * (this.mapFullWhilePlaying ? 1 : 1 - 0.75 * (u.value as number)));
   }
 
   /**
@@ -1341,6 +1343,12 @@ class ViewportEngine {
   liveState(): { on: boolean; shown: boolean; look: ParticleLook; particles: number; records: number; active: boolean; step: number; dim: number } {
     const m = this.live.particleMeta;
     return { on: this.liveOn, shown: this.liveShown(), look: this.live.gpu.currentLook(), particles: m?.particles ?? 0, records: m?.records ?? 0, active: this.live.gpu.active(), step: this.live.particleStep(), dim: this.shared.nmDim.value as number };
+  }
+
+  /** R45: the map's opacity, 0.1 to 1 (1: opaque, drawn exactly as before); the room shows through below 1. */
+  setMapOpacity(a: number): void {
+    this.mapOpacity = Math.min(1, Math.max(0.1, a));
+    this.invalidate();
   }
 
   /** Round 2, item 5: keep the map at full strength while the light plays (else it fades to 25 %). */
@@ -3154,6 +3162,11 @@ export function setGlow(g: Glow): void {
 /** Round 2: the map at full strength while the light plays (else faded to 25 %). */
 export function setMapWhilePlaying(full: boolean): void {
   engine.setMapWhilePlaying(full);
+}
+
+/** R45: the map's opacity, 0.1 to 1. */
+export function setMapOpacity(a: number): void {
+  engine.setMapOpacity(a);
 }
 
 /** Round 2: the presentation view and its turntable. */

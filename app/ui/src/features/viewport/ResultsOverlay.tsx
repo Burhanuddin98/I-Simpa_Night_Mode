@@ -43,7 +43,7 @@ const LOOK_TITLES: Record<ParticleLook, string> = {
   rays: "Each particle's whole path so far, glowing, with a spark where it turns at a wall",
 };
 const LOOK_HINT = 'How the saved particles are drawn. Glow and rays are light: brighter where louder, against a dimmed room while they play.';
-import { bandLabel, bandName, resultsView, resultsViewStore, shownMaps, startResultsView } from './resultsView';
+import { bandLabel, bandName, MAP_OPACITIES, resultsView, resultsViewStore, shownMaps, startResultsView } from './resultsView';
 import { WINDOW_CHOICES_MS, windowChoice, WINDOW_CUMULATIVE_REFUSAL, WINDOW_HINT } from './window';
 
 const PlayIcon = () => (
@@ -515,6 +515,16 @@ export function ResultsOverlay() {
           </span>
         </button>
         {v.fixed && <RangeFields lo={v.fixed.lo} hi={v.fixed.hi} />}
+        <div className="vp-row" role="radiogroup" aria-label="Opacity" data-part="map-opacity">
+          <span className="vp-row-label" title="How opaque the map is: below 100 % the room and what is behind the map show through it. The colours keep their levels.">
+            Opacity
+          </span>
+          {MAP_OPACITIES.map((a) => (
+            <button key={a} className="vp-chip-btn mono" role="radio" data-map-opacity={a} aria-checked={v.opacity === a} onClick={() => resultsView.setOpacity(a)}>
+              {`${Math.round(a * 100)} %`}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="vp-dock" data-part="results-dock" data-play-folded={playFolded}>

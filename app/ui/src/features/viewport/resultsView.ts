@@ -24,7 +24,7 @@ import type { RunData, SurfaceMapInfo } from '../../bindings/ipc';
 import { decodeParticles, decodeSurfaceMap, type SurfaceMap } from '../../resultsData';
 import { runsStore, sceneStore, selectedRunStore, stepStore, Store } from '../../store';
 import { Animator } from './animator';
-import { resultsLayer, renderNow, setGlow, setMapWhilePlaying, showMap, showParticles, type Glow } from './engine';
+import { resultsLayer, renderNow, setGlow, setMapOpacity, setMapWhilePlaying, showMap, showParticles, type Glow } from './engine';
 import { cumulativeRange, cumulativeRefusal } from './cumulative';
 import { diffRange, legendGradient, legendLabels, levelRange, surfaceMismatch, type Range } from './mapData';
 import { emissionStep, noParticlesText } from './particles';
@@ -96,8 +96,13 @@ export interface ResultsView {
   warmDepth: number;
   /** Round 2: the map kept at full strength while the light plays (else faded to 25 %). */
   mapFull: boolean;
+  /** R45: the map's opacity, one of `MAP_OPACITIES` (1: opaque, as measured). */
+  opacity: number;
   particles: ParticlesView;
 }
+
+/** R45: the opacities the map panel offers, 100 % first (opaque, drawn as before). */
+export const MAP_OPACITIES = [1, 0.75, 0.5, 0.25] as const;
 
 const OFF: ResultsView = {
   run: null,
@@ -129,11 +134,12 @@ const OFF: ResultsView = {
   glow: 'soft',
   warmDepth: 60,
   mapFull: false,
+  opacity: 1,
   particles: { state: 'off' },
 };
 
 /** The view choices a new run keeps (W5). */
-const kept = (v: ResultsView) => ({ smooth: v.smooth, isoDb: v.isoDb, fixed: v.fixed, cumulative: v.cumulative, windowMs: v.windowMs, trails: v.trails, look: v.look, glow: v.glow, mapFull: v.mapFull });
+const kept = (v: ResultsView) => ({ smooth: v.smooth, isoDb: v.isoDb, fixed: v.fixed, cumulative: v.cumulative, windowMs: v.windowMs, trails: v.trails, look: v.look, glow: v.glow, mapFull: v.mapFull, opacity: v.opacity });
 
 /** The map on screen and its baseline, as decoded: the probe reads its values here. */
 let shown: { map: SurfaceMap; base: SurfaceMap | null; what: string; cumulative: boolean; windowSteps: number } | null = null;
@@ -438,6 +444,11 @@ export const resultsView = {
     if (layer.particleLookRefusal(look)) return;
     set({ look: layer.setParticleLook(look) });
     renderNow();
+  },
+  /** R45: the map's opacity; the room shows through it below 1. Kept for the next run. */
+  setOpacity(a: number): void {
+    set({ opacity: a });
+    setMapOpacity(a);
   },
   /** Round 2: the map at full strength while the light plays, or faded to 25 %. */
   setMapFull(full: boolean): void {
