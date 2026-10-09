@@ -16,7 +16,9 @@
 //! - a direct sound `D` at 0 and a reverberation `R·e^{−t/τ}` split at `te` as
 //!   `C = 10·lg((D + Rτ(1 − e^{−te/τ})) / (Rτ·e^{−te/τ}))`, `D_te = (D + Rτ(1 − e^{−te/τ})) /
 //!   (D + Rτ)` (ISO 3382-1 A.2.3, Eqs. A.10-A.12);
-//! - impulses either side of `te` split as their energies do.
+//! - impulses either side of `te` split as their energies do; an impulse in the bin that starts
+//!   at `te` is late, the one in the bin before it early (ISO 3382-1 (3), `∫₀^te` over
+//!   `∫_te^∞`, as a sampled response's sample at `te` opens the late part).
 //!
 //! The histograms are each bin's exact integral of the continuous decay (an impulse in the bin it
 //! falls in). Every series is complete (nothing after its end) and the noise model's deposit is
@@ -237,6 +239,18 @@ fn value_cases(got: &Evaluated, w: Want<'_>) -> [Case; 2] {
     ]
 }
 
+/// The tolerance of a C or D case whose limit sits on a bin edge: the quantity's own (`base`, a
+/// tenth of its difference limen) or a tenth of the smaller change one bin moved across the limit
+/// makes (`moved`: the reference with the split a bin earlier and a bin later), whichever is
+/// smaller, so an off-by-one in the early/late split cannot hold.
+fn below_one_bin(base: f64, at: f64, moved: [f64; 2]) -> f64 {
+    let step = moved
+        .iter()
+        .map(|m| (m - at).abs())
+        .fold(f64::INFINITY, f64::min);
+    base.min(step / 10.0)
+}
+
 fn refusal_case(got: &Evaluated, name: String, quantity: &str, want: &str) -> Case {
     let status = status_of(got);
     Case {
@@ -442,11 +456,11 @@ pub fn r20() -> BedRun {
         // The reverberation's energy after u, to the series' end.
         let after = |u: f64| tr * ((-u / tr).exp() - (-end / tr).exp());
         let total = d + after(0.0);
+        // The limit on a bin edge: one bin moved across it is the closed form at te -/+ dt.
+        let c_at = |te: f64| 10.0 * ((total - after(te)) / after(te)).log10();
+        let d_at = |te: f64| (total - after(te)) / total;
         for &te_ms in &limits {
             let te = f64::from(te_ms) / 1000.0;
-            let early = total - after(te);
-            let c = 10.0 * (early / after(te)).log10();
-            let dd = early / total;
             let label = format!("direct {d} over a {t60} s reverberation, 1 ms bins");
             let got = read(&s, Arrival::at(0.0), &custom, &format!("c{te_ms}_db"));
             cases.extend(value_cases(
@@ -455,8 +469,8 @@ pub fn r20() -> BedRun {
                     name: format!("{label}: C{te_ms}"),
                     quantity: &format!("c{te_ms}_db"),
                     reference: "10 lg((D + R tau (1 - e^(-te/tau))) / (R tau e^(-te/tau))), ISO 3382-1 A.2.3".into(),
-                    expected: c,
-                    tolerance: 0.1,
+                    expected: c_at(te),
+                    tolerance: below_one_bin(0.1, c_at(te), [c_at(te - dt), c_at(te + dt)]),
                     relative: false,
                     unit: "dB",
                 },
@@ -469,8 +483,77 @@ pub fn r20() -> BedRun {
                     quantity: &format!("d{te_ms}"),
                     reference: "(D + R tau (1 - e^(-te/tau))) / (D + R tau), ISO 3382-1 A.2.3"
                         .into(),
-                    expected: dd,
-                    tolerance: 0.005,
+                    expected: d_at(te),
+                    tolerance: below_one_bin(0.005, d_at(te), [d_at(te - dt), d_at(te + dt)]),
+                    relative: false,
+                    unit: "fraction",
+                },
+            ));
+        }
+    }
+    // Impulses on the limits themselves: for each te, a direct sound 1 at 0 ms and impulses of
+    // 0.5, 0.25 and 0.125 in the bins just before te, starting at te and just after, over a tail
+    // of 1e-6 falling 1 % a bin from 400 ms. ISO 3382-1 (3) and (5) split at te as
+    // `∫₀^te` early and `∫_te^∞` late; on 1 ms bins `[k, k+1)` ms, that is bins `k < te` early and
+    // the bin that starts at te late, as a sampled response's sample at te opens the late part.
+    // An off-by-one either way moves a whole impulse across the limit.
+    {
+        let dt = 0.001;
+        let n = 1400usize;
+        let (eps, q) = (1e-6, 0.99f64);
+        let tail = eps * (1.0 - q.powi((n - 400) as i32)) / (1.0 - q);
+        for &te_ms in &limits {
+            let k = te_ms as usize;
+            let impulses = [(0usize, 1.0), (k - 1, 0.5), (k, 0.25), (k + 1, 0.125)];
+            let mut bins = vec![0.0; n];
+            for &(at, e) in &impulses {
+                bins[at] += e;
+            }
+            for (j, b) in bins.iter_mut().enumerate().skip(400) {
+                *b = eps * q.powi((j - 400) as i32);
+            }
+            let s = EnergySeries::complete(dt, bins).expect("a series");
+            let total: f64 = impulses.iter().map(|x| x.1).sum::<f64>() + tail;
+            // The energy in the bins before bin `m`, from the impulses alone (the tail is late).
+            let early_of =
+                |m: usize| -> f64 { impulses.iter().filter(|x| x.0 < m).map(|x| x.1).sum() };
+            let c_of = |m: usize| 10.0 * (early_of(m) / (total - early_of(m))).log10();
+            let d_of = |m: usize| early_of(m) / total;
+            let asked = [Extra::Clarity { te_ms }, Extra::Definition { te_ms }];
+            let label = format!(
+                "impulses at 0, {} ms, on {te_ms} ms and {} ms",
+                te_ms - 1,
+                te_ms + 1
+            );
+            let got = read(&s, Arrival::at(0.0), &asked, &format!("c{te_ms}_db"));
+            cases.extend(value_cases(
+                &got,
+                Want {
+                    name: format!("{label}: C{te_ms}"),
+                    quantity: &format!("c{te_ms}_db"),
+                    reference: format!(
+                        "10 lg({} / {:.7}): bins before {te_ms} ms early, the bin starting at {te_ms} ms late (ISO 3382-1 (3))",
+                        early_of(k),
+                        total - early_of(k)
+                    ),
+                    expected: c_of(k),
+                    tolerance: below_one_bin(0.1, c_of(k), [c_of(k - 1), c_of(k + 1)]),
+                    relative: false,
+                    unit: "dB",
+                },
+            ));
+            let got = read(&s, Arrival::at(0.0), &asked, &format!("d{te_ms}"));
+            cases.extend(value_cases(
+                &got,
+                Want {
+                    name: format!("{label}: D{te_ms}"),
+                    quantity: &format!("d{te_ms}"),
+                    reference: format!(
+                        "{} / {total:.7}: bins before {te_ms} ms early (ISO 3382-1 (5))",
+                        early_of(k)
+                    ),
+                    expected: d_of(k),
+                    tolerance: below_one_bin(0.005, d_of(k), [d_of(k - 1), d_of(k + 1)]),
                     relative: false,
                     unit: "fraction",
                 },
@@ -605,11 +688,17 @@ pub fn r20() -> BedRun {
         "c500_db",
         "params_series_too_short",
     ));
-    bed(
+    let mut b = bed(
         "m12c-r20",
         "R20: C and D at time limits chosen from 5 to 1000 ms, read by C50's, C80's and D50's split of the curve through the report's own path (results::report::parameters_with)",
         cases,
-    )
+    );
+    b.rule = format!(
+        "{RULE}; where the limit sits on a 1 ms bin edge (the reverberations and the impulses on \
+         each limit), the tolerance is also at most a tenth of the change one bin moved across \
+         the limit makes, so an off-by-one in the early/late split fails"
+    );
+    b
 }
 
 /// One curve's points and its polyline against a closed-form Schroeder level `want(u)` (dB re

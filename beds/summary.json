@@ -1583,11 +1583,11 @@
       "artifacts": [
         {
           "path": "beds/m12c-r20.json",
-          "sha256": "a339a91ef18cd93e8b5c484d985b033bc0e875897ebedfd81562c981603619b4",
+          "sha256": "409ea03a98c400cea2ebac7e12cfc22452812baedf456684a194da8613df218c",
           "section": "docs/investigations/2026-10-09-parity-refresh/README.md section 4, R20: simpa bed-extra r20 (crates/simpa-core/src/results/extra_bed.rs)",
-          "git_commit": "3aa520d1a58b2ee7463454b6b1234d4120b186a0",
+          "git_commit": "cc110f27a062b3c70cf8e97679104a5ca224715f",
           "uncommitted_changes": true,
-          "uncommitted_summary": "12 files changed, 342 insertions(+), 8 deletions(-)",
+          "uncommitted_summary": "1 file changed, 100 insertions(+), 10 deletions(-)",
           "checks": [
             {
               "read": "pass",
@@ -1625,11 +1625,11 @@
       "artifacts": [
         {
           "path": "beds/m12c-r20.json",
-          "sha256": "a339a91ef18cd93e8b5c484d985b033bc0e875897ebedfd81562c981603619b4",
+          "sha256": "409ea03a98c400cea2ebac7e12cfc22452812baedf456684a194da8613df218c",
           "section": "docs/investigations/2026-10-09-parity-refresh/README.md section 4, R20: simpa bed-extra r20 (crates/simpa-core/src/results/extra_bed.rs)",
-          "git_commit": "3aa520d1a58b2ee7463454b6b1234d4120b186a0",
+          "git_commit": "cc110f27a062b3c70cf8e97679104a5ca224715f",
           "uncommitted_changes": true,
-          "uncommitted_summary": "12 files changed, 342 insertions(+), 8 deletions(-)",
+          "uncommitted_summary": "1 file changed, 100 insertions(+), 10 deletions(-)",
           "checks": [
             {
               "read": "pass",
