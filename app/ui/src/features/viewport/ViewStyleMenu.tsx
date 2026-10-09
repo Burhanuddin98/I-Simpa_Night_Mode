@@ -7,6 +7,8 @@
 // default), Outside (every face, the room as a closed shell) or None (the edges only). See-through
 // is glass over the near walls the inside view removes, so it is offered with Inside only.
 //
+// Parity G44: Edges > None, upstream's View > Lines > None: no edge of the model is drawn.
+//
 // Item 7: Hide > Roof off (R): the faces that close the room from above left out of the view (hide.ts),
 // a view state; the chip over the view says how many and which groups.
 // Item 8: Hide > Isolate selection (I): only the picked faces or surface groups drawn until shown again.
@@ -26,6 +28,7 @@ const SURFACES: { key: SurfaceStyle; label: string; hint: string }[] = [
 const EDGES: { key: EdgeStyle; label: string; hint: string }[] = [
   { key: 'all', label: 'Every triangle', hint: 'Every edge of the mesh' },
   { key: 'feature', label: 'Features only', hint: 'Only where surfaces meet at 20 degrees or more' },
+  { key: 'none', label: 'None', hint: "No edges: the surfaces alone, as upstream's View > Lines > None" },
 ];
 
 export function ViewStyleMenu() {

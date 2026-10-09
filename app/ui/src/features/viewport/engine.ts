@@ -186,11 +186,11 @@ export const viewportUi = new Store<ViewportUi>({
 /**
  * How the 3D view draws the room (the View style menu, Burhan 2026-10-06): surfaces in their
  * material colours (the default), grey, see-through (the near walls as glass at `glass` %), or the
- * old wireframe look; edges at every triangle or only where faces meet at 20 degrees or more.
- * Remembered per viewer in localStorage, which can be absent: then the defaults.
+ * old wireframe look; edges at every triangle, only where faces meet at 20 degrees or more, or none
+ * (parity G44, upstream's View > Lines: All, Contour, None). Remembered per viewer in localStorage, which can be absent: then the defaults.
  */
 export type SurfaceStyle = 'colour' | 'grey' | 'glass' | 'wire';
-export type EdgeStyle = 'all' | 'feature';
+export type EdgeStyle = 'all' | 'feature' | 'none';
 export interface ViewStyle {
   surfaces: SurfaceStyle;
   /** Which faces are drawn (G43, faces.ts): inside (the near walls gone), outside (every face), none. */
@@ -216,7 +216,7 @@ function loadStyle(): ViewStyle {
     return {
       surfaces: (['colour', 'grey', 'glass', 'wire'] as const).includes(v.surfaces as SurfaceStyle) ? (v.surfaces as SurfaceStyle) : DEFAULT_STYLE.surfaces,
       faces: faceShowOf(v.faces),
-      edges: v.edges === 'feature' ? 'feature' : 'all',
+      edges: v.edges === 'feature' || v.edges === 'none' ? v.edges : 'all',
       glass: typeof v.glass === 'number' ? Math.min(60, Math.max(0, v.glass)) : DEFAULT_STYLE.glass,
       corners: v.corners !== false,
       fade: v.fade !== false,
@@ -2074,6 +2074,8 @@ class ViewportEngine {
     this.useFaces(this.mainFacePlan());
     (this.ghost.material as MeshMatcapNodeMaterial).opacity = st.glass / 100;
     this.edges.geometry = st.edges === 'feature' ? this.featureEdges : this.triangleEdges;
+    // G44: Lines > None draws no edge of the model; the overlays (selection, planes, zones) keep theirs.
+    this.edges.visible = st.edges !== 'none';
     this.shared.nmAoMix.value = st.corners ? 1 : 0;
     this.invalidate();
   }
