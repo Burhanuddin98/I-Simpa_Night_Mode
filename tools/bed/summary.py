@@ -163,6 +163,11 @@ ARTIFACTS = {
         "repo",
         f"{M12C_RESULT} section 4, R20: simpa bed-extra r20 (crates/simpa-core/src/results/extra_bed.rs)",
     ),
+    "m12c-r27": (
+        "beds/m12c-r27.json",
+        "repo",
+        f"{M12C_RESULT} section 4, R27: simpa bed-extra r27 (crates/simpa-core/src/results/extra_bed.rs)",
+    ),
 }
 
 # Where a set's commit is read when the summary does not carry it: the scorer's log, first line.
@@ -558,6 +563,25 @@ PARAMETERS += [
             "D at a time limit a user chooses, 5 to 1000 ms (upstream's D list), by D50's split of the "
             "Schroeder curve.",
             M12C_NOISE + " For D: D50's.",
+            M12C_CLOSED_FORM,
+            NO_MEASURED_ROOM,
+        ],
+    ),
+]
+
+PARAMETERS += [
+    (
+        "schroeder_table",
+        "schroeder_table",
+        "M12c R27, closed-form backward integrals through the curve the decay times are fitted to (simpa bed-extra r27)",
+        ["m12c-r27"],
+        [
+            "The table is the report's decay_curve, per receiver and band: the Schroeder curve EDT, T20 and "
+            "T30 are fitted to, thinned to the points that keep every knot within 0.01 dB; time from the "
+            "direct sound's arrival, level re the curve's value there. Upstream's table lists every time "
+            "step of every band; this lists the kept points of one band.",
+            "Nothing is added for the unseen tail, the solver's floor or lost particles: those bounds judge "
+            "the values read from the curve, not the curve.",
             M12C_CLOSED_FORM,
             NO_MEASURED_ROOM,
         ],

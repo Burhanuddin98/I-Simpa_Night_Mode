@@ -1653,6 +1653,48 @@
         "The bed is closed-form series through the report's own path (results::report::parameters_with); no SPPS-scale bed (M8b sets B and C) scores it.",
         "No comparison with a measured room (V2-9)."
       ]
+    },
+    "schroeder_table": {
+      "status": "PASS",
+      "by": "the rule",
+      "bed": "M12c R27, closed-form backward integrals through the curve the decay times are fitted to (simpa bed-extra r27)",
+      "result": {
+        "document": "docs/investigations/2026-10-09-parity-refresh/README.md",
+        "sections": [
+          "docs/investigations/2026-10-09-parity-refresh/README.md section 4, R27: simpa bed-extra r27 (crates/simpa-core/src/results/extra_bed.rs)"
+        ]
+      },
+      "artifacts": [
+        {
+          "path": "beds/m12c-r27.json",
+          "sha256": "46bd51bf120f5e879d4f8eefce0ea4a1fdee97cc9681c016242fc290647da45a",
+          "section": "docs/investigations/2026-10-09-parity-refresh/README.md section 4, R27: simpa bed-extra r27 (crates/simpa-core/src/results/extra_bed.rs)",
+          "git_commit": "b9019838ee74f8bc4e9f66f2f3310b3a7a7980a4",
+          "uncommitted_changes": true,
+          "uncommitted_summary": "10 files changed, 282 insertions(+), 6 deletions(-)",
+          "checks": [
+            {
+              "read": "pass",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            },
+            {
+              "read": "failures",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            }
+          ]
+        }
+      ],
+      "reasons": [],
+      "notes": [
+        "The table is the report's decay_curve, per receiver and band: the Schroeder curve EDT, T20 and T30 are fitted to, thinned to the points that keep every knot within 0.01 dB; time from the direct sound's arrival, level re the curve's value there. Upstream's table lists every time step of every band; this lists the kept points of one band.",
+        "Nothing is added for the unseen tail, the solver's floor or lost particles: those bounds judge the values read from the curve, not the curve.",
+        "The bed is closed-form series through the report's own path (results::report::parameters_with); no SPPS-scale bed (M8b sets B and C) scores it.",
+        "No comparison with a measured room (V2-9)."
+      ]
     }
   }
 }

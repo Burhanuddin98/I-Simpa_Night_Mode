@@ -69,11 +69,13 @@ pub struct BedParameters {
     pub clarity_custom: BedParameter,
     /// Parity M12c: `definition_custom` (beds/m12c-*.json).
     pub definition_custom: BedParameter,
+    /// Parity M12c: `schroeder_table` (beds/m12c-*.json).
+    pub schroeder_table: BedParameter,
 }
 
 impl BedParameters {
     /// Every one in the report's order, with their JSON names.
-    pub fn named(&self) -> [(&'static str, &BedParameter); 15] {
+    pub fn named(&self) -> [(&'static str, &BedParameter); 16] {
         [
             ("spl_db", &self.spl_db),
             ("edt_s", &self.edt_s),
@@ -90,6 +92,7 @@ impl BedParameters {
             ("decay_custom", &self.decay_custom),
             ("clarity_custom", &self.clarity_custom),
             ("definition_custom", &self.definition_custom),
+            ("schroeder_table", &self.schroeder_table),
         ]
     }
 
@@ -115,6 +118,7 @@ impl BedParameters {
             decay_custom: p(),
             clarity_custom: p(),
             definition_custom: p(),
+            schroeder_table: p(),
         }
     }
 }
@@ -196,6 +200,7 @@ pub fn demote(base: &BedParameters, plant: &BedParameters, source: &str) -> BedP
         decay_custom: one(&base.decay_custom, &plant.decay_custom),
         clarity_custom: one(&base.clarity_custom, &plant.clarity_custom),
         definition_custom: one(&base.definition_custom, &plant.definition_custom),
+        schroeder_table: one(&base.schroeder_table, &plant.schroeder_table),
     }
 }
 

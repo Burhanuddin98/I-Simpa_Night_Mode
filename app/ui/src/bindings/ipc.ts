@@ -4140,9 +4140,10 @@ export interface BedParameters {
   definition_custom: BedParameter4;
   edt_s: BedParameter;
   g_db: BedParameter5;
+  schroeder_table: BedParameter6;
   spl_db: BedParameter;
-  sti: BedParameter6;
-  t15_s: BedParameter7;
+  sti: BedParameter7;
+  t15_s: BedParameter8;
   t20_s: BedParameter;
   t30_s: BedParameter;
   ts_s: BedParameter;
@@ -4218,6 +4219,15 @@ export interface BedParameter6 {
  * (the marks, the `wide` rules, what was not tested).
  */
 export interface BedParameter7 {
+  notes: string[];
+  reasons: string[];
+  status: BedStatus;
+}
+/**
+ * One parameter's entry: its status, why it failed (empty for a PASS), and the summary's notes
+ * (the marks, the `wide` rules, what was not tested).
+ */
+export interface BedParameter8 {
   notes: string[];
   reasons: string[];
   status: BedStatus;

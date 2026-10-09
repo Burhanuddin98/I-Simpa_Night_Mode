@@ -2873,7 +2873,7 @@ mod tests {
     /// `docs/formats/results-json.md`), and pin the new pair.
     const REQUIRED_FIELDS_PIN: (u32, &str) = (
         18,
-        "8b9e09e3e43a0a0b4ca09ef876bfb9e50135a84515d569a80570fd5dbfc1d165",
+        "1f675c437b5da099ad3570886c48cd86b44bf32920cc2f141ab4842b2bfd16bb",
     );
 
     /// Every `required` list of `v`, as `<path>: <fields, sorted>`, sorted.

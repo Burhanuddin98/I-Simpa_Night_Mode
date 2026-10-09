@@ -603,6 +603,21 @@ export function decay(report: Report, r: number, band: BandSel, src: SourceSel =
   return { path, t: pts.map((p) => (p as number[])[0]), db: pts.map((p) => (p as number[])[1]) };
 }
 
+/**
+ * R27: the Schroeder decay table of receiver `r` in `band` (or the bands summed), from source
+ * `src`'s echogram: the report's `decay_curve` points, each the time after the direct sound's
+ * arrival in ms and the level in dB, as `Num`s of the report (gate (a)). Null when the report has
+ * no curve there, or when its bed (`schroeder_table`) has not passed (gate (b)): the reason then.
+ */
+export function decayTable(report: Report, r: number, band: BandSel, src: SourceSel = null): { rows: { t: Num; level: Num }[]; from: Num | null } | { withheld: string } | null {
+  const bed = (report.bed?.parameters as unknown as Record<string, { status?: string; reasons?: string[] } | undefined> | undefined)?.schroeder_table;
+  if (bed?.status !== 'PASS') return { withheld: `withheld: its test bed has not passed${bed?.reasons?.length ? ` (${bed.reasons[0]})` : ''}` };
+  const d = decay(report, r, band, src);
+  if (d === null) return null;
+  const rows = d.t.map((_, k) => ({ t: num(report, `${d.path}.points.${k}.0`, 1, 1000) as Num, level: num(report, `${d.path}.points.${k}.1`, 2) as Num }));
+  return { rows: rows.filter((x) => x.t && x.level), from: num(report, `${d.path}.from_s`, 1, 1000) };
+}
+
 /** The run to show after the active variant changes: the newest OK run of that variant, or
  * null to keep the current one. */
 export function runForVariant(rows: readonly { run: string; status: string; variant?: string | null }[], variant: string | null): string | null {

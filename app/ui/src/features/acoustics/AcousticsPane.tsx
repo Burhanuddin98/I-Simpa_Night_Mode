@@ -51,6 +51,7 @@ import {
   customWords,
   parseCustom,
   decay,
+  decayTable,
   din,
   dinGroups,
   dinTarget,
@@ -153,6 +154,51 @@ function CellView({ c, unit }: { c: Cell; unit: string }) {
 function SettingValueView({ n, word, unit }: { n: AdviceCard['from']; word: string | null; unit: string }) {
   if (word !== null) return <span className="ac-word">{word}</span>;
   return <N n={n} unit={unit || undefined} />;
+}
+
+/** R27: the Schroeder decay table, the report's curve points (`decayTable`), or why it is withheld. */
+function DecayTableView({ t }: { t: ReturnType<typeof decayTable> }) {
+  if (t === null) return <div className="ac-none">No decay curve for this receiver and band.</div>;
+  if ('withheld' in t) {
+    return (
+      <div className="ac-none" data-part="decay-table-withheld" title={t.withheld}>
+        Withheld: the table's test bed has not passed.
+      </div>
+    );
+  }
+  return (
+    <div className="ac-decay-table">
+      <span className="ac-sub">
+        Schroeder curve, the points the decay times are fitted to (every knot within a hundredth of a dB of the lines between them); time after the direct sound
+        {t.from ? (
+          <>
+            {' '}
+            at <N n={t.from} unit="ms" />
+          </>
+        ) : null}
+      </span>
+      <table className="ac-table" data-part="decay-table">
+        <thead>
+          <tr>
+            <th>Time, ms</th>
+            <th>Level, dB</th>
+          </tr>
+        </thead>
+        <tbody>
+          {t.rows.map((x, k) => (
+            <tr key={k}>
+              <td>
+                <N n={x.t} />
+              </td>
+              <td>
+                <N n={x.level} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 /** The kinds of chosen quantity the card offers, in its order (parity R15: decay ranges; R20: C and D limits). */
@@ -736,6 +782,8 @@ export function AcousticsPane() {
   const [group, setGroup] = useState('A3');
   const [error, setError] = useState<{ run: string; code: string } | null>(null);
   const [responseOpen, setResponseOpen] = useState(false);
+  // R27: the decay card shows the Schroeder table instead of the chart.
+  const [decayAsTable, setDecayAsTable] = useState(false);
   // R72: each chart's axes set by hand, and which chart's editor is open.
   const [hand, setHand] = useState<Record<ChartKey, HandAxes>>({ rt: {}, spectrum: {}, decay: {} });
   const [axesOpen, setAxesOpen] = useState<ChartKey | null>(null);
@@ -1144,8 +1192,14 @@ export function AcousticsPane() {
                 Listen
               </button>
             ) : null}
-            {curve ? axesButton('decay') : null}
-            {curve ? <ChartImage part="decay-chart" /> : null}
+            {curve ? (
+              <button type="button" className="small-button" data-action="decay-table" aria-pressed={decayAsTable} title="The Schroeder (backward-integrated) decay as a table: the points of the curve EDT, T20 and T30 are fitted to" onClick={() => setDecayAsTable((t) => !t)}>
+                Table
+              </button>
+            ) : null}
+            {curve && decayAsTable ? <CopyTable part="decay-table" what="Schroeder decay" /> : null}
+            {curve && !decayAsTable ? axesButton('decay') : null}
+            {curve && !decayAsTable ? <ChartImage part="decay-chart" /> : null}
             <span className="ac-sub">
               {names[r] !== undefined ? <S s={{ path: `${report.solver === 'tcr' ? 'tcr' : 'spps'}.point_receivers.${r}.label`, text: names[r] }} /> : null}
               {' · '}
@@ -1154,8 +1208,8 @@ export function AcousticsPane() {
               {srcNames.length ? src === null ? 'all sources summed' : sourceLabel(report, r, src) ? <S s={sourceLabel(report, r, src) as Str} /> : null : null}
             </span>
           </div>
-          {curve ? axesEditor('decay', 'Level, dB', 'Time, s') : null}
-          {curve ? <DecayChart curve={curve} hand={hand.decay} /> : <div className="ac-none">No decay curve for this receiver and band.</div>}
+          {curve && !decayAsTable ? axesEditor('decay', 'Level, dB', 'Time, s') : null}
+          {curve && decayAsTable ? <DecayTableView t={decayTable(report, r, b, src)} /> : curve ? <DecayChart curve={curve} hand={hand.decay} /> : <div className="ac-none">No decay curve for this receiver and band.</div>}
           {responseOpen && report.solver !== 'tcr' ? (
             <ResponseWindow report={report} receiver={r} source={src} receivers={names} sources={srcNames} onReceiver={setReceiver} onSource={setSource} onClose={closeResponse} />
           ) : null}

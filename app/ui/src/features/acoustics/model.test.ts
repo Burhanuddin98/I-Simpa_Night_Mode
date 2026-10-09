@@ -28,6 +28,7 @@ import {
   sources,
   shownParams,
   customCell,
+  decayTable,
   customColumns,
   customSpec,
   parseCustom,
@@ -571,4 +572,18 @@ test('Acoustics R20: chosen C and D limits parse in ms, within 5 to 1000, and ar
   assert.equal(parseCustom('definition', '1001').ok, false);
   assert.deepEqual([customSpec({ kind: 'clarity', te_ms: 30 }).label, customSpec({ kind: 'clarity', te_ms: 30 }).unit], ['C30', 'dB']);
   assert.deepEqual([customSpec({ kind: 'definition', te_ms: 80 }).name, customSpec({ kind: 'definition', te_ms: 80 }).digits], ['d80', 2]);
+});
+
+test('Acoustics R27: the Schroeder table is the report decay curve, point by point, only behind its bed', () => {
+  const r = report();
+  assert.deepEqual(decayTable(r, 0, 0), { withheld: 'withheld: its test bed has not passed' });
+  (r.bed.parameters as unknown as Record<string, unknown>).schroeder_table = { status: 'PASS', reasons: [], notes: [] };
+  const t = decayTable(r, 0, 0);
+  assert.ok(t && 'rows' in t);
+  assert.deepEqual(t.rows[1], {
+    t: { path: 'spps.point_receivers.0.bands.0.decay_curve.points.1.0', digits: 1, scale: 1000, text: '100.0' },
+    level: { path: 'spps.point_receivers.0.bands.0.decay_curve.points.1.1', digits: 2, text: '-5.50' },
+  });
+  assert.equal(t.rows.length, 2);
+  assert.equal(decayTable(r, 0, 1), null, 'no curve in that band');
 });

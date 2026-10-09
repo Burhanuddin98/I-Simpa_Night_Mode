@@ -47,7 +47,8 @@ pub fn extra_bed_cmd(args: &[&str]) -> ExitCode {
     let bed: BedRun = match which {
         Some("r15") => extra_bed::r15(),
         Some("r20") => extra_bed::r20(),
-        Some(other) => return fail(&format!("no bed '{other}': r15, r20")),
+        Some("r27") => extra_bed::r27(),
+        Some(other) => return fail(&format!("no bed '{other}': r15, r20, r27")),
         None => return fail("bed-extra needs a bed: simpa bed-extra r15 [--out <file>]"),
     };
     let (head, diff) = git();

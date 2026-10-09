@@ -129,6 +129,11 @@
   color: var(--text-2);
   font-size: 12px;
 }
+/* R27: the Schroeder table in the decay card, scrolled within the card. */
+.ac-decay-table {
+  max-height: 260px;
+  overflow: auto;
+}
 /* R15/R20: the inputs of "Chosen ranges and limits". */
 .ac-custom-form {
   display: flex;

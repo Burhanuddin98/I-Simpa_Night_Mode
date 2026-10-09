@@ -669,6 +669,10 @@
           "$ref": "#/$defs/BedParameter",
           "description": "Sound strength G (`g_db` on a band)."
         },
+        "schroeder_table": {
+          "$ref": "#/$defs/BedParameter",
+          "description": "Parity M12c: `schroeder_table` (beds/m12c-*.json)."
+        },
         "spl_db": {
           "$ref": "#/$defs/BedParameter"
         },
@@ -705,7 +709,8 @@
         "t15_s",
         "decay_custom",
         "clarity_custom",
-        "definition_custom"
+        "definition_custom",
+        "schroeder_table"
       ],
       "type": "object"
     },

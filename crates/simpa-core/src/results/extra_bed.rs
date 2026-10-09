@@ -612,6 +612,167 @@ pub fn r20() -> BedRun {
     )
 }
 
+/// One curve's points and its polyline against a closed-form Schroeder level `want(u)` (dB re
+/// the level at the arrival, `u` since the arrival): the largest error at the points the report
+/// carries, and of the straight lines between them on a 1 ms grid. Each with its control.
+fn curve_cases(
+    name: &str,
+    series: &EnergySeries,
+    arrival: Arrival,
+    want: &dyn Fn(f64) -> f64,
+    reference: &str,
+    out: &mut Vec<Case>,
+) {
+    let c = crate::params::decay::decay_curve(series, arrival);
+    let tol = crate::params::decay::CURVE_TOLERANCE_DB;
+    // The points: the first is the arrival's 0 dB; a second at u = 0 is the level after the
+    // direct sound, compared with the closed form just after 0.
+    let mut worst_point: f64 = 0.0;
+    for (i, p) in c.points.iter().enumerate() {
+        let w = if i == 1 && p[0] == 0.0 {
+            want(1e-12)
+        } else {
+            want(p[0])
+        };
+        worst_point = worst_point.max((p[1] - w).abs());
+    }
+    // The polyline between the points, read as the table and the chart join them.
+    let last = c.points.last().map_or(0.0, |p| p[0]);
+    let mut worst_line: f64 = 0.0;
+    let steps = (last / 0.001).floor() as usize;
+    for k in 1..=steps {
+        let u = k as f64 * 0.001;
+        let j = c.points.iter().rposition(|p| p[0] <= u).unwrap_or(0);
+        let level = match c.points.get(j + 1) {
+            Some(q) if q[0] > c.points[j][0] => {
+                let p = c.points[j];
+                p[1] + (q[1] - p[1]) * (u - p[0]) / (q[0] - p[0])
+            }
+            _ => c.points[j][1],
+        };
+        // Down to -60 dB, the depth every decay range reads; below it, where the curve bends
+        // inside a bin as the series' end nears, the in-bin log-linear reading is the model's,
+        // not the closed form's (its points stay exact).
+        if want(u) >= -60.0 {
+            worst_line = worst_line.max((level - want(u)).abs());
+        }
+    }
+    for (what, err, t) in [
+        ("its points", worst_point, tol),
+        (
+            "the lines between its points, every 1 ms down to -60 dB",
+            worst_line,
+            tol,
+        ),
+    ] {
+        for control in [false, true] {
+            let e = if control { (err - 2.0 * t).abs() } else { err };
+            out.push(Case {
+                name: if control {
+                    format!(
+                        "control: {name}, {what}, against a reference moved by twice the tolerance"
+                    )
+                } else {
+                    format!(
+                        "{name}: {what} ({} points kept of {} knots)",
+                        c.points.len(),
+                        c.knots
+                    )
+                },
+                quantity: "decay_curve".into(),
+                reference: reference.into(),
+                expected: Some(0.0),
+                expected_refusal: None,
+                value: Some(e),
+                status: "curve".into(),
+                tolerance: t,
+                relative: false,
+                unit: "dB".into(),
+                error: Some(e),
+                control,
+                holds: if control { e > t } else { e <= t },
+            });
+        }
+    }
+}
+
+/// R27: the Schroeder (backward-integrated) decay table: the points of the curve EDT, T20 and
+/// T30 are fitted to (`params::decay::decay_curve`, the report's `decay_curve`) against the closed
+/// form of the backward integral, within the curve's own tolerance (0.01 dB, the thinning's).
+pub fn r27() -> BedRun {
+    let mut cases = Vec::new();
+    // An exponential decay: a straight line, -60·u/T dB.
+    for (t60, dt) in [(1.5, 0.001), (0.7, 0.01)] {
+        let n = (2.5 * t60 / dt) as usize;
+        let s = EnergySeries::complete(dt, exp_bins(1.0, tau(t60), dt, n)).expect("a series");
+        let end = n as f64 * dt;
+        let ta = tau(t60);
+        let want = |u: f64| {
+            10.0 * (((-u / ta).exp() - (-end / ta).exp()) / (1.0 - (-end / ta).exp())).log10()
+        };
+        curve_cases(
+            &format!("exponential T = {t60} s, {} ms bins", dt * 1000.0),
+            &s,
+            Arrival::at(0.0),
+            &want,
+            "10 lg of the closed-form backward integral of e^(-t/tau) to the series' end",
+            &mut cases,
+        );
+    }
+    // A two-slope decay.
+    let (a, t1, b, t2, dt) = (1.0, 0.6, 0.002, 2.4, 0.001);
+    let (tau1, tau2) = (tau(t1), tau(t2));
+    let n = (2.5 * t2 / dt) as usize;
+    let bins: Vec<f64> = exp_bins(a, tau1, dt, n)
+        .iter()
+        .zip(exp_bins(b, tau2, dt, n))
+        .map(|(x, y)| x + y)
+        .collect();
+    let s = EnergySeries::complete(dt, bins).expect("a series");
+    let end = n as f64 * dt;
+    let schroeder = |t: f64| a * tau1 * (-t / tau1).exp() + b * tau2 * (-t / tau2).exp();
+    let want = |u: f64| {
+        10.0 * ((schroeder(u) - schroeder(end)) / (schroeder(0.0) - schroeder(end))).log10()
+    };
+    curve_cases(
+        &format!("two slopes (T {t1} s, then {t2} s), 1 ms bins"),
+        &s,
+        Arrival::at(0.0),
+        &want,
+        "10 lg of the closed-form backward integral A tau1 e^(-t/tau1) + B tau2 e^(-t/tau2) to the series' end",
+        &mut cases,
+    );
+    // A direct sound at 0 and a reverberation: the curve steps down by the direct sound.
+    let (d, r, t60) = (3.0, 1.0, 1.2);
+    let tr = tau(t60);
+    let n = (2.5 * t60 / dt) as usize;
+    let mut bins = exp_bins(r, tr, dt, n);
+    bins[0] += d;
+    let s = EnergySeries::complete(dt, bins).expect("a series");
+    let end = n as f64 * dt;
+    let rev = |u: f64| r * tr * ((-u / tr).exp() - (-end / tr).exp());
+    let want = |u: f64| {
+        if u <= 0.0 {
+            0.0
+        } else {
+            10.0 * (rev(u) / (d + rev(0.0))).log10()
+        }
+    };
+    curve_cases(
+        "a direct sound of 3 at 0 over a 1.2 s reverberation, 1 ms bins",
+        &s,
+        Arrival::at(0.0),
+        &want,
+        "0 dB at the arrival, then 10 lg of the reverberation's backward integral over the total",
+        &mut cases,
+    );
+    bed(
+        "m12c-r27",
+        "R27: the Schroeder decay table, the points of the curve EDT, T20 and T30 are fitted to (params::decay::decay_curve, the report's decay_curve), against the closed-form backward integral",
+        cases,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -683,6 +844,20 @@ mod tests {
     #[test]
     fn the_committed_r20_artifact_is_this_build_s() {
         committed_is_fresh("r20", &r20());
+    }
+
+    #[test]
+    fn r27_passes_and_its_controls_are_caught() {
+        let b = r27();
+        for c in &b.cases {
+            assert!(c.holds, "{c:?}");
+        }
+        assert!(b.pass);
+    }
+
+    #[test]
+    fn the_committed_r27_artifact_is_this_build_s() {
+        committed_is_fresh("r27", &r27());
     }
     #[test]
     fn the_two_slope_reference_differs_by_range() {

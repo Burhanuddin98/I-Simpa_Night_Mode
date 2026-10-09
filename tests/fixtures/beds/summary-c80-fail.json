@@ -77,6 +77,11 @@
       "status": "PASS",
       "reasons": [],
       "notes": []
+    },
+    "schroeder_table": {
+      "status": "PASS",
+      "reasons": [],
+      "notes": []
     }
   }
 }
