@@ -197,9 +197,11 @@ fn lines(m: &MeshManifest, dir: &Path) -> Vec<(LineClass, String)> {
 mod tests {
     use super::*;
 
-    /// Needs the verified `tetgen.exe` and `preprocess.exe` (`$SIMPA_SOLVERS_DIR`), and fails
-    /// without them, as the core's solver suites do.
+    /// Needs the verified `tetgen.exe` and `preprocess.exe` (`$SIMPA_SOLVERS_DIR`): ignored in the
+    /// gates' solver-free `cargo test -p app` (m9, m10, m11), run by hand with
+    /// `cargo test -p app -- --ignored mesh_now`.
     #[test]
+    #[ignore = "needs the verified tetgen.exe: set SIMPA_SOLVERS_DIR, run with --ignored"]
     fn mesh_now_meshes_the_box_and_changes_nothing_in_the_project() {
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../tests/fixtures/rooms/tutorial1_box.simpa");
@@ -239,12 +241,33 @@ mod tests {
         let s = session.lock().unwrap();
         assert_eq!(s.json().unwrap(), json);
         assert_eq!(s.info().unwrap().undo_depth, undo);
-        drop(s);
+    }
 
-        // One at a time.
-        MESHING.store(true, Ordering::SeqCst);
-        let busy = mesh_now(&session, &slot, &cache).unwrap_err();
-        MESHING.store(false, Ordering::SeqCst);
-        assert_eq!(busy.code, "MESH_NOW_ACTIVE");
+    /// The refusals, before any program is looked for: no project, no model, one at a time.
+    #[test]
+    fn mesh_now_refuses_with_no_model_and_while_one_runs() {
+        let session = Mutex::new(Session::default());
+        let slot = Mutex::new(RunSlot::default());
+        let cache = Mutex::new(SolversCache::default());
+        assert_eq!(
+            mesh_now(&session, &slot, &cache).unwrap_err().code,
+            "NO_PROJECT"
+        );
+        session.lock().unwrap().new_project("empty");
+        assert_eq!(
+            mesh_now(&session, &slot, &cache).unwrap_err().code,
+            "MESH_NOW_NO_MODEL"
+        );
+        let held = Busy::take().unwrap();
+        assert_eq!(
+            mesh_now(&session, &slot, &cache).unwrap_err().code,
+            "MESH_NOW_ACTIVE"
+        );
+        drop(held);
+        assert_eq!(
+            mesh_now(&session, &slot, &cache).unwrap_err().code,
+            "MESH_NOW_NO_MODEL",
+            "freed when the first ends"
+        );
     }
 }
