@@ -31,6 +31,7 @@ import type { BandKind, Op, ReflectionLaw } from './bindings/schema';
 import { regroupFaces } from './chrome/sceneModel';
 import { noteRecent } from './chrome/recent';
 import { dropChoice } from './chrome/drop';
+import { addRefusal, type Job, type JobStatus, jobsSummary, jobStatusText, nextJob, samePath, withJob } from './features/simulate/jobs';
 import { mapOfGroup, surfaceMapPlan } from './chrome/groupsModel';
 import { newBoxZone } from './chrome/zones';
 import { emptyLog, endLine, foldEvent, needsSavePrompt, progressText } from './flow';
@@ -1176,6 +1177,123 @@ export async function openDropped(paths: readonly string[]): Promise<void> {
   }
   log('INFO', `Dropped ${choice.path}${choice.ignored > 0 ? `; ${choice.ignored} more ${choice.ignored === 1 ? 'file' : 'files'} not opened (one at a time)` : ''}`);
   await openPath(choice.path);
+}
+
+// ---- Parity C40: the job list (features/simulate/jobs.ts) ---------------------------------------
+
+/** The session's job list, kept across the projects it opens (upstream's is the session's too). */
+export const jobsStore = new Store<Job[]>([]);
+/** Whether the list is running, and whether Stop was pressed. */
+export const jobRunStore = new Store<{ running: boolean; stopping: boolean }>({ running: false, stopping: false });
+let nextJobId = 1;
+
+/** "Add this project": the open project's file, the solver and device chosen now, at the end of the
+ * list; refused with a sentence (an unsaved project, a job already waiting) as a FAIL line. */
+export function addJob(): boolean {
+  const info = sceneStore.get()?.info ?? null;
+  const solver = solverStore.get();
+  const device: SppsDevice = solver === 'spps' ? deviceStore.get() : 'cpu';
+  const why = addRefusal(info, solver, device, jobsStore.get());
+  if (why || !info?.path) {
+    log('FAIL', `Job list: ${why}`);
+    return false;
+  }
+  jobsStore.set([...jobsStore.get(), { id: nextJobId++, path: info.path, name: info.name, solver, device, status: 'waiting' }]);
+  log('OK', `Job list: added ${info.name}, ${solver.toUpperCase()}${solver === 'spps' ? ` on the ${device.toUpperCase()}` : ''}`);
+  return true;
+}
+
+/** Takes a waiting job off the list. */
+export function removeJob(id: number): void {
+  jobsStore.set(jobsStore.get().filter((j) => j.id !== id || j.status === 'running'));
+}
+
+/** Empties the list (not while it runs). */
+export function clearJobs(): void {
+  if (jobRunStore.get().running) return;
+  jobsStore.set([]);
+}
+
+const JOB_POLL_MS = 250;
+
+/** Waits until this page's active run has ended; the run folder it made, as far as it was seen. */
+async function runEnded(): Promise<string | null> {
+  let name: string | null = runStore.get()?.run ?? null;
+  for (;;) {
+    const r = runStore.get();
+    if (r?.run) name = r.run;
+    if (r === null) break;
+    await new Promise<void>((resolve) => setTimeout(resolve, JOB_POLL_MS));
+  }
+  // A run too short to be seen running: its `ended` event selected it on the Results step.
+  return name ?? selectedRunStore.get();
+}
+
+/**
+ * "Run job list": each waiting job in turn. Its file is opened when it is not the one open (the save
+ * prompt first, as Open; a cancelled prompt or a file that does not open leaves the job "Not run" and
+ * the list goes on), refused when the open project has unsaved changes (a job runs the file as
+ * saved), then run as Run runs it, and waited for. A run cancelled, or Stop, stops the list; the jobs
+ * not reached keep waiting. The Console says how each went, and the tally at the end.
+ */
+export async function runJobList(): Promise<void> {
+  if (jobRunStore.get().running) return;
+  if (refuseDuringRun('Run job list')) return;
+  jobRunStore.set({ running: true, stopping: false });
+  const set = (id: number, patch: Partial<Job>) => jobsStore.set(withJob(jobsStore.get(), id, patch));
+  try {
+    for (;;) {
+      if (jobRunStore.get().stopping) break;
+      const job = nextJob(jobsStore.get());
+      if (!job) break;
+      set(job.id, { status: 'running', note: undefined });
+      if (!samePath(sceneStore.get()?.info.path, job.path)) {
+        await openPath(job.path).catch(() => {});
+        if (!samePath(sceneStore.get()?.info.path, job.path)) {
+          set(job.id, { status: 'refused', note: `${job.path} did not open (or the save prompt was cancelled)` });
+          log('FAIL', `Job list: ${job.name} not run: ${job.path} did not open`);
+          continue;
+        }
+      }
+      if (sceneStore.get()?.info.dirty) {
+        set(job.id, { status: 'refused', note: 'the project has unsaved changes: a job runs its file as saved' });
+        log('FAIL', `Job list: ${job.name} not run: it has unsaved changes; save or undo them, then run the list again`);
+        continue;
+      }
+      if (jobRunStore.get().stopping) {
+        set(job.id, { status: 'waiting' });
+        break;
+      }
+      const started = await runStart(job.solver, job.device).catch(() => null);
+      if (!started) {
+        const blockers = sceneStore.get()?.run_blockers ?? [];
+        set(job.id, { status: 'refused', note: blockers.length > 0 ? `Run was refused: ${blockers.join(', ')}` : 'Run was refused' });
+        log('FAIL', `Job list: ${job.name} not run: Run was refused`);
+        continue;
+      }
+      const name = await runEnded();
+      const view = await refreshRuns().catch(() => null);
+      const row = view?.rows.find((r) => r.run === name) ?? null;
+      const status: JobStatus = row && row.status !== 'RUNNING' ? row.status : 'INTERRUPTED';
+      set(job.id, { status, run: name ?? undefined });
+      log(status === 'OK' ? 'OK' : 'FAIL', `Job list: ${job.name} ${job.solver.toUpperCase()}: ${jobStatusText({ ...job, status })}${name ? ` (${name})` : ''}`);
+      if (status === 'CANCELLED') {
+        log('INFO', 'Job list: stopped, since the run was cancelled; the jobs not reached wait');
+        break;
+      }
+    }
+  } finally {
+    const stopped = jobRunStore.get().stopping;
+    jobRunStore.set({ running: false, stopping: false });
+    log('INFO', `Job list ${stopped ? 'stopped' : 'done'}: ${jobsSummary(jobsStore.get())}`);
+  }
+}
+
+/** "Stop": the job running is cancelled, and no other starts; the ones not reached keep waiting. */
+export function stopJobList(): void {
+  if (!jobRunStore.get().running) return;
+  jobRunStore.set({ running: true, stopping: true });
+  if (runStore.get()) fire(runCancel());
 }
 
 // ---- Parity A34: crash recovery (src-tauri recovery.rs) ------------------------------------------

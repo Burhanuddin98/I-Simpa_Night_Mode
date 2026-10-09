@@ -70,6 +70,7 @@ import {
   solverChoices,
 } from './model';
 import { SettingsEditor } from './SettingsEditor';
+import { JobList } from './JobList';
 import { reasonWords } from './reasonWords';
 import { liveFinishMs, remainingText, solverSentence } from './runTime';
 import './simulate.css';
@@ -473,6 +474,11 @@ export function SimulatePanel() {
             </button>
           </div>
         )}
+      </div>
+
+      <div className="props-section">
+        <div className="label sim-section-label">Job list</div>
+        <JobList />
       </div>
     </div>
   );
