@@ -28,7 +28,7 @@ import {
 } from './backend';
 import type { Setting, UiIssue } from './bindings/ipc';
 import type { BandKind, Op, ReflectionLaw } from './bindings/schema';
-import { regroupFaces } from './chrome/sceneModel';
+import { blockerText, regroupFaces } from './chrome/sceneModel';
 import { noteRecent } from './chrome/recent';
 import { dropChoice } from './chrome/drop';
 import { addRefusal, type Job, type JobStatus, jobsSummary, jobStatusText, nextJob, samePath, withJob } from './features/simulate/jobs';
@@ -1267,7 +1267,7 @@ export async function runJobList(): Promise<void> {
       const started = await runStart(job.solver, job.device).catch(() => null);
       if (!started) {
         const blockers = sceneStore.get()?.run_blockers ?? [];
-        set(job.id, { status: 'refused', note: blockers.length > 0 ? `Run was refused: ${blockers.join(', ')}` : 'Run was refused' });
+        set(job.id, { status: 'refused', note: blockers.length > 0 ? `Run was refused: ${blockers.map(blockerText).join('; ')}` : 'Run was refused' });
         log('FAIL', `Job list: ${job.name} not run: Run was refused`);
         continue;
       }
