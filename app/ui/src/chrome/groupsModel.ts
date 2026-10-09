@@ -137,3 +137,48 @@ export function inUseSentence(name: string, message: string): string {
   const by = /is still used by (.+)$/.exec(message)?.[1];
   return by ? `${name} cannot be deleted: ${by} still uses it.` : message;
 }
+
+// ---- M40: a surface map on the model's own faces ---------------------------------------------
+
+export const ADD_SURFACE_MAP_LABEL = 'Add surface map';
+
+/** What a surface-map plan needs of the project (the scene view, structurally). */
+export interface SurfaceMapView {
+  surface_groups: readonly GroupLike[];
+  surface_receivers: readonly { id: string; name: string; enabled: boolean; shape: { kind: string; groups?: readonly string[] } }[];
+}
+
+/** The enabled scene receiver other than `except` that already maps group `id`, if any: a face has one map (`.cbin idRs`). */
+export function mapOfGroup(id: string, view: SurfaceMapView, except?: string): { id: string; name: string } | null {
+  const r = view.surface_receivers.find((x) => x.id !== except && x.enabled && x.shape.kind === 'scene' && (x.shape.groups ?? []).includes(id));
+  return r ? { id: r.id, name: r.name } : null;
+}
+
+/**
+ * M40: the groups a new surface map takes from the selection (one group, Ctrl+clicked groups, or
+ * the groups of faces picked in the 3D view), or why it cannot: nothing picked, or a picked group
+ * already in an enabled surface map (a face carries one map's id, so the run's input could not be
+ * written; the core's writer refuses it as `group_in_two_zones`).
+ */
+export function surfaceMapPlan(sel: GroupSelection, view: SurfaceMapView): { groups: string[] } | { problem: { code: string; message: string } } {
+  const byName = (n: string) => view.surface_groups.find((g) => g.name === n)?.id;
+  const ids =
+    sel.kind === 'group'
+      ? [sel.id as string]
+      : sel.kind === 'groups'
+        ? [...(sel.ids as string[])]
+        : sel.kind === 'faces'
+          ? (sel.groups as string[]).map(byName).filter((x): x is string => !!x)
+          : [];
+  const groups = [...new Set(ids)].filter((id) => view.surface_groups.some((g) => g.id === id));
+  if (!groups.length) {
+    return { problem: { code: 'MAP_NOTHING_PICKED', message: 'Pick the surfaces to map first: click a surface in the list (Ctrl+click for several), or faces in the 3D view.' } };
+  }
+  const taken = groups.map((id) => ({ id, map: mapOfGroup(id, view) })).filter((t) => t.map);
+  if (taken.length) {
+    const name = (id: string) => view.surface_groups.find((g) => g.id === id)?.name ?? id;
+    const list = taken.map((t) => `${name(t.id)} (in ${t.map?.name})`).join(', ');
+    return { problem: { code: 'MAP_GROUP_TAKEN', message: `A surface is in one surface map at most, and ${list} already ${taken.length === 1 ? 'is' : 'are'}. Switch that map off or remove it first.` } };
+  }
+  return { groups };
+}

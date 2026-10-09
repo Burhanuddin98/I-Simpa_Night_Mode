@@ -622,3 +622,79 @@ fn a_source_group_never_reaches_the_solver_input() {
     }
     println!("{checked} sources grouped, solver input unchanged");
 }
+
+// ---- M40: a surface map added over a surface, and taken away again -----------------------------
+//
+// "+ Surface map" sends `add_surface_receiver` with a scene receiver over the picked groups
+// (`newSceneReceiver`, ops.ts), at the end of the list. Not added, nothing changes; added,
+// config.xml gains exactly its one `recepteur_surfacique`; undone, byte-identical.
+
+#[test]
+fn a_surface_map_added_and_undone_leaves_the_solver_input_byte_identical() {
+    let mut checked = 0;
+    for (name, original) in fixtures() {
+        let configs = both_configs(&original);
+        let mesh = mesh_input(&original);
+        let mapped: Vec<schema::GroupId> = original
+            .surface_receivers
+            .iter()
+            .filter(|r| r.enabled)
+            .filter_map(|r| match &r.shape {
+                schema::SurfaceReceiverShape::Scene { groups } => Some(groups.clone()),
+                _ => None,
+            })
+            .flatten()
+            .collect();
+        let Some(group) = original.surface_groups.iter().find(|g| {
+            !mapped.contains(&g.id) && original.geometry.faces.iter().any(|f| f.group == g.id)
+        }) else {
+            println!("{name}: every surface is mapped already");
+            continue;
+        };
+        let id = "6d0b7a3e-1f2c-4e5d-9a8b-7c6d5e4f3a2b";
+        let receiver = serde_json::json!({
+            "id": id, "name": "Surface map 1", "enabled": true,
+            "shape": { "kind": "scene", "groups": [group.id] }, "solver_id": null
+        });
+        let text = serde_json::json!({
+            "op": "add_surface_receiver",
+            "index": original.surface_receivers.len(),
+            "receiver": receiver
+        })
+        .to_string();
+        let mut p = original.clone();
+        let undo = Op::from_json(&text).unwrap().apply(&mut p).unwrap();
+        let new_id = simpa_core::config_xml::SolverIds::assign(&p)
+            .unwrap()
+            .surface_receiver_id(p.surface_receivers.last().unwrap().id)
+            .unwrap();
+        let added = both_configs(&p);
+        for k in 0..2 {
+            assert_ne!(added[k], configs[k], "{name}: the map is written");
+            assert_eq!(
+                added[k]
+                    .matches(&format!(
+                        "<recepteur_surfacique id=\"{new_id}\" name=\"Surface map 1\"/>"
+                    ))
+                    .count(),
+                1,
+                "{name}: once, as upstream writes a surface receiver"
+            );
+            same_text(
+                &without_element(&added[k], "recepteur_surfacique", new_id),
+                &configs[k],
+                &format!("{name}: only the map's line is new"),
+            );
+        }
+        undo.apply(&mut p).unwrap();
+        assert_eq!(p, original, "{name}: undone");
+        assert_eq!(both_configs(&p), configs, "{name}: undone, byte-identical");
+        assert_eq!(mesh_input(&p), mesh, "{name}: undone, TetGen's input");
+        println!(
+            "{name}: M40 map over '{}' (id {new_id}) added and undone",
+            group.name
+        );
+        checked += 1;
+    }
+    assert!(checked >= 10, "{checked}");
+}

@@ -31,6 +31,11 @@
 // (the air; a click opens Simulate, where it is edited) and Display (the 3D view's View style
 // menu). Each says plainly what cannot be done here.
 //
+// M40: "+ Surface map" in the Receivers head (`[data-action="add-surface-map"]`) puts a sound map
+// on the surfaces picked (a scene surface receiver over their groups), one checked edit; a surface
+// is in one map at most, so a surface another enabled map holds is refused here, in words. A map's
+// row says how many surfaces it covers (`[data-map-groups]`) and has a remove button.
+//
 // M43: each surface receiver, cutting plane and fitting zone has an on/off switch,
 // `[data-enabled-toggle="<kind>:<id>"]`, as a source has (EnabledSwitch); off leaves it out of the
 // solver's input.
@@ -40,7 +45,8 @@ import type { Source, UiIssue } from '../bindings/ipc';
 import { issuesByEntity, projectIssues } from '../issues';
 import { fittingZonesStore, groupRenameStore, refusalStore, sceneStore, selectionStore, stepStore, useStore } from '../store';
 import { settingsStore } from '../features/simulate/runSize';
-import { ADD_GROUP_LABEL, groupPicked, mergePlan, renameProblem, toggleGroup } from './groupsModel';
+import { ADD_GROUP_LABEL, ADD_SURFACE_MAP_LABEL, groupPicked, mergePlan, renameProblem, toggleGroup } from './groupsModel';
+import { removeSurfaceReceiver } from '../ops';
 import { FoldButton, useFold } from './fold';
 import { usePanelWidth } from './panelWidth';
 import { Search, Trash2 } from './icons';
@@ -312,6 +318,9 @@ export function ScenePanel() {
   const groupRefusals = uniqueIssues(
     ...[...refusals].filter(([k]) => k.startsWith('surface_group:') && /:(name|merge|faces|delete)$/.test(k)).map(([, v]) => v),
   );
+  // M40: the last "+ Surface map" problem (nothing picked, a surface in another map), cleared by the next try.
+  const [mapProblem, setMapProblem] = useState<{ code: string; message: string } | null>(null);
+  const groupName = (id: string) => view?.surface_groups.find((g) => g.id === id)?.name ?? id;
   const folded = useFold('scene');
   const sized = usePanelWidth('nm-scene-width', 248, 'right');
   // A problem that concerns one group shows under that group's row, when the row is listed; else under the Surfaces.
@@ -494,7 +503,31 @@ export function ScenePanel() {
               title="Receivers"
               shown={receivers.length + grids.length}
               total={view.point_receivers.length + view.surface_receivers.length}
-            />
+            >
+              <button
+                className="scene-head-add"
+                data-action="add-surface-map"
+                title={`${ADD_SURFACE_MAP_LABEL}: a sound map on the surfaces picked (click a surface, Ctrl+click for several, or pick faces in the 3D view); it has a map once SPPS runs again`}
+                onClick={() => {
+                  setMapProblem(null);
+                  actions
+                    .addSurfaceMap()
+                    .then((r) => setMapProblem('problem' in r ? r.problem : null))
+                    .catch((e: unknown) => setMapProblem(actions.asCmdError(e)));
+                }}
+              >
+                + Surface map
+              </button>
+            </Head>
+            {mapProblem && (
+              <div className="issues toggle-issues" data-part="surface-map-problem">
+                <div className="issue" data-issue-code={mapProblem.code} role="alert">
+                  <span className="code">FAIL {mapProblem.code}</span>
+                  <span className="msg">{mapProblem.message} The project is unchanged.</span>
+                </div>
+              </div>
+            )}
+            <ToggleRefusalLines issues={refusals.get('surface_receiver:new:map') ?? []} part="surface-map-issues" />
             {receivers.map((r) => (
               <div key={r.id} className="scene-line">
               <button
@@ -530,9 +563,28 @@ export function ScenePanel() {
                     <span className="row-name">{r.name}</span>
                     <IssueTag issues={issuesOf('surface_receiver', r.id)} />
                     {!r.enabled && <span className="row-detail row-off">off</span>}
-                    <span className="row-detail">{r.shape.kind === 'scene' ? 'surface map' : 'cutting plane'}</span>
+                    <span
+                      className="row-detail"
+                      data-map-groups={r.shape.kind === 'scene' ? r.shape.groups.length : undefined}
+                      title={r.shape.kind === 'scene' ? `A sound map on ${r.shape.groups.map(groupName).join(', ') || 'no surface'}` : undefined}
+                    >
+                      {r.shape.kind === 'scene'
+                        ? `surface map · ${r.shape.groups.length} ${r.shape.groups.length === 1 ? 'surface' : 'surfaces'}`
+                        : 'cutting plane'}
+                    </span>
                   </div>
                   <EnabledSwitch kind="surface_receiver" id={r.id} name={r.name} on={r.enabled} off="the run leaves it out and makes no map for it" compact />
+                  {r.shape.kind === 'scene' && (
+                    <button
+                      className="row-remove"
+                      data-part="map-remove"
+                      aria-label={`Remove ${r.name}`}
+                      title={`Remove ${r.name} (Ctrl+Z brings it back); the surfaces stay`}
+                      onClick={() => actions.fire(actions.apply(removeSurfaceReceiver(r.id), `surface_receiver:${r.id}:enabled`))}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  )}
                 </div>
                 <EnabledRefusals kind="surface_receiver" id={r.id} />
               </Fragment>

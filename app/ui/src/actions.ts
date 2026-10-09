@@ -28,6 +28,7 @@ import {
 import type { Setting, UiIssue } from './bindings/ipc';
 import type { BandKind, Op, ReflectionLaw } from './bindings/schema';
 import { regroupFaces } from './chrome/sceneModel';
+import { mapOfGroup, surfaceMapPlan } from './chrome/groupsModel';
 import { emptyLog, endLine, foldEvent, needsSavePrompt, progressText } from './flow';
 import { logProgress } from './features/simulate/runTime';
 import { decodeMesh } from './mesh';
@@ -44,6 +45,7 @@ import {
   libraryMaterial,
   newReceiver,
   newSource,
+  newSceneReceiver,
   nextName,
   replaceFittingZone,
   replaceMaterial,
@@ -932,10 +934,43 @@ export async function setSourceEnabled(id: string, enabled: boolean): Promise<Ed
  * undo step, refusals filed under `surface_receiver:<id>:enabled`. A receiver switched off is left
  * out of the solver's input, as a source is; its solver id is kept, so nothing else renumbers.
  */
-export async function setSurfaceReceiverEnabled(id: string, enabled: boolean): Promise<EditOutcome> {
-  const r = sceneStore.get()?.view.surface_receivers.find((x) => x.id === id);
-  if (!r) throw new Error(`setSurfaceReceiverEnabled: no surface receiver ${id}`);
-  return apply(replaceSurfaceReceiver({ ...r, enabled }), `surface_receiver:${id}:enabled`);
+export async function setSurfaceReceiverEnabled(id: string, enabled: boolean): Promise<EditOutcome | null> {
+  const view = sceneStore.get()?.view;
+  const r = view?.surface_receivers.find((x) => x.id === id);
+  if (!view || !r) throw new Error(`setSurfaceReceiverEnabled: no surface receiver ${id}`);
+  const key = `surface_receiver:${id}:enabled`;
+  // M40: a surface map switched on over a surface another enabled map holds could not be written for a run.
+  const taken = enabled && r.shape.kind === 'scene' ? r.shape.groups.map((g) => ({ g, map: mapOfGroup(g, view, id) })).find((t) => t.map) : undefined;
+  if (taken?.map) {
+    const group = view.surface_groups.find((g) => g.id === taken.g)?.name ?? taken.g;
+    fileLocal(key, 'MAP_GROUP_TAKEN', { kind: 'surface_receiver', id }, `${group} is in ${taken.map.name} already, and a surface is in one surface map at most: switch ${taken.map.name} off first`);
+    return null;
+  }
+  return apply(replaceSurfaceReceiver({ ...r, enabled }), key);
+}
+
+/** A refusal the UI makes itself, filed under `key` as the checked apply files one. */
+function fileLocal(key: string, code: string, entity: UiIssue['entity'], message: string): void {
+  const next = new Map(refusalStore.get());
+  next.set(key, [{ code, rule: '', severity: 'error', path: key, entity, field: key.split(':')[2] ?? '', message }]);
+  refusalStore.set(next);
+}
+
+/**
+ * M40: a new surface map (a scene surface receiver) over the surfaces picked, named
+ * `Surface map <n>`, at the end of the surface receivers: one checked edit, one undo step. Its
+ * problem instead when nothing is picked or a picked surface is in another map
+ * (groupsModel.ts `surfaceMapPlan`); the project is then unchanged.
+ */
+export async function addSurfaceMap(): Promise<{ outcome: EditOutcome } | { problem: { code: string; message: string } }> {
+  const view = sceneStore.get()?.view;
+  if (!view) return { problem: { code: 'NO_PROJECT', message: 'Open a project first.' } };
+  const plan = surfaceMapPlan(selectionStore.get(), view);
+  if ('problem' in plan) return plan;
+  const name = nextName('Surface map ', view.surface_receivers.map((r) => r.name));
+  const outcome = await apply(addSurfaceReceiver(view.surface_receivers.length, newSceneReceiver(crypto.randomUUID(), name, plan.groups)), 'surface_receiver:new:map');
+  if (outcome.applied) log('OK', `Added ${name} over ${plan.groups.length} ${plan.groups.length === 1 ? 'surface' : 'surfaces'}: it has a map once SPPS runs again`);
+  return { outcome };
 }
 
 /** M43: switches a fitting zone on or off, as `setSurfaceReceiverEnabled`; refusals under `fitting_zone:<id>:enabled`. */

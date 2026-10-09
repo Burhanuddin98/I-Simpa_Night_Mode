@@ -209,6 +209,11 @@ export const addSurfaceReceiver = (index: number, receiver: SurfaceReceiver): Op
 export const replaceSurfaceReceiver = (receiver: SurfaceReceiver): Op => ({ op: 'replace_surface_receiver', receiver });
 export const removeSurfaceReceiver = (id: string): Op => ({ op: 'remove_surface_receiver', id });
 
+/** M40: an enabled scene surface receiver (a sound map on the model's own faces) over `groups`. */
+export function newSceneReceiver(id: string, name: string, groups: readonly string[]): SurfaceReceiver {
+  return { id, name, enabled: true, shape: { kind: 'scene', groups: [...groups] }, solver_id: null };
+}
+
 // ---- fitting zones ------------------------------------------------------------------------------
 
 /** A fitting zone replaced whole, by its id (M43: switched on or off): one undo step. */

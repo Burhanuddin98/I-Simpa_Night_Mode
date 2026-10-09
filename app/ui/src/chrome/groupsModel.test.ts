@@ -83,3 +83,30 @@ test('the in-use refusal of the core reads without the id', () => {
   );
   assert.equal(inUseSentence('Group 1', 'something else'), 'something else');
 });
+
+// M40: a surface map over the picked surfaces.
+import { mapOfGroup, surfaceMapPlan } from './groupsModel.ts';
+
+test('M40: a surface map takes the picked groups, from the list or from faces; nothing picked says so', () => {
+  const view = {
+    surface_groups: [
+      { id: 'g1', name: 'Floor' },
+      { id: 'g2', name: 'Walls' },
+      { id: 'g3', name: 'Seats' },
+    ],
+    surface_receivers: [
+      { id: 'r1', name: 'Map 1', enabled: true, shape: { kind: 'scene', groups: ['g3'] } },
+      { id: 'r2', name: 'Off map', enabled: false, shape: { kind: 'scene', groups: ['g2'] } },
+      { id: 'p1', name: 'Plane 1', enabled: true, shape: { kind: 'cutting_plane' } },
+    ],
+  };
+  assert.deepEqual(surfaceMapPlan({ kind: 'group', id: 'g1' }, view), { groups: ['g1'] });
+  assert.deepEqual(surfaceMapPlan({ kind: 'groups', ids: ['g1', 'g2'] }, view), { groups: ['g1', 'g2'] }, 'a switched-off map holds nothing');
+  assert.deepEqual(surfaceMapPlan({ kind: 'faces', faces: [1, 2], groups: ['Walls', 'Floor', 'Walls'] }, view), { groups: ['g2', 'g1'] });
+  const none = surfaceMapPlan({ kind: 'none' }, view);
+  assert.ok('problem' in none && none.problem.code === 'MAP_NOTHING_PICKED');
+  const taken = surfaceMapPlan({ kind: 'groups', ids: ['g1', 'g3'] }, view);
+  assert.ok('problem' in taken && taken.problem.code === 'MAP_GROUP_TAKEN' && taken.problem.message.includes('Seats (in Map 1)'), JSON.stringify(taken));
+  assert.deepEqual(mapOfGroup('g3', view), { id: 'r1', name: 'Map 1' });
+  assert.equal(mapOfGroup('g3', view, 'r1'), null, 'its own map is not another');
+});
