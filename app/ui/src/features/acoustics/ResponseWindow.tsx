@@ -491,7 +491,7 @@ export function ResponseWindow({
               title={s === 'map' ? 'The levels as a time x band map' : 'The levels as a table: one row per time bin, one column per band, over the time shown'}
               onClick={() => setShape(s)}
             >
-              <span data-label="control">{s === 'map' ? 'Map' : 'Table'}</span>
+              {s === 'map' ? 'Map' : 'Table'}
             </button>
           ))}
         </div>
