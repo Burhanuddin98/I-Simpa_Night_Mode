@@ -9,7 +9,8 @@ geometry, the dock, auralization and the GPU solver.
 and choose between a parity milestone before the hybrid engine or the hybrid first).
 
 My reading: v1 gets a parity milestone, M12c, before M13 (the installer). Section 4 proposes its cut. **The cut is a
-proposal until Burhan confirms it**; the decision-log row 76 records the order and that the cut is open.
+proposal until Burhan confirms it**, and so are M12c's place before M13 and its order against the hybrid engine;
+the decision-log row 76 records his words and that all three are open.
 
 ## 1. The answer
 
@@ -104,7 +105,7 @@ in the cut may put a wrong number in front of a user. Sizes are not estimated he
 
 **P0, the core rows (9; A40 is M13 itself):** G8, G16, G18, G43, G47, G48, M32, C36, A29.
 
-**P1, built in the engine, add the control (15 common rows):** G7 keep groups on re-import, G28/G29 fitting zones
+**P1, built in the engine, add the control (15 common rows; G28 and G29 are two):** G7 keep groups on re-import, G28/G29 fitting zones
 shown and edited, G32 mesh on demand, G34 surface-receiver area constraint, G36 preprocess toggle, M27 source
 groups, M40 scene surface receivers, M43 enable/disable planes, surface receivers and zones, C14 SPPS air absorption,
 C17 transmission switch, C20 map quantity (intensity/SPL), C23 TCR air absorption, R36 TCR receiver levels, A31
@@ -131,8 +132,12 @@ the receiver grid, R28 LF/LFC, R42/R44/R73 parameter and STI maps (v1.1-backlog 
 selection, R68/R71 the report document, A12/A52 preferences, A13 languages, A24 update check, A41 macOS/Linux, A47
 project archive.
 
-**Open for Burhan:** (1) confirm or change the cut; (2) R42, maps of T30/EDT/C80/D50, is what an I-Simpa user
-expects on a map and is v1.1 only because those map numbers have no bed: pull it into v1 with a bed, or keep it out.
+**Open for Burhan:** (1) confirm or change the cut, and M12c's place before M13; (2) R42, maps of T30/EDT/C80/D50,
+is what an I-Simpa user expects on a map and is v1.1 only because those map numbers have no bed: pull it into v1 with a
+bed, or keep it out; (3) the order of the two arcs: he was asked at 03:00 "parity first or the hybrid engine first" and
+his answer did not choose. The hybrid arc itself is open too: at 02:28 he asked whether to "think it over and maybe
+redesign the whole thing" (the options and four product questions were put to him, unanswered; Zeph's evidence is on
+branch `fdtd-probe`).
 
 ## 5. Corrections to earlier statements
 
