@@ -50,7 +50,7 @@ Imp = importance (core/common/niche).
 | A39 | Keyboard shortcuts | common | Absent | Partial | App.tsx:81-128: Ctrl+O/S/Shift+S/Z/Y/Shift+Z, F5, Home; F2 rename, Del | Missing: Ctrl+N, Ctrl+C/V (copy/paste elements), Ctrl+K (palette not built) |
 | A40 | Windows installer | core | Planned | Absent | tauri.conf.json: "bundle":{"active":false}; only tools/devtools/package-zeph.ps1 (portable folder app.exe + solvers\) | No NSIS build exists |
 | A41 | macOS/Linux packages | common | Absent | Deferred | V2-10 (v1.1-backlog.md) | |
-| A42 | File association | common | Absent | Absent | no bundle config | |
+| A42 | File association | common | Absent | Absent | no bundle config | Built 2026-10-09 with M13 (`v1q` ca74b3e): per-user ProgID `DockyardNightMode.simpa`, `"<install>\app.exe" --project "%1"`, removed on uninstall (`tools/installer/night-mode.nsi`); bed-m13 a42-progid, a42-resolved, a42-launch, a42-opened, uninstall-a42-gone pass |
 | A43 | Bundled tutorial projects | common | Absent | Partial | tauri/examples.rs:38-66 (Elmia hall, Industrial hall, BRAS CR1-4); landing cards; commands::example_open | Six shipped examples as fresh copies. Not upstream's 3 tutorials, no tutorial text; V2-13 |
 | A44 | Bundled validation projects | niche | Absent | Absent | none | BRAS rooms are examples, not the air-absorption/clarity set |
 | A45 | Scripting samples | niche | Absent | Deferred | V2-5 | |
