@@ -6,7 +6,8 @@
 // SPPS: particles per source and band (C7), particles saved for playback with the particle
 // file's size (C8), duration (C10), time step in ms with the step count (C11), the receiver
 // radius, the particle extinction and "Preserve walls when meshing (-Y)" (backlog 80: every value
-// the run-quality advisor's Apply sets has its field), the method (C12),
+// the run-quality advisor's Apply sets has its field), the surface-receiver face size TetGen
+// refines to (G34), the method (C12),
 // sound maps per band (C21) and what they show (C20), echogram per source (C22), transmission
 // through walls (C17), the bands it computes (C25) and the band
 // presets (C26), and the air (C27) with the switch that lets it absorb (C14). TCR: its method as
@@ -38,6 +39,8 @@ import {
   BAND_PRESETS,
   bandPresetOf,
   NOT_A_COUNT,
+  NOT_ABOVE_ZERO,
+  parseFaceArea,
   parseCount,
   pbinBytes,
   realInputText,
@@ -48,6 +51,7 @@ import {
   timeStepInputText,
   withAir,
   withMeshing,
+  withReceiverFaceArea,
   withSpps,
   withSoundMap,
   withSppsSwitch,
@@ -83,7 +87,9 @@ function parseIssue(code: string, field: string, text: string): UiIssue {
   const message =
     code === NOT_A_COUNT
       ? `"${text}" is not a whole number from 0 to 2,147,483,647: write digits only, like 150000`
-      : `"${text}" is not a number: write digits with a decimal point, like 4.5`;
+      : code === NOT_ABOVE_ZERO
+        ? `"${text}" is not above 0: write the largest face allowed, or leave the field empty for faces as modelled`
+        : `"${text}" is not a number: write digits with a decimal point, like 4.5`;
   return { code, rule: '', severity: 'error', path: `settings:${field}`, entity: null, field, message };
 }
 
@@ -574,6 +580,32 @@ export function SettingsEditor({ scene, settings, solver }: { scene: SceneState 
           refused={refusals.get(keyOf('meshing', 'preserve_boundary')) ?? []}
           current={issuesAt(issues, ['/solvers/meshing/preserve_boundary'])}
         />
+      </div>
+      <div className="sim-setting sim-block" data-setting="receiver_face_area">
+        <NumberField
+          group="meshing"
+          field="receiver_face_area"
+          label="Surface-receiver face size"
+          unit="m²"
+          placeholder="as modelled"
+          value={s.solvers.meshing.surface_receiver_max_area_m2 == null ? '' : realInputText(s.solvers.meshing.surface_receiver_max_area_m2)}
+          // Empty is "faces as modelled": the project stores nothing and no .var is written. 0 stands for it here;
+          // a typed 0 or less is refused by parseFaceArea before it gets this far.
+          read={(text) => {
+            const r = parseFaceArea(text);
+            return r.ok ? { ok: true, value: r.value ?? 0 } : r;
+          }}
+          op={(now, v) => {
+            const next = withReceiverFaceArea(now.solvers, v > 0 ? v : null);
+            return next ? setSolverSettings(next) : null;
+          }}
+          current={issuesAt(issues, ['/solvers/meshing/surface_receiver_max_area_m2'])}
+        />
+        <div className="sim-hint" data-part="receiver-face-area-hint">
+          TetGen splits the faces of the scene's surface receivers (not cutting planes) until none is larger than this, so their
+          sound maps get finer cells. Setting a size turns off Preserve walls (-Y), which forbids those splits; clearing it leaves
+          that switch as it is. Empty: faces as modelled, upstream's default.
+        </div>
       </div>
       <div className="sim-setting sim-block" data-setting="method">
         <div className="sim-field-line">

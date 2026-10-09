@@ -238,6 +238,33 @@ export function withMeshing(s: SolverSettings, patch: Partial<MeshSettings>): So
   return { ...s, meshing: { ...s.meshing, ...patch } };
 }
 
+/** The UI code of a size typed at or below 0. */
+export const NOT_ABOVE_ZERO = 'NOT_ABOVE_ZERO';
+
+/**
+ * The surface-receiver face size as typed (G34), square metres: empty is none (faces as
+ * modelled, `null`); otherwise a decimal above 0, as the mesher requires of the `.var`.
+ */
+export function parseFaceArea(text: string): { ok: true; value: number | null } | { ok: false; code: string; text: string } {
+  if (text.trim() === '') return { ok: true, value: null };
+  const parsed = parseStrictDecimal(text);
+  if (!parsed.ok) return parsed;
+  return parsed.value > 0 ? parsed : { ok: false, code: NOT_ABOVE_ZERO, text };
+}
+
+/**
+ * The solver settings with the surface-receiver face size set (G34: TetGen's `.var` facet-area
+ * constraint on the faces of scene surface receivers), or cleared with null; null when it already
+ * is. Setting one turns -Y off in the same edit, as upstream's GUI does when its constraint goes on
+ * (`e_core_core_tetconf.h:82-86`): -Y forbids the splits the size asks for, and the validator
+ * refuses the two together (`mesh_settings_conflict`). Clearing it leaves -Y as it is.
+ */
+export function withReceiverFaceArea(s: SolverSettings, area: number | null): SolverSettings | null {
+  const have = s.meshing.surface_receiver_max_area_m2 ?? null;
+  if (have === area) return null;
+  return withMeshing(s, area === null ? { surface_receiver_max_area_m2: null } : { surface_receiver_max_area_m2: area, preserve_boundary: false });
+}
+
 /** The environment with the air's fields replaced; everything else as stored. */
 export function withAir(
   env: Environment,

@@ -232,3 +232,30 @@ test('withSoundMap: no op when stored; otherwise sound_map only', () => {
   assert.match(opText(setSolverSettings(spl)), /"sound_map":"spl"/);
   assert.equal(withSoundMap(spl, 'spl'), null);
 });
+
+// G34: the surface-receiver face size (TetGen's .var), with upstream's -Y coupling.
+import { NOT_ABOVE_ZERO, parseFaceArea, withReceiverFaceArea } from './settings.ts';
+
+test('parseFaceArea: empty is none, a decimal above 0 is a size, 0 or less is refused', () => {
+  assert.deepEqual(parseFaceArea(''), { ok: true, value: null });
+  assert.deepEqual(parseFaceArea('  '), { ok: true, value: null });
+  assert.deepEqual(parseFaceArea('2.5'), { ok: true, value: 2.5 });
+  assert.deepEqual(parseFaceArea('0.1'), { ok: true, value: 0.1 });
+  assert.deepEqual(parseFaceArea('0'), { ok: false, code: NOT_ABOVE_ZERO, text: '0' });
+  assert.deepEqual(parseFaceArea('-1'), { ok: false, code: NOT_ABOVE_ZERO, text: '-1' });
+  assert.equal(parseFaceArea('two').ok, false);
+});
+
+test('withReceiverFaceArea: no op when stored; setting turns -Y off with it; clearing leaves -Y', () => {
+  const s = { ...solvers(), meshing: { ...solvers().meshing, preserve_boundary: true } };
+  assert.equal(withReceiverFaceArea(s, null), null, 'none stored, none asked: no op');
+  const on = withReceiverFaceArea(s, 2.5);
+  assert.ok(on);
+  assert.deepEqual(on.meshing, { ...s.meshing, surface_receiver_max_area_m2: 2.5, preserve_boundary: false });
+  assert.deepEqual({ ...on, meshing: s.meshing }, s, 'SPPS and TCR do not move');
+  assert.equal(withReceiverFaceArea(on, 2.5), null);
+  const off = withReceiverFaceArea(on, null);
+  assert.ok(off);
+  assert.deepEqual(off.meshing, { ...s.meshing, preserve_boundary: false }, 'clearing does not turn -Y back on');
+  assert.match(opText(setSolverSettings(on)), /"surface_receiver_max_area_m2":2.5,"preserve_boundary":false/);
+});

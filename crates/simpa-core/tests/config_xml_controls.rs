@@ -233,3 +233,130 @@ fn every_control_turned_back_leaves_the_solver_input_byte_identical() {
     }
     println!("{checked} control x fixture pairs checked");
 }
+
+// ---- the meshing controls: TetGen's input, not config.xml -------------------------------------
+//
+// G34's face size and G36's scene correction change what TetGen is given (`.poly`, `.var`, its
+// flags), never config.xml. The same two promises, held on that input and on the mesh input hash
+// a run records, with config.xml checked unchanged throughout.
+
+/// What TetGen is given for `p`, as bytes: the `.poly`, the `.var` when there is one, the flags;
+/// and the mesh input hash.
+#[derive(Debug, PartialEq)]
+struct MeshInputBytes {
+    poly: Vec<u8>,
+    var: Option<Vec<u8>>,
+    flags: Vec<String>,
+    hash: String,
+}
+
+fn mesh_input(p: &Project) -> MeshInputBytes {
+    let input = simpa_core::mesh::project_input(p).unwrap_or_else(|e| panic!("{}", e.0));
+    MeshInputBytes {
+        poly: simpa_core::formats::poly::write(&input.poly),
+        var: input.var,
+        flags: simpa_core::mesh::tetgen_flags(&p.solvers.meshing),
+        hash: simpa_core::validate::mesh_input_hash(p),
+    }
+}
+
+fn both_configs(p: &Project) -> [String; 2] {
+    [config(p, SolverKind::Spps), config(p, SolverKind::Tcr)]
+}
+
+/// The op G34's field sends (`withReceiverFaceArea`, settings.ts): the face size set or cleared;
+/// setting one turns -Y off with it, clearing leaves -Y as it is.
+fn face_area_op(p: &Project, area: Option<f64>) -> Op {
+    let mut solvers = serde_json::to_value(&p.solvers).unwrap();
+    let m = &mut solvers["meshing"];
+    m["surface_receiver_max_area_m2"] = area.map_or(Value::Null, Value::from);
+    if area.is_some() {
+        m["preserve_boundary"] = Value::Bool(false);
+    }
+    let text = serde_json::json!({ "op": "set_solver_settings", "settings": solvers }).to_string();
+    Op::from_json(&text).unwrap_or_else(|e| panic!("{text}: {e}"))
+}
+
+#[test]
+fn the_face_size_turned_back_leaves_tetgen_input_byte_identical() {
+    for (name, original) in fixtures() {
+        let before = mesh_input(&original);
+        let configs = both_configs(&original);
+        let stored = original
+            .solvers
+            .meshing
+            .surface_receiver_max_area_m2
+            .map(|a| a.get());
+        let y_was = original.solvers.meshing.preserve_boundary;
+        let mut p = original.clone();
+        let (to, back) = match stored {
+            None => (Some(2.5), None),
+            Some(a) => (None, Some(a)),
+        };
+        let undo = face_area_op(&p, to).apply(&mut p).unwrap();
+        let turned = mesh_input(&p);
+        assert_eq!(
+            both_configs(&p),
+            configs,
+            "{name}: config.xml does not hold the mesh settings"
+        );
+        assert_eq!(
+            turned.poly, before.poly,
+            "{name}: the .poly does not change"
+        );
+        match to {
+            Some(_) => {
+                assert!(
+                    turned.var.is_some() && before.var.is_none(),
+                    "{name}: a .var appears"
+                );
+                assert!(
+                    !turned.flags.contains(&"-Y".to_string()),
+                    "{name}: -Y goes off with it"
+                );
+                assert!(!p.solvers.meshing.preserve_boundary);
+            }
+            None => {
+                assert!(
+                    turned.var.is_none() && before.var.is_some(),
+                    "{name}: the .var goes"
+                );
+                assert_eq!(
+                    turned.flags, before.flags,
+                    "{name}: clearing leaves -Y as it was"
+                );
+            }
+        }
+        assert_ne!(turned.hash, before.hash, "{name}: a run would mesh again");
+
+        // Turned back by the field.
+        let mut again = p.clone();
+        face_area_op(&again, back).apply(&mut again).unwrap();
+        let back_input = mesh_input(&again);
+        if stored.is_some() || !y_was {
+            assert_eq!(
+                back_input, before,
+                "{name}: turned back, TetGen's input is byte-identical"
+            );
+            assert_eq!(again, original, "{name}: the project is as it was");
+        } else {
+            // -Y was on and setting a size turned it off; clearing leaves it off, the one
+            // difference, said in the field's help line. Undo (below) restores both.
+            let mut want = before.flags.clone();
+            want.retain(|f| f != "-Y");
+            assert_eq!(
+                (&back_input.poly, &back_input.var, &back_input.flags),
+                (&before.poly, &before.var, &want),
+                "{name}"
+            );
+        }
+        assert_eq!(both_configs(&again), configs, "{name}");
+        // Undone: byte-identical, -Y included.
+        undo.apply(&mut p).unwrap();
+        assert_eq!(mesh_input(&p), before, "{name}: undone");
+        assert_eq!(p, original, "{name}: undone, the project is as it was");
+        println!(
+            "{name}: G34 face size {stored:?} -> {to:?} -> {back:?} (-Y was {y_was}), TetGen input identical after undo"
+        );
+    }
+}
