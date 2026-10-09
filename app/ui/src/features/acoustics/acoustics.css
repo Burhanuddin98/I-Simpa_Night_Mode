@@ -422,8 +422,10 @@
   font-size: 11.5px;
   text-align: right;
 }
-.rw-table th + th {
+.rw-table th + th,
+.rw-table td + td {
   text-align: right;
+  padding-left: 22px;
 }
 .rw-head {
   cursor: move;
