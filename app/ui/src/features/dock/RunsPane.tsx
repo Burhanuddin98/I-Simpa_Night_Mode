@@ -350,7 +350,7 @@ function DeleteRun({ row, total }: { row: RunRow; total: number }) {
       {row.exports.length > 0 ? (
         <div data-part="delete-cites" data-cites={row.exports.length}>
           <span className="flag warn">CITED</span>
-          {` ${row.exports.length} exported file${row.exports.length === 1 ? '' : 's'} cite this run. They stay where they are, naming a run that is gone:`}
+          {` ${row.exports.length} exported file${row.exports.length === 1 ? ' cites' : 's cite'} this run. They stay where they are, naming a run that is gone:`}
           <ul className="cites">
             {row.exports.map((x) => (
               <li key={x.path} className="mono" data-cite={x.path} title={`${x.kind.toUpperCase()}, written ${x.at}`}>
