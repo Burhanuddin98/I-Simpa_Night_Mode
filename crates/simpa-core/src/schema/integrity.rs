@@ -165,7 +165,10 @@ pub(crate) fn check_bands(bands: &BandSet) -> Result {
     }
 }
 
-pub(crate) fn check_spectrum(what: impl FnOnce() -> String, s: &Spectrum, n: usize) -> Result {
+pub(crate) fn check_spectrum(what: impl Fn() -> String, s: &Spectrum, n: usize) -> Result {
+    if let Some(a) = &s.attenuation_db {
+        band_count(|| format!("{} attenuation", what()), a.len(), n)?;
+    }
     match &s.shape {
         SpectrumShape::Custom { relative_db } => band_count(what, relative_db.len(), n),
         SpectrumShape::Pink | SpectrumShape::White => Ok(()),

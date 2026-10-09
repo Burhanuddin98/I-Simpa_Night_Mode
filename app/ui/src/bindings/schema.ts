@@ -621,6 +621,16 @@ export interface BandData {
   background_noise_shapes: [string, (number | string)[] | null][];
   fitting_zones: [string, FittingBands][];
   materials: [string, MaterialBands][];
+  /**
+   * Parity M46: the attenuations of the receivers' background noise that have one, in project
+   * order. Not written while none has.
+   */
+  noise_attenuations?: [string, (number | string)[]][];
+  /**
+   * Parity M46: the attenuations of the sources that have one, in project order. Not written
+   * while none has.
+   */
+  source_attenuations?: [string, (number | string)[]][];
   source_shapes: [string, (number | string)[] | null][];
   /**
    * Parity M17: each library spectrum's levels, in library order. Not written while the
@@ -840,6 +850,17 @@ export interface MarkerDisplay {
  */
 export interface Spectrum {
   /**
+   * Parity M46: an attenuation per band, in dB, taken off each band level
+   * ([`Spectrum::band_levels_db`], the spectrum's own level, upstream's Lw) before it is
+   * written: config.xml's `bfreq@db` is the level minus the band's attenuation, as upstream's
+   * GUI makes a source's dB its Lw minus its attenuation (`e_data_row_ext_bandefreq.h:114-117`).
+   * It lets a source linked to a library entry be attenuated band by band and stay linked.
+   * `None` is 0 dB in every band, and is what an attenuation set back to 0 everywhere is
+   * stored as. Optional in the file and not written when `None`, so a project saved before it
+   * existed loads and saves unchanged.
+   */
+  attenuation_db?: (number | string)[] | null;
+  /**
    * The energetic sum over the project's bands, in dB.
    */
   global_db: number | string;
@@ -919,6 +940,17 @@ export interface PointReceiver {
  * via the `definition` "Spectrum".
  */
 export interface Spectrum1 {
+  /**
+   * Parity M46: an attenuation per band, in dB, taken off each band level
+   * ([`Spectrum::band_levels_db`], the spectrum's own level, upstream's Lw) before it is
+   * written: config.xml's `bfreq@db` is the level minus the band's attenuation, as upstream's
+   * GUI makes a source's dB its Lw minus its attenuation (`e_data_row_ext_bandefreq.h:114-117`).
+   * It lets a source linked to a library entry be attenuated band by band and stay linked.
+   * `None` is 0 dB in every band, and is what an attenuation set back to 0 everywhere is
+   * stored as. Optional in the file and not written when `None`, so a project saved before it
+   * existed loads and saves unchanged.
+   */
+  attenuation_db?: (number | string)[] | null;
   /**
    * The energetic sum over the project's bands, in dB.
    */

@@ -202,6 +202,16 @@ pub struct Spectrum {
     /// loads and saves unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub library: Option<super::SpectrumId>,
+    /// Parity M46: an attenuation per band, in dB, taken off each band level
+    /// ([`Spectrum::band_levels_db`], the spectrum's own level, upstream's Lw) before it is
+    /// written: config.xml's `bfreq@db` is the level minus the band's attenuation, as upstream's
+    /// GUI makes a source's dB its Lw minus its attenuation (`e_data_row_ext_bandefreq.h:114-117`).
+    /// It lets a source linked to a library entry be attenuated band by band and stay linked.
+    /// `None` is 0 dB in every band, and is what an attenuation set back to 0 everywhere is
+    /// stored as. Optional in the file and not written when `None`, so a project saved before it
+    /// existed loads and saves unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attenuation_db: Option<Vec<F64>>,
 }
 
 impl Spectrum {
@@ -210,6 +220,7 @@ impl Spectrum {
             global_db: F64::new(global_db),
             shape,
             library: None,
+            attenuation_db: None,
         }
     }
 

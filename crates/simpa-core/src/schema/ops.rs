@@ -101,6 +101,14 @@ pub struct BandData {
     /// library is empty.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub spectra: Vec<(SpectrumId, Vec<F64>)>,
+    /// Parity M46: the attenuations of the sources that have one, in project order. Not written
+    /// while none has.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_attenuations: Vec<(SourceId, Vec<F64>)>,
+    /// Parity M46: the attenuations of the receivers' background noise that have one, in project
+    /// order. Not written while none has.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub noise_attenuations: Vec<(PointReceiverId, Vec<F64>)>,
 }
 
 /// One edit. [`Op::apply`] returns its exact inverse.
@@ -643,7 +651,41 @@ fn check_band_data(p: &Project, data: &BandData, n: usize) -> Result<()> {
     for (id, levels) in &data.spectra {
         count(format!("library spectrum {id}"), levels.len())?;
     }
+    let attenuated: Vec<SourceId> = p
+        .sources
+        .iter()
+        .filter(|s| s.power.attenuation_db.is_some())
+        .map(|s| s.id)
+        .collect();
+    same_ids(
+        "attenuated sources",
+        attenuated.into_iter(),
+        &data.source_attenuations,
+    )?;
+    for (id, a) in &data.source_attenuations {
+        count(format!("source {id} attenuation"), a.len())?;
+    }
+    let attenuated: Vec<PointReceiverId> = p
+        .point_receivers
+        .iter()
+        .filter(|r| noise_attenuation(r).is_some())
+        .map(|r| r.id)
+        .collect();
+    same_ids(
+        "attenuated receivers",
+        attenuated.into_iter(),
+        &data.noise_attenuations,
+    )?;
+    for (id, a) in &data.noise_attenuations {
+        count(format!("receiver {id} noise attenuation"), a.len())?;
+    }
     Ok(())
+}
+
+fn noise_attenuation(r: &PointReceiver) -> Option<&Vec<F64>> {
+    r.background_noise
+        .as_ref()
+        .and_then(|s| s.attenuation_db.as_ref())
 }
 
 /// Swaps the project's per-band arrays with `data` (already checked) and returns the old ones.
@@ -684,6 +726,21 @@ fn swap_band_data(p: &mut Project, mut data: BandData) -> BandData {
     );
     for (s, (_, levels)) in p.spectra.iter_mut().zip(&mut data.spectra) {
         swap(&mut s.levels_db, levels);
+    }
+    let attenuated = p
+        .sources
+        .iter_mut()
+        .filter_map(|s| s.power.attenuation_db.as_mut());
+    for (mine, (_, theirs)) in attenuated.zip(&mut data.source_attenuations) {
+        swap(mine, theirs);
+    }
+    let attenuated = p
+        .point_receivers
+        .iter_mut()
+        .filter_map(|r| r.background_noise.as_mut())
+        .filter_map(|n| n.attenuation_db.as_mut());
+    for (mine, (_, theirs)) in attenuated.zip(&mut data.noise_attenuations) {
+        swap(mine, theirs);
     }
     data
 }
@@ -738,6 +795,16 @@ impl Project {
                 .iter()
                 .map(|s| (s.id, s.levels_db.clone()))
                 .collect(),
+            source_attenuations: self
+                .sources
+                .iter()
+                .filter_map(|s| s.power.attenuation_db.clone().map(|a| (s.id, a)))
+                .collect(),
+            noise_attenuations: self
+                .point_receivers
+                .iter()
+                .filter_map(|r| noise_attenuation(r).cloned().map(|a| (r.id, a)))
+                .collect(),
         }
     }
 
@@ -788,6 +855,12 @@ impl Project {
         data.tcr_bands_computed = map(&pick, &data.tcr_bands_computed);
         for (_, levels) in &mut data.spectra {
             *levels = map(&pick, levels);
+        }
+        for (_, a) in &mut data.source_attenuations {
+            *a = map(&pick, a);
+        }
+        for (_, a) in &mut data.noise_attenuations {
+            *a = map(&pick, a);
         }
         Some(Op::SetBands { bands, data })
     }

@@ -211,7 +211,12 @@ fn a_band_change_keeps_every_link() {
         .apply(&mut p)
         .unwrap();
     let s0 = serde_json::to_value(&original.sources[0]).unwrap();
-    op(serde_json::json!({ "op": "replace_source", "source": linked(&s0, &e) }))
+    // Linked and attenuated (parity M46): 3 dB off the lowest band.
+    let mut s = linked(&s0, &e);
+    let mut att = vec![0.0; n];
+    att[0] = 3.0;
+    s["power"]["attenuation_db"] = Value::from(att);
+    op(serde_json::json!({ "op": "replace_source", "source": s }))
         .apply(&mut p)
         .unwrap();
     let thirds = BandSet::range(BandKind::ThirdOctave, 100, 5000).unwrap();

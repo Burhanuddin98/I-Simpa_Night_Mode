@@ -1340,3 +1340,88 @@ fn a_reflection_law_edited_in_one_band_moves_only_that_bands_loi() {
     assert!(checked >= 10, "{checked}");
     println!("{checked} materials edited in one band, only that band's loi moved");
 }
+
+// ---- M46: a source's band attenuated, and set back --------------------------------------------
+//
+// The Sources step's spectrum table sends the source back whole with `power.attenuation_db` set
+// (`withBandAttenuation`, `emission.ts`), or without it once every band is back at 0. Upstream
+// writes a source's band as its Lw minus its attenuation (`e_data_row_ext_bandefreq.h:114-117`):
+// config.xml must move by exactly that source's band `db`, by the attenuation; an attenuation of
+// 0 in every band must write what none writes; and set back, the input is byte-identical.
+
+/// The line and `db` of band `band` of the `<source` element named `name`.
+fn source_band_db(xml: &str, name: &str, band: usize) -> (usize, f64) {
+    let lines: Vec<&str> = xml.lines().collect();
+    let named = format!(" name=\"{name}\"");
+    let at = lines
+        .iter()
+        .position(|l| l.trim_start().starts_with("<source ") && l.contains(&named))
+        .unwrap_or_else(|| panic!("source {name} is written"));
+    let line = at + 1 + band;
+    let text = lines[line];
+    let db = text
+        .split(" db=\"")
+        .nth(1)
+        .and_then(|r| r.split('"').next())
+        .unwrap_or_else(|| panic!("no db in {text}"));
+    (line, db.parse().unwrap())
+}
+
+#[test]
+fn a_source_band_attenuated_moves_only_that_bands_db() {
+    let mut checked = 0;
+    for (name, original) in fixtures() {
+        let configs = both_configs(&original);
+        let n = original.bands.len();
+        let band = n / 2;
+        // The first enabled source: the k-th source written.
+        let Some(k) = original.sources.iter().position(|s| s.enabled) else {
+            continue;
+        };
+        let item = serde_json::to_value(&original.sources[k]).unwrap();
+        assert!(item["power"].get("attenuation_db").is_none(), "{name}");
+
+        // 0 dB in every band, spelled out: the bytes of no attenuation.
+        let mut zeros = item.clone();
+        zeros["power"]["attenuation_db"] = Value::from(vec![0.0; n]);
+        let mut p = original.clone();
+        replace_op("replace_source", "source", zeros)
+            .apply(&mut p)
+            .unwrap();
+        assert_eq!(both_configs(&p), configs, "{name}: 0 dB everywhere");
+
+        let mut att = vec![0.0; n];
+        att[band] = 6.0;
+        let mut edited = item.clone();
+        edited["power"]["attenuation_db"] = Value::from(att);
+        let mut p = original.clone();
+        let undo = replace_op("replace_source", "source", edited)
+            .apply(&mut p)
+            .unwrap();
+        let after = both_configs(&p);
+        let source = original.sources[k].name.as_str();
+        for (i, solver) in [SolverKind::Spps, SolverKind::Tcr].into_iter().enumerate() {
+            let (line, was) = source_band_db(&configs[i], source, band);
+            let (_, now) = source_band_db(&after[i], source, band);
+            assert!(
+                (was - 6.0 - now).abs() < 1e-4,
+                "{name} {solver:?}: {was} dB less 6 dB is {now} dB"
+            );
+            let (a, b): (Vec<&str>, Vec<&str>) =
+                (after[i].lines().collect(), configs[i].lines().collect());
+            assert_eq!(a.len(), b.len(), "{name} {solver:?}");
+            let moved: Vec<usize> = (0..a.len()).filter(|&j| a[j] != b[j]).collect();
+            assert_eq!(
+                moved,
+                vec![line],
+                "{name} {solver:?}: only that band's db moves"
+            );
+        }
+        undo.apply(&mut p).unwrap();
+        assert_eq!(p, original, "{name}: undone");
+        assert_eq!(both_configs(&p), configs, "{name}: undone, byte-identical");
+        checked += 1;
+    }
+    assert!(checked >= 10, "{checked}");
+    println!("{checked} sources attenuated in one band, only that band's db moved");
+}

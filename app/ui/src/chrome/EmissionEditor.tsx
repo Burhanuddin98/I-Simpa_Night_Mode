@@ -14,6 +14,13 @@
 // the entry's name and levels are edited there (`replace_spectrum`), and every source linked to
 // it follows, as upstream's sources follow their user spectrum. Unlink keeps the levels; Delete
 // removes an entry no other source uses.
+//
+// Parity M18 and M46: the power is upstream's spectrum table (`generic_element/e_property_freq.cpp`):
+// a row per band with dB (what the solver gets), dB(A) (dB plus IEC 61672-1's A-weighting),
+// the band's attenuation and Lw (the spectrum's own level), and a Global row of energetic sums
+// (`[data-part="global-row"]`). Typing a Global dB, dB(A) or Lw moves every band alike; a Global
+// attenuation moves every band's attenuation; a band's dB or dB(A) makes the spectrum typed per
+// band; a band's attenuation keeps a linked source linked. The library entry takes dB(A) too.
 import { useEffect, useState } from 'react';
 import * as actions from '../actions';
 import type { SceneState, Source, UiIssue, UserSpectrum } from '../bindings/ipc';
@@ -25,15 +32,22 @@ import {
   bandLevels,
   DIRECTIVITIES,
   entryFrom,
+  entryTable,
   entryUsers,
+  entryWithBandDba,
+  entryWithGlobal,
   entryWithLevel,
   linkedTo,
   powerFor,
   powerKey,
   powerOptions,
+  spectrumTable,
   unlinked,
-  withBandLevel,
+  withBandAttenuation,
+  withBandDb,
+  withBandDba,
   withDirectivity,
+  withGlobal,
 } from './emission';
 import { bandLabel } from '../features/materials/bands';
 import { AXES, exact } from './sceneModel';
@@ -55,6 +69,9 @@ function notANumber(text: string, id: string, field: string): UiIssue {
 const now = (id: string) => sceneStore.get()?.view.sources.find((s) => s.id === id);
 /** The project's spectrum library as it is now. */
 const entries = () => sceneStore.get()?.view.spectra ?? [];
+
+/** A level as the table shows it: to 0.1 dB. */
+const r1 = (v: number) => String(Math.round(v * 10) / 10);
 
 /** A refusal made here, in words, filed under `field` of source `id`. */
 function said(id: string, field: string, code: string, message: string): UiIssue {
@@ -99,19 +116,20 @@ export function EmissionEditor({ scene, source }: { scene: SceneState; source: S
     return parsed.value;
   };
 
-  const commitGlobal = async (text: string) => {
-    const v = number('power.global_db', text);
-    if (v === null) return false;
-    return replace('power', (s) => (Object.is(s.power.global_db, v) ? null : { ...s, power: { ...s.power, global_db: v } }));
-  };
-  const commitBand = (band: number) => async (text: string) => {
-    const v = number(`power.band.${band}`, text);
+  /** M18/M46: a number of the spectrum table typed in `field`, the power it gives committed. */
+  const commitPower = (field: string, change: (power: Source['power'], v: number) => Source['power'] | null) => async (text: string) => {
+    const v = number(field, text);
     if (v === null) return false;
     return replace('power', (s) => {
-      const power = withBandLevel(s.power, freqs, band, v);
+      const power = change(s.power, v);
       return power ? { ...s, power } : null;
     });
   };
+  const GLOBAL_FIELD = { lw: 'power.global_db', db: 'power.db', dba: 'power.dba', att: 'power.att' } as const;
+  const commitGlobal = (column: keyof typeof GLOBAL_FIELD) => commitPower(GLOBAL_FIELD[column], (p, v) => withGlobal(p, freqs, column, v));
+  const commitBand = (band: number) => commitPower(`power.band.${band}`, (p, v) => withBandDb(p, freqs, band, v));
+  const commitBandDba = (band: number) => commitPower(`power.dba.${band}`, (p, v) => withBandDba(p, freqs, band, v));
+  const commitBandAtt = (band: number) => commitPower(`power.att.${band}`, (p, v) => withBandAttenuation(p, freqs.length, band, v));
   const chooseSpectrum = (value: string) => {
     actions.fire(
       replace('power', (s) => {
@@ -154,14 +172,30 @@ export function EmissionEditor({ scene, source }: { scene: SceneState; source: S
     setLocalIssue('spectrum.name', null);
     return replaceEntry((e) => (e.name === name ? null : { ...e, name }));
   };
-  const commitEntryBand = (band: number) => async (text: string) => {
-    const v = number(`entry.band.${band}`, text);
+  /** M17/M18: a number of the library entry's table typed in `field`. */
+  const commitEntry = (field: string, change: (e: UserSpectrum, v: number) => { levels_db: readonly (number | string)[] } | null) => async (text: string) => {
+    const v = number(field, text);
     if (v === null) return false;
     return replaceEntry((e) => {
-      const next = entryWithLevel(e, band, v);
+      const next = change(e, v);
       return next ? { ...e, levels_db: [...next.levels_db] } : null;
     });
   };
+  const commitEntryBand = (band: number) => commitEntry(`entry.band.${band}`, (e, v) => entryWithLevel(e, band, v));
+  const commitEntryDba = (band: number) => commitEntry(`entry.dba.${band}`, (e, v) => entryWithBandDba(e, freqs, band, v));
+  const commitEntryGlobal = (column: 'db' | 'dba') => commitEntry(`entry.${column}`, (e, v) => entryWithGlobal(e, freqs, column, v));
+  /** One number cell of a table: a field committed on Enter or blur, outlined while refused. */
+  const cell = (field: string, label: string, value: string, commit: (text: string) => Promise<boolean>) => (
+    <CommitInput
+      field={field}
+      label={label}
+      className="mono"
+      value={value}
+      invalid={!!local[field]}
+      commit={commit}
+      onRevert={() => setLocalIssue(field, null)}
+    />
+  );
   const unlink = () => actions.fire(replace('power', (s) => (s.power.library ? { ...s, power: unlinked(s.power) } : null)));
   /** M17: the linked entry deleted, this source unlinked first, in one step; refused, in words,
    * while another source or a receiver uses it (the core refuses it too, `in_use`). */
@@ -205,6 +239,8 @@ export function EmissionEditor({ scene, source }: { scene: SceneState; source: S
   };
 
   const levels = bandLevels(source.power, freqs);
+  const table = spectrumTable(source.power, freqs);
+  const etable = (e: UserSpectrum) => entryTable(e, freqs);
   const user = scene.view.spectra;
   const key = powerKey(source.power, library);
   const options = powerOptions(library, user, key);
@@ -228,21 +264,6 @@ export function EmissionEditor({ scene, source }: { scene: SceneState; source: S
   return (
     <div className="props-section emission" data-input data-part="emission">
       <div className="label section-label">Emission</div>
-      <label className="field-row">
-        <span className="label">Sound power</span>
-        <span className="axis-field">
-          <CommitInput
-            field="power.global_db"
-            label="Sound power level, dB re 1 pW, over every band"
-            className="mono"
-            value={exact(source.power.global_db)}
-            invalid={powerRefused.length > 0 || !!local['power.global_db']}
-            commit={commitGlobal}
-            onRevert={() => setLocalIssue('power.global_db', null)}
-          />
-          <span className="unit">dB</span>
-        </span>
-      </label>
       <label className="field-row">
         <span className="label">Spectrum</span>
         <select
@@ -295,24 +316,38 @@ export function EmissionEditor({ scene, source }: { scene: SceneState; source: S
             Linked: {users.join(', ')}. A level changed here changes {users.length === 1 ? 'it' : 'every one'}.
           </div>
           <div
-            className="band-levels"
             data-part="entry-levels"
-            title="The library spectrum's level in each band, dB. A linked source keeps its own sound power and takes the shape of these levels."
+            title="The library spectrum's level in each band, dB, and A-weighted. A linked source keeps its own sound power and takes the shape of these levels."
           >
-            {entry.levels_db.map((l, i) => (
-              <label key={freqs[i] ?? i} className="band-level">
-                <span className="k">{bandLabel(freqs[i])}</span>
-                <CommitInput
-                  field={`entry.band.${i}`}
-                  label={`Library spectrum level at ${freqs[i]} Hz, dB`}
-                  className="mono"
-                  value={String(Math.round(Number(l) * 10) / 10)}
-                  invalid={!!local[`entry.band.${i}`]}
-                  commit={commitEntryBand(i)}
-                  onRevert={() => setLocalIssue(`entry.band.${i}`, null)}
-                />
-              </label>
-            ))}
+            <table className="spectrum-table">
+              <thead>
+                <tr>
+                  <th scope="col">Band</th>
+                  <th scope="col">dB</th>
+                  <th scope="col" title="dB plus the band's A-weighting (IEC 61672-1)">dB(A)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {etable(entry).bands.map((b, i) => (
+                  <tr key={freqs[i] ?? i}>
+                    <th scope="row">{bandLabel(freqs[i])}</th>
+                    <td>{cell(`entry.band.${i}`, `Library spectrum level at ${freqs[i]} Hz, dB`, r1(b.db), commitEntryBand(i))}</td>
+                    <td>{b.dba === null ? null : cell(`entry.dba.${i}`, `Library spectrum level at ${freqs[i]} Hz, dB(A)`, r1(b.dba), commitEntryDba(i))}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr data-part="entry-global-row">
+                  <th scope="row">Global</th>
+                  <td>{cell('entry.db', 'Library spectrum, every band summed, dB', r1(etable(entry).global.db), commitEntryGlobal('db'))}</td>
+                  <td>
+                    {etable(entry).global.dba === null
+                      ? null
+                      : cell('entry.dba', 'Library spectrum, every band summed, dB(A)', r1(etable(entry).global.dba as number), commitEntryGlobal('dba'))}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
           </div>
           <div className="entry-actions">
             <button type="button" className="small-button" data-action="spectrum-unlink" onClick={unlink} title="Keep these levels as the source's own, typed per band">
@@ -337,22 +372,50 @@ export function EmissionEditor({ scene, source }: { scene: SceneState; source: S
           </button>
         </div>
       )}
-      {levels && (
-        <div className="band-levels" data-part="band-levels" title="Each band's sound power level, dB re 1 pW. Typing one keeps the others and makes the spectrum 'Typed per band'.">
-          {levels.map((l, i) => (
-            <label key={freqs[i]} className="band-level">
-              <span className="k">{bandLabel(freqs[i])}</span>
-              <CommitInput
-                field={`power.band.${i}`}
-                label={`Sound power level at ${freqs[i]} Hz, dB`}
-                className="mono"
-                value={String(Math.round(l * 10) / 10)}
-                invalid={!!local[`power.band.${i}`]}
-                commit={commitBand(i)}
-                onRevert={() => setLocalIssue(`power.band.${i}`, null)}
-              />
-            </label>
-          ))}
+      {table && (
+        <div data-part="band-levels">
+          <div className="label spectrum-table-label">Sound power, dB re 1 pW</div>
+          <table className="spectrum-table" aria-label="Sound power per band">
+            <thead>
+              <tr>
+                <th scope="col">Band</th>
+                <th scope="col" title="What the solver gets: Lw less the attenuation. Typing one makes the spectrum typed per band.">
+                  dB
+                </th>
+                <th scope="col" title="dB plus the band's A-weighting (IEC 61672-1). Typing one sets the band's dB.">
+                  dB(A)
+                </th>
+                <th scope="col" title="Taken off Lw in this band; a linked source stays linked">
+                  Att.
+                </th>
+                <th scope="col" title="The spectrum's own level">
+                  Lw
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {table.bands.map((b, i) => (
+                <tr key={freqs[i]}>
+                  <th scope="row">{bandLabel(freqs[i])}</th>
+                  <td>{cell(`power.band.${i}`, `Sound power level at ${freqs[i]} Hz, dB`, r1(b.db), commitBand(i))}</td>
+                  <td>{b.dba === null ? null : cell(`power.dba.${i}`, `Sound power level at ${freqs[i]} Hz, dB(A)`, r1(b.dba), commitBandDba(i))}</td>
+                  <td>{cell(`power.att.${i}`, `Attenuation at ${freqs[i]} Hz, dB`, r1(b.att), commitBandAtt(i))}</td>
+                  <td className="ro" data-part="lw">
+                    {r1(b.lw)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr data-part="global-row">
+                <th scope="row">Global</th>
+                <td>{cell('power.db', 'Sound power, every band summed, dB', r1(table.global.db), commitGlobal('db'))}</td>
+                <td>{table.global.dba === null ? null : cell('power.dba', 'Sound power, every band summed, dB(A)', r1(table.global.dba), commitGlobal('dba'))}</td>
+                <td>{cell('power.att', 'Attenuation overall (Lw less dB), dB', r1(table.global.att), commitGlobal('att'))}</td>
+                <td>{cell('power.global_db', 'Sound power level Lw, dB re 1 pW, over every band', r1(Number(source.power.global_db)), commitGlobal('lw'))}</td>
+              </tr>
+            </tfoot>
+          </table>
         </div>
       )}
       <Issues refused={[...localPower, ...localEntry, ...powerRefused]} current={powerIssues} />

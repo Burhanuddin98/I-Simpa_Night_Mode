@@ -1653,3 +1653,54 @@ input.marker-colour:focus-visible {
 [data-part='box-room-dialog'] .issue {
   margin-top: 8px;
 }
+/* Parity M18/M46: the spectrum table, upstream's columns (dB, dB(A), attenuation, Lw) and its Global row. */
+.spectrum-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 12px;
+}
+.spectrum-table th,
+.spectrum-table td {
+  padding: 2px 3px;
+  text-align: left;
+  font-weight: 400;
+}
+.spectrum-table thead th {
+  font-size: 11px;
+  color: var(--text-3);
+}
+.spectrum-table tbody th,
+.spectrum-table tfoot th {
+  width: 44px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-3);
+}
+.spectrum-table input {
+  width: 100%;
+  min-width: 0;
+  height: 24px;
+  padding: 0 4px;
+  font-size: 12px;
+  box-sizing: border-box;
+}
+.spectrum-table .ro {
+  font-family: var(--mono);
+  color: var(--text-2);
+}
+.spectrum-table tfoot tr {
+  border-top: 1px solid var(--edge);
+}
+.spectrum-table tfoot th {
+  color: var(--text);
+  font-family: var(--sans);
+  font-weight: 600;
+}
+.spectrum-table tfoot td,
+.spectrum-table tfoot th {
+  padding-top: 6px;
+}
+.spectrum-table-label {
+  margin-bottom: 4px;
+}

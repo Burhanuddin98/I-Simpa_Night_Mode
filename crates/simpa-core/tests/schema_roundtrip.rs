@@ -367,6 +367,7 @@ fn spectrum(rng: &mut Rng, n: usize) -> Spectrum {
         global_db: rng.f64(0.0, 120.0),
         shape,
         library: None,
+        attenuation_db: None,
     }
 }
 

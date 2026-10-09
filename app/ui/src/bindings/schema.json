@@ -135,6 +135,66 @@
           },
           "type": "array"
         },
+        "noise_attenuations": {
+          "description": "Parity M46: the attenuations of the receivers' background noise that have one, in project\norder. Not written while none has.",
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "items": {
+                  "description": "A float. Finite values are numbers; non-finite values are strings.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "type": "array"
+              }
+            ],
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "source_attenuations": {
+          "description": "Parity M46: the attenuations of the sources that have one, in project order. Not written\nwhile none has.",
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "items": {
+                  "description": "A float. Finite values are numbers; non-finite values are strings.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "type": "array"
+              }
+            ],
+            "type": "array"
+          },
+          "type": "array"
+        },
         "source_shapes": {
           "items": {
             "maxItems": 2,
@@ -2724,6 +2784,25 @@
       "additionalProperties": false,
       "description": "A level spectrum: a global level spread over the project's bands by a shape.\n\nUsed for source sound power (dB re 1 pW) and receiver background noise.",
       "properties": {
+        "attenuation_db": {
+          "description": "Parity M46: an attenuation per band, in dB, taken off each band level\n([`Spectrum::band_levels_db`], the spectrum's own level, upstream's Lw) before it is\nwritten: config.xml's `bfreq@db` is the level minus the band's attenuation, as upstream's\nGUI makes a source's dB its Lw minus its attenuation (`e_data_row_ext_bandefreq.h:114-117`).\nIt lets a source linked to a library entry be attenuated band by band and stay linked.\n`None` is 0 dB in every band, and is what an attenuation set back to 0 everywhere is\nstored as. Optional in the file and not written when `None`, so a project saved before it\nexisted loads and saves unchanged.",
+          "items": {
+            "description": "A float. Finite values are numbers; non-finite values are strings.",
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                "type": "string"
+              }
+            ]
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "global_db": {
           "description": "The energetic sum over the project's bands, in dB.",
           "oneOf": [

@@ -10,6 +10,7 @@
 // with the band levels as its relative levels and their energy sum as the global level, so the
 // other bands keep their levels and the typed one is written as typed.
 import type { Directivity, Source, SpectrumShape } from '../bindings/ipc.ts';
+import { aWeightDb } from './aweight.ts';
 
 export type F64 = number | string;
 
@@ -139,12 +140,13 @@ export function powerOptions(
 
 /** `power` without a library link: the shape and global level kept. */
 export function unlinked(power: Power): Power {
-  return { global_db: power.global_db, shape: power.shape };
+  const { library: _, ...rest } = power;
+  return rest;
 }
 
 /** `power` linked to `entry`: the entry's levels as its shape, its own global level kept. */
 export function linkedTo(power: Power, entry: UserSpectrumLike): Power {
-  return { global_db: power.global_db, shape: { kind: 'custom', relative_db: [...entry.levels_db] }, library: entry.id };
+  return { ...power, shape: { kind: 'custom', relative_db: [...entry.levels_db] }, library: entry.id };
 }
 
 /** The power a choice in the select gives, or null when it is no change or not a choice: a library
@@ -161,7 +163,7 @@ export function powerFor(
     return entry ? linkedTo(power, entry) : null;
   }
   const shape = shapeFor(value, reference);
-  return shape ? { global_db: power.global_db, shape } : null;
+  return shape ? { ...unlinked(power), shape } : null;
 }
 
 /** A new library entry holding `power`'s band levels on the bands, named `name`; null when the
@@ -213,4 +215,121 @@ export function withDirectivity(current: Directivity, kind: string): Directivity
     default:
       return null;
   }
+}
+
+// ---- Parity M18 and M46: the spectrum editor's columns and its Global row ----------------------
+//
+// Upstream's source spectrum is a table (`generic_element/e_property_freq.cpp`,
+// `e_data_row_ext_bandefreq.h`): per band Lw (the spectrum's own level), an attenuation, dB = Lw -
+// attenuation (what config.xml writes) and dB(A) = dB + the band's A-weighting
+// (`e_data_row_bandefreq.h:128-133`); and a Global row whose dB, dB(A) and Lw are each the
+// energetic sum of the bands (`CalcNiveauSonoreGlobal`, `e_property_freq.cpp:256-272`). Typing a
+// global moves every band by the same amount (`SetGlobalLevel`, `:331-358`). Here the Global row's
+// attenuation is Lw - dB, the overall attenuation (upstream's own reading of it when it upgrades an
+// old project, `e_property_freq.cpp:103`); upstream's energetic sum of the band attenuations reads
+// 8.5 dB for seven bands of 0 dB, which tells a user nothing.
+
+/** One row of the table, in dB. `dba` is null when a band has no A-weighting in the table. */
+export interface LevelRow {
+  lw: number;
+  att: number;
+  db: number;
+  dba: number | null;
+}
+
+/** Each band's attenuation, in dB: the stored ones, or 0 in every band. */
+export function attenuations(power: Power, n: number): number[] {
+  const a = power.attenuation_db;
+  return a && a.length === n ? a.map(num) : Array.from({ length: n }, () => 0);
+}
+
+/** The table of a power on the bands: a row per band and the Global row; null when the shape does
+ * not fit the bands. */
+export function spectrumTable(power: Power, frequenciesHz: readonly number[]): { bands: LevelRow[]; global: LevelRow } | null {
+  const lw = bandLevels(power, frequenciesHz);
+  if (!lw) return null;
+  const att = attenuations(power, lw.length);
+  const db = lw.map((l, i) => l - att[i]);
+  const w = frequenciesHz.map(aWeightDb);
+  const dba = w.every((x) => x !== null) ? db.map((d, i) => d + (w[i] as number)) : null;
+  const bands = lw.map((l, i) => ({ lw: l, att: att[i], db: db[i], dba: dba ? dba[i] : null }));
+  const gLw = energySum(lw);
+  const gDb = energySum(db);
+  return { bands, global: { lw: gLw, att: gLw - gDb, db: gDb, dba: dba ? energySum(dba) : null } };
+}
+
+/** `power` with these attenuations, stored as none when every band is 0, so a project whose
+ * attenuations are set back to 0 is the project it was. */
+function withAttenuation(power: Power, att: readonly number[]): Power {
+  const { attenuation_db: _, ...rest } = power;
+  return att.every((a) => a === 0) ? rest : { ...rest, attenuation_db: [...att] };
+}
+
+/** The power with its Global `column` typed as `value` dB: every band moves by the same amount, as
+ * upstream's `SetGlobalLevel` does. dB, dB(A) and Lw move the spectrum's own level (a linked source
+ * stays linked); the attenuation moves every band's attenuation. Null when nothing changes. */
+export function withGlobal(power: Power, frequenciesHz: readonly number[], column: 'db' | 'dba' | 'att' | 'lw', value: number): Power | null {
+  const t = spectrumTable(power, frequenciesHz);
+  if (!t) return null;
+  if (column === 'lw') return Object.is(num(power.global_db), value) ? null : { ...power, global_db: value };
+  const current = t.global[column];
+  if (current === null) return null;
+  const delta = value - current;
+  if (delta === 0) return null;
+  if (column === 'att') return withAttenuation(power, t.bands.map((b) => b.att + delta));
+  return { ...power, global_db: num(power.global_db) + delta };
+}
+
+/** The power with band `band`'s attenuation at `value` dB, every other band kept; a linked source
+ * stays linked (upstream attenuates a user spectrum band by band, `e_data_row_ext_bandefreq.h`).
+ * Null when nothing changes. */
+export function withBandAttenuation(power: Power, n: number, band: number, value: number): Power | null {
+  const att = attenuations(power, n);
+  if (band < 0 || band >= n || Object.is(att[band], value)) return null;
+  att[band] = value;
+  return withAttenuation(power, att);
+}
+
+/** The power with band `band`'s dB (what the solver gets) typed as `value`: its Lw becomes `value`
+ * plus its attenuation, the other bands kept, typed per band (a link to the library ends). */
+export function withBandDb(power: Power, frequenciesHz: readonly number[], band: number, value: number): Power | null {
+  const att = attenuations(power, frequenciesHz.length);
+  if (band < 0 || band >= att.length) return null;
+  const next = withBandLevel(power, frequenciesHz, band, value + att[band]);
+  return next ? withAttenuation(next, att) : null;
+}
+
+/** The power with band `band`'s dB(A) typed as `value`: its dB is `value` minus the band's
+ * A-weighting. Null for a band with no A-weighting. */
+export function withBandDba(power: Power, frequenciesHz: readonly number[], band: number, value: number): Power | null {
+  const w = aWeightDb(frequenciesHz[band]);
+  return w === null ? null : withBandDb(power, frequenciesHz, band, value - w);
+}
+
+/** A library entry's table: dB as stored, dB(A) per band, and the Global row (energetic sums). */
+export function entryTable(
+  entry: UserSpectrumLike,
+  frequenciesHz: readonly number[],
+): { bands: { db: number; dba: number | null }[]; global: { db: number; dba: number | null } } {
+  const db = entry.levels_db.map(num);
+  const w = frequenciesHz.map(aWeightDb);
+  const dba = w.length === db.length && w.every((x) => x !== null) ? db.map((d, i) => d + (w[i] as number)) : null;
+  return {
+    bands: db.map((d, i) => ({ db: d, dba: dba ? dba[i] : null })),
+    global: { db: energySum(db), dba: dba ? energySum(dba) : null },
+  };
+}
+
+/** A library entry with its Global dB or dB(A) typed as `value`: every band moves by the same amount. */
+export function entryWithGlobal(entry: UserSpectrumLike, frequenciesHz: readonly number[], column: 'db' | 'dba', value: number): UserSpectrumLike | null {
+  const current = entryTable(entry, frequenciesHz).global[column];
+  if (current === null || current === value) return null;
+  const delta = value - current;
+  return { ...entry, levels_db: entry.levels_db.map((l) => num(l) + delta) };
+}
+
+/** A library entry with band `band`'s dB(A) typed as `value`. */
+export function entryWithBandDba(entry: UserSpectrumLike, frequenciesHz: readonly number[], band: number, value: number): UserSpectrumLike | null {
+  const w = aWeightDb(frequenciesHz[band]);
+  return w === null ? null : entryWithLevel(entry, band, value - w);
 }

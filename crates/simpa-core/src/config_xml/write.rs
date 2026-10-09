@@ -644,7 +644,17 @@ pub(crate) fn transmission_loss_written(loss_db: f64, absorption: f64) -> Option
 /// unit in the last place: it does in 2 of tutorial 1's 27 background-noise bands. Every other
 /// spectrum, and every spectrum on another band set, is [`Spectrum::band_levels_db`]. `None` when
 /// the spectrum does not fit the band set.
+///
+/// Parity M46: a band's attenuation ([`Spectrum::attenuation_db`]) is taken off its level, in the
+/// precision the level is computed in (`f32` for upstream's reference spectra, as upstream's GUI
+/// subtracts it, `e_data_row_ext_bandefreq.h:114-117`). With none, nothing is subtracted, so a
+/// spectrum without one writes exactly what it wrote before attenuations existed.
 pub fn band_levels_written(spectrum: &Spectrum, bands: &BandSet) -> Option<Vec<f64>> {
+    let attenuation = match &spectrum.attenuation_db {
+        Some(a) if a.len() != bands.len() => return None,
+        Some(a) => Some(a),
+        None => None,
+    };
     let reference_id = match spectrum.shape {
         SpectrumShape::White => Some(0),
         SpectrumShape::Pink => Some(1),
@@ -657,10 +667,19 @@ pub fn band_levels_written(spectrum: &Spectrum, bands: &BandSet) -> Option<Vec<f
         Some(r) => Some(
             upstream_band_levels(&r.band_db, spectrum.global_db.get() as f32)
                 .iter()
-                .map(|&l| widen_f32(l))
+                .enumerate()
+                .map(|(i, &l)| match attenuation {
+                    Some(a) => widen_f32(l - a[i].get() as f32),
+                    None => widen_f32(l),
+                })
                 .collect(),
         ),
-        None => spectrum.band_levels_db(bands),
+        None => spectrum
+            .band_levels_db(bands)
+            .map(|levels| match attenuation {
+                Some(a) => levels.iter().zip(a).map(|(l, a)| l - a.get()).collect(),
+                None => levels,
+            }),
     }
 }
 
