@@ -19,9 +19,10 @@ simpa-core = { path = "../../crates/simpa-core" }
 tauri = { version = "2.11.6", features = [] }
 tauri-plugin-dialog = "2.7.3"
 
-# R3: a run goes to the Recycle Bin through the shell's IFileOperation, watched item by item
-# (recycle.rs). The version Tauri's webview already brings in, so nothing new is downloaded.
+# R3: a run goes to the Recycle Bin through the shell's IFileOperation, watched item by item, after
+# the drive's own bin settings are read (recycle.rs). The version Tauri's webview already brings
+# in, so nothing new is downloaded.
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Shell"] }
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_Registry", "Win32_UI_Shell"] }
 # The `implement` macro names `windows_core` directly.
 windows-core = "0.61"

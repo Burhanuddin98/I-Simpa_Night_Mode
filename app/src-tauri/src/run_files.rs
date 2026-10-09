@@ -158,12 +158,18 @@ pub fn delete(root: &Path, project: &Path, active: Option<&str>, run: &str) -> C
 fn recycle(dir: &Path) -> CmdResult<()> {
     match crate::recycle::to_recycle_bin(dir) {
         Ok(()) => Ok(()),
-        Err(crate::recycle::Refusal::NotRecyclable) => Err(CmdError::new(
+        Err(crate::recycle::Refusal::NotRecyclable(why)) => Err(CmdError::new(
             "RUN_NO_RECYCLE_BIN",
             format!(
-                "nothing was deleted: Windows cannot put {} in the Recycle Bin (the run is larger \
-                 than the bin holds, the bin is turned off, or the drive has none), so it is left \
-                 where it is; delete it by hand if it should go",
+                "nothing was deleted: Windows cannot put {} in the Recycle Bin ({why}), so it is \
+                 left where it is; delete it by hand if it should go",
+                dir.display()
+            ),
+        )),
+        Err(crate::recycle::Refusal::Declined) => Err(CmdError::new(
+            "RUN_DELETE_DECLINED",
+            format!(
+                "nothing was deleted: Windows asked whether to delete {} and the answer was No",
                 dir.display()
             ),
         )),
