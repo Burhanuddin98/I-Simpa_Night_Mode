@@ -70,6 +70,8 @@ import {
 } from './model';
 import './acoustics.css';
 import { CopyTable } from './CopyTable';
+import { AxesEditor } from './AxesEditor';
+import { type HandAxes, stepTicks } from './chartAxes';
 import { N, S } from './Marked';
 import { auralHookOpen, auralHookSave, auralHookView, AuralWindow } from './AuralWindow';
 import { responseHookView, ResponseWindow } from './ResponseWindow';
@@ -238,8 +240,22 @@ function AdviceCardView({ cards, solver, conflicts }: { cards: AdviceCard[]; sol
 const ZOOM_CURSOR: uPlot.Cursor = { x: false, y: false, points: { show: false }, drag: { x: true, y: true, uni: 24, setScale: true } };
 const ZOOM_HINT = 'Drag to zoom (sideways, up and down, or a box); double-click for the whole chart';
 
+/** R72: `opts` on the axes set by hand: a typed range replaces the chart's own, a typed spacing
+ * puts the value axis's ticks at its multiples. The values drawn are the same. */
+function withHand(opts: Omit<uPlot.Options, 'width' | 'height'>, hand: HandAxes | undefined): Omit<uPlot.Options, 'width' | 'height'> {
+  if (!hand || (!hand.x && !hand.y && hand.yStep === undefined)) return opts;
+  const scales = { ...opts.scales };
+  if (hand.x) scales.x = { ...scales.x, range: [hand.x[0], hand.x[1]] };
+  if (hand.y) scales.y = { ...scales.y, range: [hand.y[0], hand.y[1]] };
+  const axes = [...(opts.axes ?? [])];
+  const step = hand.yStep;
+  if (step !== undefined && axes[1]) axes[1] = { ...axes[1], splits: (_u: uPlot, _i: number, min: number, max: number) => stepTicks(min, max, step) };
+  return { ...opts, scales, axes };
+}
+
 /** A uPlot chart over `data`, redrawn when `data` changes; sized to its box. */
-function Chart({ opts, data, part, hidden = [] }: { opts: Omit<uPlot.Options, 'width' | 'height'>; data: uPlot.AlignedData; part: string; hidden?: readonly number[] }) {
+function Chart({ opts: own, data, part, hidden = [], hand }: { opts: Omit<uPlot.Options, 'width' | 'height'>; data: uPlot.AlignedData; part: string; hidden?: readonly number[]; hand?: HandAxes }) {
+  const opts = useMemo(() => withHand(own, hand), [own, hand]);
   const box = useRef<HTMLDivElement>(null);
   const plot = useRef<uPlot | null>(null);
   const hiddenNow = useRef(hidden);
@@ -269,6 +285,18 @@ function Chart({ opts, data, part, hidden = [] }: { opts: Omit<uPlot.Options, 'w
     if (plot.current) show(plot.current, hidden);
   }, [hidden]);
   return <div className="ac-chart" data-part={part} ref={box} title={ZOOM_HINT} />;
+}
+
+/** R72: the charts whose axes can be set by hand. */
+type ChartKey = 'rt' | 'spectrum' | 'decay';
+
+/** R72: opens a chart's axes editor; marked while the axes are set by hand. */
+function AxesButton({ open, set, onClick }: { open: boolean; set: boolean; onClick: () => void }) {
+  return (
+    <button type="button" className={`small-button ac-copy${set ? ' ac-axes-set' : ''}`} data-action="axes" aria-pressed={open} title={set ? 'The axes are set by hand: change them, or Auto' : 'Set the axes by hand: range and tick spacing'} onClick={onClick}>
+      {set ? 'Axes (by hand)' : 'Axes'}
+    </button>
+  );
 }
 
 /** R62: a legend key that switches its series on and off (`aria-pressed`: drawn). */
@@ -335,7 +363,7 @@ function rangeWhiskers(series: readonly Series[], colour: (param: string) => str
 /** RT per band against the DIN target: the shown reverberation times, each with its range as a
  * whisker (`rtSeries`: the tables' filter, so a value the tables do not show is a gap), the target
  * line, and a shaded fifth either side of it. */
-function RtChart({ report, series, target, off }: { report: NonNullable<ReportView['report']>; series: Series[]; target: number | null; off: ReadonlySet<string> }) {
+function RtChart({ report, series, target, off, hand }: { report: NonNullable<ReportView['report']>; series: Series[]; target: number | null; off: ReadonlySet<string>; hand: HandAxes }) {
   const { opts, data } = useMemo(() => {
     const x = report.bands_hz.map((_, i) => i);
     const t = target ?? null;
@@ -366,7 +394,7 @@ function RtChart({ report, series, target, off }: { report: NonNullable<ReportVi
     () => [...series.flatMap((s, i) => (off.has(s.param) ? [i + 1] : [])), ...(off.has(TARGET_KEY) ? [n + 1, n + 2, n + 3] : [])],
     [series, off, n],
   );
-  return <Chart opts={opts} data={data} part="rt-chart" hidden={hidden} />;
+  return <Chart opts={opts} data={data} part="rt-chart" hidden={hidden} hand={hand} />;
 }
 
 /** R62: the RT legend's key for the DIN target and its shading. */
@@ -374,7 +402,7 @@ const TARGET_KEY = 'din-target';
 
 /** R9: a receiver's spectrum, SPL per band as bars (`spectrumSeries`: the receivers table's cells,
  * so a level the table does not show is a gap), each with its range as a whisker. */
-function SpectrumChart({ report, series }: { report: NonNullable<ReportView['report']>; series: Series[] }) {
+function SpectrumChart({ report, series, hand }: { report: NonNullable<ReportView['report']>; series: Series[]; hand: HandAxes }) {
   const { opts, data } = useMemo(() => {
     const x = report.bands_hz.map((_, i) => i);
     const data: uPlot.AlignedData = [x, ...series.map((s) => s.values)];
@@ -403,10 +431,10 @@ function SpectrumChart({ report, series }: { report: NonNullable<ReportView['rep
     };
     return { opts, data };
   }, [report, series]);
-  return <Chart opts={opts} data={data} part="spectrum-chart" />;
+  return <Chart opts={opts} data={data} part="spectrum-chart" hand={hand} />;
 }
 
-function DecayChart({ curve }: { curve: { t: number[]; db: number[] } }) {
+function DecayChart({ curve, hand }: { curve: { t: number[]; db: number[] }; hand: HandAxes }) {
   const { opts, data } = useMemo(() => {
     const data: uPlot.AlignedData = [curve.t, curve.db];
     const opts: Omit<uPlot.Options, 'width' | 'height'> = {
@@ -417,7 +445,7 @@ function DecayChart({ curve }: { curve: { t: number[]; db: number[] } }) {
     };
     return { opts, data };
   }, [curve]);
-  return <Chart opts={opts} data={data} part="decay-chart" />;
+  return <Chart opts={opts} data={data} part="decay-chart" hand={hand} />;
 }
 
 /** What the tab shows, for the `acousticsView` test hook; null while the tab is not mounted. */
@@ -479,6 +507,12 @@ export function AcousticsPane() {
   const [group, setGroup] = useState('A3');
   const [error, setError] = useState<{ run: string; code: string } | null>(null);
   const [responseOpen, setResponseOpen] = useState(false);
+  // R72: each chart's axes set by hand, and which chart's editor is open.
+  const [hand, setHand] = useState<Record<ChartKey, HandAxes>>({ rt: {}, spectrum: {}, decay: {} });
+  const [axesOpen, setAxesOpen] = useState<ChartKey | null>(null);
+  const axesButton = (k: ChartKey) => <AxesButton open={axesOpen === k} set={!!(hand[k].x || hand[k].y || hand[k].yStep !== undefined)} onClick={() => setAxesOpen((o) => (o === k ? null : k))} />;
+  const axesEditor = (k: ChartKey, yName: string, xName?: string) =>
+    axesOpen === k ? <AxesEditor key={k} x={!!xName} xName={xName ?? ''} yName={yName} value={hand[k]} onChange={(a) => setHand((h) => ({ ...h, [k]: a }))} /> : null;
   // R62: the RT legend's keys switched off (parameters, and the DIN target).
   const [rtOff, setRtOff] = useState<ReadonlySet<string>>(new Set());
   const toggleRt = (key: string) =>
@@ -517,6 +551,7 @@ export function AcousticsPane() {
   const src: SourceSel = !srcNames.length ? null : source === undefined || (source !== null && !srcNames.includes(source)) ? srcNames[0] : source;
   const series = useMemo(() => (report ? rtSeries(report, r, src) : []), [report, r, src]);
   const spectrum = useMemo(() => (report ? spectrumSeries(report, r, src) : []), [report, r, src]);
+  const spectrumShown = spectrum.some((s) => s.values.some((v) => v !== null));
   const target = report ? dinTarget(report, group) : null;
   const curve = useMemo(() => (report ? decay(report, r, b, src) : null), [report, r, b, src]);
 
@@ -633,6 +668,7 @@ export function AcousticsPane() {
               </select>
             </label>
             {series.length ? <CopyTable part="rt-table" what="reverberation time" /> : null}
+            {series.length ? axesButton('rt') : null}
           </div>
           <div className="ac-legend">
             {series.map((s) => (
@@ -649,6 +685,7 @@ export function AcousticsPane() {
             </SeriesKey>
             <span className="ac-key">whiskers: each value's range</span>
           </div>
+          {series.length ? axesEditor('rt', 'Time, s') : null}
           <div className="ac-din" data-part="din-target">
             <label className="ac-control">
               <span data-label="standard">DIN 18041</span>
@@ -670,7 +707,7 @@ export function AcousticsPane() {
             )}
           </div>
           {d?.note ? <S s={d.note} className="ac-note block" /> : null}
-          {series.length ? <RtChart report={report} series={series} target={target} off={rtOff} /> : <div className="ac-none">No reverberation time is shown for this run.</div>}
+          {series.length ? <RtChart report={report} series={series} target={target} off={rtOff} hand={hand.rt} /> : <div className="ac-none">No reverberation time is shown for this run.</div>}
           {series.length ? (
             <table className="ac-table" data-part="rt-table">
               <thead>
@@ -770,8 +807,9 @@ export function AcousticsPane() {
                 ))}
               </select>
             </label>
+            {spectrumShown ? axesButton('spectrum') : null}
           </div>
-          {spectrum.length && spectrum.some((s) => s.values.some((v) => v !== null)) ? (
+          {spectrumShown ? (
             <>
               {/* Only a shown parameter is named (gate (b)): the key exists only with the chart. */}
               <div className="ac-legend">
@@ -785,7 +823,8 @@ export function AcousticsPane() {
                 ))}
                 <span className="ac-key">per band, as the Receivers table shows it; whiskers: each value's range</span>
               </div>
-              <SpectrumChart report={report} series={spectrum} />
+              {axesEditor('spectrum', 'Level, dB')}
+              <SpectrumChart report={report} series={spectrum} hand={hand.spectrum} />
             </>
           ) : (
             <div className="ac-none" data-part="spectrum-none">
@@ -853,6 +892,7 @@ export function AcousticsPane() {
                 Listen
               </button>
             ) : null}
+            {curve ? axesButton('decay') : null}
             <span className="ac-sub">
               {names[r] !== undefined ? <S s={{ path: `${report.solver === 'tcr' ? 'tcr' : 'spps'}.point_receivers.${r}.label`, text: names[r] }} /> : null}
               {' · '}
@@ -861,7 +901,8 @@ export function AcousticsPane() {
               {srcNames.length ? src === null ? 'all sources summed' : sourceLabel(report, r, src) ? <S s={sourceLabel(report, r, src) as Str} /> : null : null}
             </span>
           </div>
-          {curve ? <DecayChart curve={curve} /> : <div className="ac-none">No decay curve for this receiver and band.</div>}
+          {curve ? axesEditor('decay', 'Level, dB', 'Time, s') : null}
+          {curve ? <DecayChart curve={curve} hand={hand.decay} /> : <div className="ac-none">No decay curve for this receiver and band.</div>}
           {responseOpen && report.solver !== 'tcr' ? (
             <ResponseWindow report={report} receiver={r} source={src} receivers={names} sources={srcNames} onReceiver={setReceiver} onSource={setSource} onClose={closeResponse} />
           ) : null}

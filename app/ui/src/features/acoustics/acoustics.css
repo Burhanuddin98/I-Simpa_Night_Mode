@@ -149,6 +149,35 @@
   align-items: center;
   gap: 5px;
 }
+/* R72: a chart's axes set by hand, in a row under its legend. */
+.ac-axes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.ac-axis {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.ac-axis .k {
+  color: var(--text-3);
+}
+.ac-axis-num {
+  width: 58px;
+  height: 22px;
+  padding: 0 6px;
+  font-size: 12px;
+}
+.ac-axes-error {
+  color: var(--red-hi);
+}
+.small-button.ac-axes-set {
+  border-color: var(--red);
+}
 /* R62: a legend key that switches its series; off, it is dimmed and struck through. */
 .ac-key-toggle {
   border: 0;
