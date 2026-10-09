@@ -335,6 +335,34 @@
 .rw-moved {
   transform: none;
 }
+/* R7: the level table, in the map's place, scrolling under a header that stays. */
+.rw-table-box {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  margin-top: 4px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  background: rgba(12, 10, 10, 0.88);
+}
+.rw-table-note {
+  font-size: 11.5px;
+  color: var(--text-3);
+  margin-bottom: 6px;
+}
+.rw-table th {
+  position: sticky;
+  top: 0;
+  background: rgb(12, 10, 10);
+}
+.rw-table td {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  text-align: right;
+}
+.rw-table th + th {
+  text-align: right;
+}
 .rw-head {
   cursor: move;
   user-select: none;

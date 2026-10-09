@@ -13,6 +13,8 @@
 // the time bin; the strip's band; a readout of the bin under the cursor. The window moves by its
 // title bar and resizes by its corner; the map fills what it is given, and the band labels thin
 // out when their rows are shorter than a line (`labelEvery`), so 27 third-octave bands read.
+// R7: "Show Table" lists the same bins as a table, one row per time bin over the range shown and
+// one column per band (`[data-part=response-level-table]`), each the level the map draws.
 //
 // What response.ts decides is drawn and printed here, with the tab's DOM contract: every number
 // of the report a `[data-num][data-json]` path (band labels, time ticks, the emission, the time
@@ -125,6 +127,60 @@ function SpanWord({ span }: { span: number }) {
     <span className="rw-span-word" data-label="span">
       {l.text}
     </span>
+  );
+}
+
+/** The most time bins the level table lists at once (R7): a longer range asks for a zoom or a wider bin. */
+export const LEVEL_ROWS_MAX = 500;
+
+/** A level re the map's maximum as the readout prints it: `−12.3 dB`, or `no energy`. */
+const fmtDb = (d: number | undefined) => (d === undefined ? '' : d === -Infinity ? 'no energy' : `${d.toFixed(1).replace('-', '−')} dB`);
+
+/**
+ * R7: the receiver's level per time bin and band, as a table (upstream's receiver table, dB per band
+ * per time step): the map's own bins over the range shown, each the level the map's colour and the
+ * readout give it (`v.map.db`, dB re the map's maximum), nothing computed anew. The time is the
+ * bin's start, as the readout prints it. Numbers derived from the map, marked as the readout's are.
+ */
+function LevelTable({ v, range, colStepS }: { v: ResponseView; range: ColRange; colStepS: number }) {
+  const n = range.c1 - range.c0;
+  const cols = Array.from({ length: Math.min(n, LEVEL_ROWS_MAX) }, (_, i) => range.c0 + i);
+  return (
+    <div className="rw-table-box" data-part="response-level-table">
+      <div className="rw-table-note">
+        Each band’s level per time bin, dB re the map’s maximum: the values the map’s colours and the readout show.
+        {n > LEVEL_ROWS_MAX ? (
+          <span data-part="response-level-cut">
+            {' '}
+            Listing the first <span data-label="readout">{LEVEL_ROWS_MAX}</span> of <span data-label="readout">{n}</span> time bins: zoom in or pick a wider time bin for the rest.
+          </span>
+        ) : null}
+      </div>
+      <table className="ac-table rw-table">
+        <thead>
+          <tr>
+            <th>Time, s</th>
+            {v.bands.map((b) => (
+              <th key={b.path}>
+                <N n={b.label.num} unit={b.label.unit} />
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {cols.map((c) => (
+            <tr key={c}>
+              <td data-label="readout">{(c * colStepS).toFixed(3)}</td>
+              {v.bands.map((b, i) => (
+                <td key={b.path} data-label="readout">
+                  {fmtDb(v.map.db[i][c])}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -364,7 +420,8 @@ export function ResponseWindow({
   const frame = useFrame();
   const hoverDb = hover && v ? v.map.db[hover.band]?.[hover.col] : undefined;
   const hoverStrip = hover && stripDb ? stripDb[hover.col] : undefined;
-  const fmtDb = (d: number | undefined) => (d === undefined ? '' : d === -Infinity ? 'no energy' : `${d.toFixed(1).replace('-', '−')} dB`);
+  // R7: the map, or its bins as a table of levels.
+  const [shape, setShape] = useState<'map' | 'table'>('map');
 
   return createPortal(
     <div
@@ -419,6 +476,23 @@ export function ResponseWindow({
         {RESPONSE_NOTE}
       </div>
       <div className="rw-controls" data-part="response-controls">
+        <div className="rw-bins segmented" role="radiogroup" aria-label="Show" data-part="response-shape">
+          <span className="rw-bins-label">Show</span>
+          {(['map', 'table'] as const).map((s) => (
+            <button
+              key={s}
+              type="button"
+              role="radio"
+              aria-checked={shape === s}
+              aria-selected={shape === s}
+              data-shape={s}
+              title={s === 'map' ? 'The levels as a time x band map' : 'The levels as a table: one row per time bin, one column per band, over the time shown'}
+              onClick={() => setShape(s)}
+            >
+              <span data-label="control">{s === 'map' ? 'Map' : 'Table'}</span>
+            </button>
+          ))}
+        </div>
         <div className="rw-bins segmented" role="radiogroup" aria-label="Time bin" data-part="response-bins">
           <span className="rw-bins-label">Time bin</span>
           {RESPONSE_BINS.map((b) => (
@@ -495,7 +569,9 @@ export function ResponseWindow({
           </button>
         </div>
       </div>
-      {v ? (
+      {v && shape === 'table' ? (
+        <LevelTable v={v} range={range} colStepS={colStepS} />
+      ) : v ? (
         <div className="rw-grid" style={{ ['--rw-rows' as string]: String(v.bands.length) }}>
           <div className="rw-y" data-part="response-bands">
             {v.bands.map((b, i) => (
