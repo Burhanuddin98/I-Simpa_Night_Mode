@@ -11,12 +11,16 @@
 // in the list and in its editor's head. A refused switch is shown under the sources.
 //
 // W1 (parity M41): the sound-level planes below the receivers (PlanesSection.tsx).
+//
+// M27: a source's group (`data-field="source.group"`), typed as a path (`Stage / Left`) and
+// committed through the checked apply (`replace_source`); empty is the top level. It reaches no
+// solver. The list shows it beside the name (`[data-source-group]`).
 import { useEffect, useRef, useState, type Ref } from 'react';
 import * as actions from '../actions';
 import type { PointReceiver, SceneState, Source, UiIssue } from '../bindings/ipc';
 import { fieldKey, issuesByEntity, issuesForField } from '../issues';
 import { NOT_A_NUMBER, parseStrictDecimal } from '../numbers';
-import { moveReceiver, moveSource, rename, replaceReceiver, type Vec3 } from '../ops';
+import { moveReceiver, moveSource, rename, replaceReceiver, replaceSource, type Vec3 } from '../ops';
 import { refusalStore, sceneStore, selectionStore, toolStore, useStore } from '../store';
 import { EmissionEditor } from './EmissionEditor';
 import { PlanesSection } from './PlanesSection';
@@ -26,6 +30,7 @@ import {
   coord,
   directionTo,
   exact,
+  groupPath,
   roomCentre,
   sourceSpot,
   sentence,
@@ -227,6 +232,20 @@ function PointEditor({ scene, kind, point }: { scene: SceneState; kind: Kind; po
     return out.applied;
   };
 
+  // M27: a source's group, typed as a path (`Stage / Left`); empty is the top level.
+  const commitGroup = async (text: string) => {
+    const now = current('source', id) as Source | undefined;
+    if (!now) return false;
+    const group = groupPath(text);
+    if (group === now.group) {
+      hide(keyOf('group'), true);
+      return true;
+    }
+    const out = await actions.apply(replaceSource({ ...now, group }), keyOf('group'));
+    if (!out.applied) hide(keyOf('group'), false);
+    return out.applied;
+  };
+
   const nameRefused = refusedFor(keyOf('name'));
   const nameIssues = issuesForField(scene.issues, kind, id, 'name');
   const posRefused = refusedFor(keyOf('position'));
@@ -276,6 +295,24 @@ function PointEditor({ scene, kind, point }: { scene: SceneState; kind: Kind; po
           />
         </label>
         <Issues refused={nameRefused} current={nameIssues} />
+        {source && (
+          <>
+            <label className="field-row" title="The source group it sits in, as upstream groups sources: names from the outermost, joined by /. It reaches no solver; names need be unique only within one group">
+              <span className="label">Group</span>
+              <CommitInput
+                field="source.group"
+                label="Source group"
+                className="name-input"
+                value={source.group ?? ''}
+                placeholder="None (top level)"
+                invalid={refusedFor(keyOf('group')).length > 0}
+                commit={commitGroup}
+                onRevert={() => hide(keyOf('group'), true)}
+              />
+            </label>
+            <Issues refused={refusedFor(keyOf('group'))} current={[]} />
+          </>
+        )}
       </div>
 
       <div className="props-section">
@@ -440,6 +477,11 @@ function PointRow({ scene, kind, point, on }: { scene: SceneState; kind: Kind; p
       onClick={() => selectPoint(kind === 'source' ? 'source' : 'receiver', point.id)}
     >
       <span className="point-name mono">{point.name}</span>
+      {source?.group && (
+        <span className="row-folder" data-source-group={source.group} title={`In the source group ${source.group}`}>
+          {source.group}
+        </span>
+      )}
       <span className="point-pos mono">
         ({coord(x, 2)}, {coord(y, 2)}, {coord(z, 2)})
       </span>

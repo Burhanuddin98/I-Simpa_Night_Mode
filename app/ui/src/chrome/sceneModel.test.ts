@@ -7,6 +7,7 @@ import {
   unrepairable,
   environmentText,
   fittingZonesOf,
+  groupPath,
   volumeRow,
   blockerText,
   displayName,
@@ -368,6 +369,14 @@ test('G16: fitting zones are read from the project file, box or scene, on or off
   assert.deepEqual(fittingZonesOf('{"fitting_zones":[]}'), []);
   assert.equal(fittingZonesOf('{}'), null);
   assert.equal(fittingZonesOf('not json'), null);
+});
+
+test('M27: a source group typed is stored as an import stores it; nothing typed is the top level', () => {
+  assert.equal(groupPath('Stage'), 'Stage');
+  assert.equal(groupPath(' Stage /Left  '), 'Stage / Left');
+  assert.equal(groupPath('Stage // Left /'), 'Stage / Left');
+  assert.equal(groupPath('   '), null);
+  assert.equal(groupPath(''), null);
 });
 
 test('G16: the volume row is the Geometry panel number, and none for a refused model', () => {

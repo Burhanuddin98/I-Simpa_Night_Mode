@@ -586,3 +586,39 @@ fn every_enabled_switch_turned_back_leaves_the_solver_input_byte_identical() {
     assert!(checked >= 15, "{checked}");
     println!("{checked} switches checked");
 }
+
+// ---- M27: a source's group is the project's own; it reaches no solver --------------------------
+//
+// The Sources step sends the source back whole with its group set (`replace_source`, M27 in
+// SourcesPanel.tsx). Upstream writes a group's sources in its place, as the writer writes every
+// source, so the solver input does not move.
+
+#[test]
+fn a_source_group_never_reaches_the_solver_input() {
+    let mut checked = 0;
+    for (name, original) in fixtures() {
+        let configs = both_configs(&original);
+        let mesh = mesh_input(&original);
+        let mut p = original.clone();
+        for (i, s) in original.sources.iter().enumerate() {
+            let mut item = serde_json::to_value(s).unwrap();
+            item["group"] = Value::from(if i % 2 == 0 { "Stage / Left" } else { "Pit" });
+            replace_op("replace_source", "source", item)
+                .apply(&mut p)
+                .unwrap();
+            checked += 1;
+        }
+        assert!(p.sources.iter().all(|s| s.group.is_some()), "{name}");
+        assert_eq!(
+            both_configs(&p),
+            configs,
+            "{name}: config.xml is byte-identical"
+        );
+        assert_eq!(
+            mesh_input(&p),
+            mesh,
+            "{name}: TetGen's input is byte-identical"
+        );
+    }
+    println!("{checked} sources grouped, solver input unchanged");
+}

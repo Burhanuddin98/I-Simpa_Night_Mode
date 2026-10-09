@@ -242,6 +242,19 @@ export function receiverFolder(receiver: { group?: string | null }): string {
   return receiver.group ?? '';
 }
 
+/**
+ * M27: a source group's path as typed, as the project stores it: the group names from the
+ * outermost, each trimmed, joined by ` / ` (`Stage / Left`), as a `.proj` import writes it; empty
+ * names dropped, and nothing left is the top level (null).
+ */
+export function groupPath(text: string): string | null {
+  const names = text
+    .split('/')
+    .map((n) => n.trim())
+    .filter((n) => n.length > 0);
+  return names.length ? names.join(' / ') : null;
+}
+
 // ---- filter ----------------------------------------------------------------------------------
 
 /**

@@ -297,7 +297,7 @@ export function ScenePanel() {
     ? view.surface_groups.map((g) => ({ g, m: effectiveMaterial(view, g.id), assigned: stats.get(g.id)?.assigned ?? true }))
     : [];
   const shownSurfaces = surfaces.filter(({ g, m }) => matchesFilter(query, g.name, m?.name ?? ''));
-  const sources = (view?.sources ?? []).filter((s) => matchesFilter(query, s.name));
+  const sources = (view?.sources ?? []).filter((s) => matchesFilter(query, s.name, receiverFolder(s)));
   const receivers = (view?.point_receivers ?? []).filter((r) => matchesFilter(query, r.name, receiverFolder(r)));
   const grids = (view?.surface_receivers ?? []).filter((r) => matchesFilter(query, r.name));
   const general = projectIssues(scene?.issues ?? []);
@@ -467,6 +467,12 @@ export function ScenePanel() {
                 >
                   <span className={`marker source${s.enabled ? '' : ' off'}`} />
                   <span className="row-name">{s.name}</span>
+                  {/* M27: the source group it sits in, edited in the Sources step. */}
+                  {s.group && (
+                    <span className="row-folder" data-source-group={s.group} title={`In the source group ${s.group}`}>
+                      {s.group}
+                    </span>
+                  )}
                   <IssueTag issues={issuesOf('source', s.id)} />
                   {!s.enabled && (
                     <span className="row-detail row-off" data-part="source-off">
