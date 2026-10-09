@@ -149,6 +149,14 @@ branch `fdtd-probe`).
 
 - My dispatch brief to the readers (02:33) said the app has a command palette and recent files. It has neither: the Ctrl K
   button is disabled, and the Model, Results and Help menus are disabled stubs (`area/project-app.md`).
+- C44 "Pause and resume a running simulation" (section 3, P2) is not a pause of a solver (checked 2026-10-09
+  14:43 while building P2). Upstream's Simulation › Pause and its toolbar button, beside Previous and Next time
+  step, call `OpenGlViewer::PauseSimulation` (3dengine/OpenGlViewer.cpp:415-418), which only sets
+  `simulationIsRunning` false; that flag gates the particle animation's `Tic()` (:219-224), so it pauses the
+  animation playback, which the app has as R55 (Ready). No upstream code pauses a running SPPS or TCR, and SPPS
+  reads nothing from its console while it runs (src/spps: no stdin read), so there is no pause to offer and none
+  is built; suspending the solver's process would be a pause upstream does not have. The P2 count is 42 builds,
+  C44 answered by R55.
 - A17 "Headless and scripted operation" is not an upstream feature: its own receipt says "Python scripts only", and
   upstream's GUI needs wx. It is a rebuild goal (the CLI). Weak but real rows: C3 TLM (loads from old projects only),
   C4 md_octave (ExperimentalCore, not installed), R67 (interop), A24 (code present, never runs), A42 (Linux .desktop
