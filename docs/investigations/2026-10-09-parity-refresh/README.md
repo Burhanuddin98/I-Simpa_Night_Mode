@@ -132,6 +132,10 @@ the receiver grid, R28 LF/LFC, R42/R44/R73 parameter and STI maps (v1.1-backlog 
 selection, R68/R71 the report document, A12/A52 preferences, A13 languages, A24 update check, A41 macOS/Linux, A47
 project archive.
 
+**The cut counts 66 items:** P0 9, P1 15, P2 42 (14 results, 13 scene/sources/receivers, 3 calculation, 12 app).
+**03:14, Burhan, verbatim: "parity, first, like let me know what those final features for v1 are, we continue
+building a hubrid engine in this chat".** Parity goes before the hybrid engine.
+
 **Open for Burhan:** (1) confirm or change the cut, and M12c's place before M13; (2) R42, maps of T30/EDT/C80/D50,
 is what an I-Simpa user expects on a map and is v1.1 only because those map numbers have no bed: pull it into v1 with a
 bed, or keep it out; (3) the order of the two arcs: he was asked at 03:00 "parity first or the hybrid engine first" and
