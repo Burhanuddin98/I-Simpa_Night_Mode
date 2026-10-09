@@ -686,11 +686,11 @@ function runEvents(id: number): (batch: RunStreamBatch) => void {
           if (current) current = { ...current, run: e.run, status: current.status === 'cancelling' ? 'cancelling' : 'running' };
           break;
         case 'stage':
-          if (current) current = { ...current, stage: e.stage };
+          if (current) current = { ...current, stage: e.stage, solveAt: e.stage === 'solve' ? (current.solveAt ?? Date.now()) : current.solveAt };
           break;
         case 'line':
           if (current && e.class === 'PROGRESS' && e.source === 'solver') {
-            current = { ...current, progress: e.progress ?? null, progressText: progressText(e.text) };
+            current = { ...current, progress: e.progress ?? null, progressText: progressText(e.text), progressAt: Date.now() };
           }
           break;
         case 'ended':

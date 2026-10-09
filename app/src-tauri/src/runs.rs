@@ -26,7 +26,7 @@ use simpa_core::geometry::import::{REFERENCE_MATERIALS, REFERENCE_SPECTRA, libra
 use simpa_core::mesh;
 use simpa_core::process::{self, CancelToken};
 use simpa_core::run::gpu::{self, SPPS_GPU_EXE_NAME, SppsDevice};
-use simpa_core::run::manager::{PREPROCESS_EXE_NAME, TETGEN_EXE_NAME, solver_exe_name};
+use simpa_core::run::manager::{PREPROCESS_EXE_NAME, SOLVE_DIR, TETGEN_EXE_NAME, solver_exe_name};
 use simpa_core::run::{
     DEFAULT_LOSS_LIMIT, ExeSearch, LineClass as CoreClass, MeshChoice, RunError, RunEvent,
     RunManifest, RunOptions, RunReport, RunSource, Stage, Status, run_project,
@@ -249,9 +249,37 @@ pub struct RunRow {
     pub solver_build: Option<SolverBuildUi>,
     /// The solver's wall time in seconds, one decimal ([`elapsed_s`]).
     pub elapsed_s: Option<String>,
+    /// What an SPPS run gave the solver to do, read from its own `config.xml`: what the Simulate
+    /// step scales this run's [`RunRow::elapsed_s`] by to forecast the next run. `None` for TCR,
+    /// and for a run whose `config.xml` does not read.
+    pub work: Option<RunWorkUi>,
     pub exit_code: Option<u32>,
     /// `run.json` is there but does not read.
     pub manifest_error: Option<String>,
+}
+
+/// An SPPS run's work as its `config.xml` gave it (`simpa_core::run::expect::SppsWork`).
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+pub struct RunWorkUi {
+    /// `nbparticules`: particles per source and band.
+    pub particles_per_source: u32,
+    pub sources: u32,
+    /// Bands computed.
+    pub bands: u32,
+    /// `duree_simulation` as SPPS reads it, s.
+    pub duration_s: f64,
+}
+
+/// The work of the SPPS run in `folder` (its `solve` folder's `config.xml`); `None` when it does
+/// not read.
+pub fn run_work(folder: &Path) -> Option<RunWorkUi> {
+    let w = simpa_core::run::expect::read_spps_work(&folder.join(SOLVE_DIR))?;
+    Some(RunWorkUi {
+        particles_per_source: w.particles_per_source,
+        sources: u32::try_from(w.sources).ok()?,
+        bands: u32::try_from(w.bands).ok()?,
+        duration_s: w.duration_s,
+    })
 }
 
 /// A run's solver build, verified or not, with the reason's core and UI codes (backlog 38).
@@ -577,6 +605,7 @@ pub fn row_from_manifest(run: &str, number: u32, m: &RunManifest) -> RunRow {
         solvers: m.solvers.clone(),
         solver_build: Some(SolverBuildUi::of(&results::solver_build(m))),
         elapsed_s: m.outcome.as_ref().map(|o| elapsed_s(o.elapsed_ms)),
+        work: None,
         exit_code: m.outcome.as_ref().and_then(|o| o.exit_code),
         manifest_error: None,
     }
@@ -610,6 +639,7 @@ fn bare_row(
         solvers: None,
         solver_build: None,
         elapsed_s: None,
+        work: None,
         exit_code: None,
         manifest_error: error,
     }
@@ -689,7 +719,13 @@ pub fn list(root: &Path, project: &Path, active: Option<&str>) -> CmdResult<Runs
             }
             Err(e) => unreadable(&name, format!("{}: {e}", manifest.display())),
             Ok(text) => match RunManifest::from_json(&text) {
-                Ok(m) if belongs(&m, project) => row_from_manifest(&name, 0, &m),
+                Ok(m) if belongs(&m, project) => {
+                    let mut row = row_from_manifest(&name, 0, &m);
+                    if m.solver == SolverKind::Spps {
+                        row.work = run_work(&root.join(&name));
+                    }
+                    row
+                }
                 Ok(_) => {
                     view.other_projects += 1;
                     continue;

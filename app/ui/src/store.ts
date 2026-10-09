@@ -133,6 +133,10 @@ export interface ActiveRun {
   /** The last PROGRESS line's text after its `#`, exactly as the solver printed it. */
   progressText: string;
   startedAt: number;
+  /** When the solve stage began, on this page's clock (`Date.now()`): the live finish time's origin. */
+  solveAt?: number;
+  /** When the last PROGRESS line arrived, on this page's clock. */
+  progressAt?: number;
   status: 'starting' | 'running' | 'cancelling';
 }
 export const runStore = new Store<ActiveRun | null>(null);

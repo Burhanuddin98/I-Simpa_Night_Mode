@@ -9,6 +9,9 @@
 // the run-quality advisor's Apply sets has its field), the method (C12),
 // sound maps per band (C21), echogram per source (C22), the bands it computes (C25) and the band
 // presets (C26), and the air (C27). TCR: its method as drawn, its bands and the air.
+// Under the particles (and TCR's method), the run-time forecast (runTime.ts, Burhan's 10-05 UI
+// list item 5): this project's last run of the solver, scaled to the field as typed, and the
+// finish as a clock time; or that there is no measurement yet.
 //
 // Numbers. The values typed are inputs: an <input>'s value is not page text, so no exemption is
 // needed for them (m11-h, GATE.md F2), and nothing here is marked `[data-input]`. The readouts
@@ -24,10 +27,11 @@ import { CommitInput, Issues } from '../../chrome/SourcesPanel';
 import { fieldKey } from '../../issues';
 import { parseStrictDecimal } from '../../numbers';
 import { setBandComputed, setEnvironment, setSolverSettings } from '../../ops';
-import { refusalStore, type SolverName, useStore } from '../../store';
+import { deviceStore, refusalStore, runsStore, type SolverName, useStore } from '../../store';
 import { EDT_MARKS } from '../acoustics/model';
 import { bandsText, hzText, projectSettings, type ProjectSettings, settingsRows } from './model';
 import { cubeText, mapStepRatio, REFUSE_GB, resultCube, WARN_GB } from './runSize';
+import { forecastRunTime, measuredRun, runTimeText, workNow } from './runTime';
 import {
   BAND_PRESETS,
   bandPresetOf,
@@ -145,6 +149,49 @@ function NumberField(props: {
         </span>
       </label>
       <Issues refused={refused} current={[...(local ? [local] : []), ...current]} />
+    </div>
+  );
+}
+
+/** The wall clock, read again every 15 s: the finish time follows it to the minute. */
+function useMinuteClock(): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now()), 15_000);
+    return () => window.clearInterval(t);
+  }, []);
+  return now;
+}
+
+/**
+ * The run's time before it runs: a forecast measured on this project's last run of the same
+ * solver on the same device, scaled to `particles` (the field as typed), with the finish as a
+ * clock time; or that there is no measurement yet (runTime.ts). Never an acoustic number.
+ */
+function RunTime({ scene, s, solver, particles }: { scene: SceneState; s: ProjectSettings; solver: SolverName; particles: number | null }) {
+  const runs = useStore(runsStore);
+  const device = useStore(deviceStore);
+  const now = useMinuteClock();
+  const dev = solver === 'spps' ? device : 'cpu';
+  const from = measuredRun(runs, solver, dev);
+  const f = forecastRunTime(from, solver, solver === 'spps' ? workNow(scene, s, particles) : null);
+  const t = runTimeText(f, solver, dev, now, from !== null);
+  return (
+    <div className="sim-runtime" data-part="run-time" data-measured={from ? from.run : ''}>
+      <div className="sim-field-line">
+        <span className="k">Run time, forecast</span>
+        <span className="v" data-part="run-time-forecast">
+          {t.forecast ?? '—'}
+        </span>
+      </div>
+      {t.finish ? (
+        <div className="sim-runtime-finish" data-part="run-time-finish">
+          {t.finish}
+        </div>
+      ) : null}
+      <div className="sim-runtime-basis" data-part="run-time-basis">
+        {t.basis}
+      </div>
     </div>
   );
 }
@@ -303,6 +350,7 @@ function AirEditor({ scene, s }: { scene: SceneState; s: ProjectSettings }) {
 export function SettingsEditor({ scene, settings, solver }: { scene: SceneState | null; settings: ProjectSettings | null; solver: SolverName }) {
   const [savedDraft, setSavedDraft] = useState<string | null>(null);
   const [stepDraft, setStepDraft] = useState<string | null>(null);
+  const [particlesDraft, setParticlesDraft] = useState<string | null>(null);
   const refusals = useStore(refusalStore);
 
   if (!scene || !settings) {
@@ -323,9 +371,12 @@ export function SettingsEditor({ scene, settings, solver }: { scene: SceneState 
   if (solver === 'tcr') {
     return (
       <div className="sim-settings" data-part="settings">
-        <div className="sim-setting" data-setting="method">
-          <span className="k">Method</span>
-          <span className="v mono">Sabine · Eyring</span>
+        <div className="sim-setting sim-block" data-setting="method">
+          <div className="sim-field-line">
+            <span className="k">Method</span>
+            <span className="v mono">Sabine · Eyring</span>
+          </div>
+          <RunTime scene={scene} s={s} solver="tcr" particles={null} />
         </div>
         <div className="sim-setting sim-block" data-setting="bands">
           <BandsEditor scene={scene} s={s} solver="tcr" />
@@ -344,6 +395,9 @@ export function SettingsEditor({ scene, settings, solver }: { scene: SceneState 
   const typedStep = stepDraft === null ? null : secondsFromMs(stepDraft);
   const step = typedStep?.ok ? typedStep.value : spps.time_step_s;
   const steps = stepCount(spps.duration_s, step);
+  // The forecast follows the particles as typed, before they are committed.
+  const typedParticles = particlesDraft === null ? null : parseCount(particlesDraft);
+  const particles = typedParticles?.ok ? typedParticles.value : null;
   const typedSaved = savedDraft === null ? null : parseCount(savedDraft);
   const saved = typedSaved?.ok ? typedSaved.value : spps.particles_saved;
   const sources = scene.view.sources.filter((x) => x.enabled).length;
@@ -384,7 +438,9 @@ export function SettingsEditor({ scene, settings, solver }: { scene: SceneState 
           read={parseCount}
           op={sppsOp((v) => ({ particles_per_source: v }), (now, v) => now.particles_per_source === v)}
           current={issuesAt(issues, ['/solvers/spps/particles_per_source'])}
+          onDraft={setParticlesDraft}
         />
+        <RunTime scene={scene} s={s} solver="spps" particles={particles} />
       </div>
       <div className="sim-setting sim-block" data-setting="particles_saved">
         <NumberField

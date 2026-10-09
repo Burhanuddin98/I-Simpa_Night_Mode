@@ -5207,6 +5207,17 @@
             "$ref": "#/$defs/ReasonUi"
           },
           "type": "array"
+        },
+        "work": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunWorkUi"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What an SPPS run gave the solver to do, read from its own `config.xml`: what the Simulate\nstep scales this run's [`RunRow::elapsed_s`] by to forecast the next run. `None` for TCR,\nand for a run whose `config.xml` does not read."
         }
       },
       "required": [
@@ -5490,6 +5501,40 @@
           "type": "object"
         }
       ]
+    },
+    "RunWorkUi": {
+      "description": "An SPPS run's work as its `config.xml` gave it (`simpa_core::run::expect::SppsWork`).",
+      "properties": {
+        "bands": {
+          "description": "Bands computed.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "duration_s": {
+          "description": "`duree_simulation` as SPPS reads it, s.",
+          "format": "double",
+          "type": "number"
+        },
+        "particles_per_source": {
+          "description": "`nbparticules`: particles per source and band.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sources": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "particles_per_source",
+        "sources",
+        "bands",
+        "duration_s"
+      ],
+      "type": "object"
     },
     "RunsView": {
       "description": "The Runs tab: every run of the open project under its runs root.",

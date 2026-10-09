@@ -5275,6 +5275,12 @@ export interface RunRow {
    */
   variant?: string | null;
   warnings: ReasonUi[];
+  /**
+   * What an SPPS run gave the solver to do, read from its own `config.xml`: what the Simulate
+   * step scales this run's [`RunRow::elapsed_s`] by to forecast the next run. `None` for TCR,
+   * and for a run whose `config.xml` does not read.
+   */
+  work?: RunWorkUi | null;
 }
 /**
  * This interface was referenced by `IpcBindings`'s JSON-Schema
@@ -5351,6 +5357,27 @@ export interface SolverCheck {
   name: string;
   path: string;
   raw_sha256?: string | null;
+}
+/**
+ * An SPPS run's work as its `config.xml` gave it (`simpa_core::run::expect::SppsWork`).
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "RunWorkUi".
+ */
+export interface RunWorkUi {
+  /**
+   * Bands computed.
+   */
+  bands: number;
+  /**
+   * `duree_simulation` as SPPS reads it, s.
+   */
+  duration_s: number;
+  /**
+   * `nbparticules`: particles per source and band.
+   */
+  particles_per_source: number;
+  sources: number;
 }
 /**
  * The Runs tab: every run of the open project under its runs root.

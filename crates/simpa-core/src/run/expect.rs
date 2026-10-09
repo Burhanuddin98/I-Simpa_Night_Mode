@@ -506,6 +506,46 @@ fn dedup(v: Vec<String>) -> Vec<String> {
     v.into_iter().filter(|p| seen.insert(p.clone())).collect()
 }
 
+/// The work an SPPS run's `config.xml` gave the solver, as the solver reads it: what the run's
+/// wall time is scaled by when the Simulate step forecasts the next run from it (Burhan's 10-05 UI
+/// list, item 5, "run cost by the particle slider measured not guessed").
+#[derive(Clone, Debug, PartialEq)]
+pub struct SppsWork {
+    /// `nbparticules`, at least 1: particles per source and band.
+    pub particles_per_source: u32,
+    /// The `sources` items, as [`Expectation::sources`] counts them.
+    pub sources: usize,
+    /// The bands the solver computes (`docalc` exactly `"1"`).
+    pub bands: usize,
+    /// `duree_simulation` as SPPS reads it (`f32`), s.
+    pub duration_s: f64,
+}
+
+/// [`SppsWork`] from a `config.xml`'s text; `None` when it does not parse or has no finite,
+/// positive `duree_simulation`.
+pub fn spps_work(xml: &str) -> Option<SppsWork> {
+    let exp = Expectation::from_config(xml, SolverKind::Spps).ok()?;
+    let doc = Document::parse(xml).ok()?;
+    let duration = child(doc.root_element(), "simulation")?
+        .attribute("duree_simulation")
+        .and_then(super::locate::to_float)
+        .map(f64::from)
+        .filter(|d| d.is_finite() && *d > 0.0)?;
+    Some(SppsWork {
+        particles_per_source: exp.spps.as_ref()?.nbparticules,
+        sources: exp.sources.len(),
+        bands: exp.bands.iter().filter(|b| b.computed).count(),
+        duration_s: duration,
+    })
+}
+
+/// [`spps_work`] of `dir/config.xml`; `None` when it cannot be read.
+pub fn read_spps_work(dir: &Path) -> Option<SppsWork> {
+    let bytes = std::fs::read(dir.join(names::CONFIG)).ok()?;
+    let bytes = bytes.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&bytes);
+    spps_work(std::str::from_utf8(bytes).ok()?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -564,6 +604,29 @@ mod tests {
         assert_eq!(e.surface_receivers, [7]);
         assert_eq!(e.cutting_planes, 1);
         assert_eq!(e.first_surface_receiver_has_faces, None);
+    }
+
+    #[test]
+    fn spps_work_is_what_the_solver_was_given() {
+        // No duree_simulation: no work, never a guessed duration.
+        assert_eq!(spps_work(MINIMAL), None);
+        let xml = MINIMAL.replace(
+            r#"nbparticules="0""#,
+            r#"nbparticules="300000" duree_simulation="2,5""#,
+        );
+        // The comma is SPPS's decimal too (`ToFloat`); one band computed (`docalc` exactly "1").
+        assert_eq!(
+            spps_work(&xml),
+            Some(SppsWork {
+                particles_per_source: 300_000,
+                sources: 2,
+                bands: 1,
+                duration_s: 2.5,
+            })
+        );
+        let zero = MINIMAL.replace(r#"nbparticules="0""#, r#"duree_simulation="0""#);
+        assert_eq!(spps_work(&zero), None);
+        assert_eq!(spps_work("not xml"), None);
     }
 
     #[test]

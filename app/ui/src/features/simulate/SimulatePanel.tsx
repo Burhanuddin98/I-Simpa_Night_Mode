@@ -2,7 +2,9 @@
 // - the head, "Simulation · Runs in the background · the app stays usable";
 // - the solver choice, SPPS, TCR or SPPS on the GPU (`[data-solver]` `spps`, `tcr`, `spps-gpu`,
 //   `aria-checked`), session state only. The GPU entry (decision 70, A5) names the device the
-//   session's probe found, or is shown disabled with the probe's reason, never hidden;
+//   session's probe found, or is shown disabled with the probe's reason, never hidden; under it,
+//   one sentence saying which solver will run and what it is for (`[data-part="solver-words"]`,
+//   Burhan's 10-05 UI list item 5, runTime.ts `solverSentence`);
 // - the chosen solver's settings as fields (PQ3, SettingsEditor.tsx): each edit an op through the
 //   checked apply, its refusals inline; Run is blocked for the chosen solver's own errors too
 //   (`flow.projectBlockers`: every band off, `NO_BAND_COMPUTED`);
@@ -13,7 +15,8 @@
 //   blocks Run, and holds no number next to s, ms, dB or % (m10-h): a duration's or a time
 //   step's new value shows in its own field once applied;
 // - while a run is active, the running block: what it is doing ("Meshing…", "Solving · <p> %"),
-//   the bar, the elapsed m:ss, Cancel (`[data-part="cancel-run"]`, PQ2);
+//   the bar, the elapsed m:ss, the finish as a clock time from SPPS's progress so far
+//   (`[data-part="running-finish"]`, runTime.ts `liveFinishMs`), Cancel (`[data-part="cancel-run"]`, PQ2);
 // - when idle, the last run: "Run <n> · <variant>" (a link to the Results step), its status as
 //   text, "Particles lost <x> % / <l> % limit", "Solver warnings <n>", and the big Run button.
 //
@@ -67,6 +70,7 @@ import {
 } from './model';
 import { SettingsEditor } from './SettingsEditor';
 import { reasonWords } from './reasonWords';
+import { clockText, liveFinishMs, solverSentence } from './runTime';
 import './simulate.css';
 
 /**
@@ -150,36 +154,42 @@ function SolverChoice({ solver }: { solver: SolverName }) {
     pick(next.key);
     refs.current[next.key]?.focus();
   };
+  const gpuName = choices.find((c) => c.key === 'spps-gpu' && !c.disabled)?.what ?? null;
   return (
-    <div className="sim-solvers" role="radiogroup" aria-label="Solver" onKeyDown={onKey}>
-      {choices.map((c) => (
-        <button
-          key={c.key}
-          ref={(el) => {
-            refs.current[c.key] = el;
-          }}
-          className="sim-solver"
-          role="radio"
-          aria-checked={current === c.key}
-          aria-disabled={c.disabled || undefined}
-          disabled={c.disabled}
-          tabIndex={current === c.key ? 0 : -1}
-          data-solver={c.key}
-          data-device={c.device}
-          data-available={c.key === 'spps-gpu' ? String(!c.disabled) : undefined}
-          title={c.title ?? undefined}
-          onClick={() => pick(c.key)}
-        >
-          <span className="name">{c.name}</span>
-          <span className="what">{c.what}</span>
-          {c.why ? (
-            <span className="why" data-part="gpu-why">
-              {c.why}
-            </span>
-          ) : null}
-        </button>
-      ))}
-    </div>
+    <>
+      <div className="sim-solvers" role="radiogroup" aria-label="Solver" onKeyDown={onKey}>
+        {choices.map((c) => (
+          <button
+            key={c.key}
+            ref={(el) => {
+              refs.current[c.key] = el;
+            }}
+            className="sim-solver"
+            role="radio"
+            aria-checked={current === c.key}
+            aria-disabled={c.disabled || undefined}
+            disabled={c.disabled}
+            tabIndex={current === c.key ? 0 : -1}
+            data-solver={c.key}
+            data-device={c.device}
+            data-available={c.key === 'spps-gpu' ? String(!c.disabled) : undefined}
+            title={c.title ?? undefined}
+            onClick={() => pick(c.key)}
+          >
+            <span className="name">{c.name}</span>
+            <span className="what">{c.what}</span>
+            {c.why ? (
+              <span className="why" data-part="gpu-why">
+                {c.why}
+              </span>
+            ) : null}
+          </button>
+        ))}
+      </div>
+      <div className="sim-solver-words" data-part="solver-words" data-will-run={current}>
+        {solverSentence(solver, current === 'spps-gpu' ? 'gpu' : 'cpu', gpuName)}
+      </div>
+    </>
   );
 }
 
@@ -260,6 +270,7 @@ function AdviceList({ rows }: { rows: AdviceRow[] | null }) {
 function RunningBlock({ active }: { active: ActiveRun }) {
   const now = useNow(true);
   const cancelling = active.status === 'cancelling';
+  const finish = cancelling ? null : liveFinishMs(active);
   return (
     <div className="sim-running" data-part="running" data-run={active.run ?? ''} data-stage={active.stage ?? ''}>
       <div className="sim-running-head" data-part="running-head">
@@ -284,6 +295,13 @@ function RunningBlock({ active }: { active: ActiveRun }) {
         >
           {cancelling ? 'Cancelling…' : 'Cancel run'}
         </button>
+      </div>
+      <div className="sim-running-finish" data-part="running-finish">
+        {finish !== null
+          ? `Done about ${clockText(finish, now)}, from the progress so far`
+          : active.solver === 'tcr'
+            ? 'TCR reports no progress: no finish time until it ends.'
+            : 'The finish time shows once the solver reports progress.'}
       </div>
       <div className="sim-note">Solver output is read line by line in the Console tab.</div>
     </div>
