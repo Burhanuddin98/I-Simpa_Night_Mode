@@ -25,11 +25,13 @@ describe('M10 harness smoke', () => {
     // still holds the whole list and its order, not a subset.
     // Re-pinned 2026-10-09 (parity G11): New box room… joins between New project and Open…, on purpose
     // (upstream's New scene, a box room of a given width, length and height).
+    // Re-pinned 2026-10-09 (parity A43): upstream's tutorials 1-3 join after BRAS CR4, on purpose,
+    // under their own heading (examples/tutorial_N.simpa, Help › Tutorial N).
     const landing = await browser.execute(() => ({
       examples: [...document.querySelectorAll('[data-part="landing"] [data-example]')].map((e) => e.getAttribute('data-example')),
       actions: [...document.querySelectorAll('[data-part="landing"] [data-landing-action]')].map((e) => e.getAttribute('data-landing-action')),
     }));
-    assert.deepEqual(landing, { examples: ['elmia', 'industrial', 'bras-cr1', 'bras-cr2', 'bras-cr3', 'bras-cr4'], actions: ['new-project', 'new-box-room', 'open'] });
+    assert.deepEqual(landing, { examples: ['elmia', 'industrial', 'bras-cr1', 'bras-cr2', 'bras-cr3', 'bras-cr4', 'tutorial-1', 'tutorial-2', 'tutorial-3'], actions: ['new-project', 'new-box-room', 'open'] });
     const title = await browser.getTitle();
     assert.equal(title, 'I-Simpa Night Mode');
   });
