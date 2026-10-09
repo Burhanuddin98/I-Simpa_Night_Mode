@@ -10,8 +10,9 @@
 // both places, and the project is left unchanged. The switch is a button of its own beside the
 // row's button, never inside it.
 //
-// Scope row 15 (1), M37: a point receiver an imported `.proj` put in a receiver group shows the
-// group's path, read-only (`[data-receiver-group]`), and the filter finds it by it.
+// Scope row 15 (1), M37: a point receiver in a receiver group (from a `.proj` import, or set in its
+// properties since parity M37) shows the group's path (`[data-receiver-group]`), and the filter finds
+// it by it.
 //
 // C1 (docs/investigations/2026-10-07-blank-geometry/SPEC.md): each surface row shows its face
 // count (`[data-group-faces]`); F2 on a selected group (or a double-click on its row) edits its
@@ -543,7 +544,7 @@ export function ScenePanel() {
                   <span
                     className="row-folder"
                     data-receiver-group={receiverFolder(r)}
-                    title={`In the receiver group ${receiverFolder(r)}, as the imported project has it`}
+                    title={`In the receiver group ${receiverFolder(r)}`}
                   >
                     {receiverFolder(r)}
                   </span>

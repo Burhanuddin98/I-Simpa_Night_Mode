@@ -235,15 +235,15 @@ export function regroupFaces(selection: { kind: string; faces?: readonly number[
 }
 
 /**
- * A point receiver's folder (M37): the path of the receiver groups an imported `.proj` put it in
- * (`Stalls / Front`), or '' at the top level. Read-only: groups are made in upstream's GUI.
+ * A point receiver's folder (M37): the path of the receiver groups it sits in (`Stalls / Front`), from a
+ * `.proj` import or set in its properties (`groupPath`), or '' at the top level.
  */
 export function receiverFolder(receiver: { group?: string | null }): string {
   return receiver.group ?? '';
 }
 
 /**
- * M27: a source group's path as typed, as the project stores it: the group names from the
+ * M27 and M37: a source or receiver group's path as typed, as the project stores it: the group names from the
  * outermost, each trimmed, joined by ` / ` (`Stage / Left`), as a `.proj` import writes it; empty
  * names dropped, and nothing left is the top level (null).
  */

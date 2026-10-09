@@ -921,3 +921,48 @@ fn a_material_colour_never_reaches_the_solver_input() {
     assert!(checked >= 10, "{checked}");
     println!("{checked} materials recoloured, solver input unchanged");
 }
+
+// ---- M37: a point receiver's group is the project's own; it reaches no solver --------------------
+//
+// The Sources step sends the receiver back whole with its group set (`replace_point_receiver`, M37 in
+// SourcesPanel.tsx). Upstream writes a group's receivers in its place (`e_scene_recepteursp.h:152-161`),
+// as the writer writes every receiver, so the solver input does not move; cleared again, the project
+// is the one it was.
+
+#[test]
+fn a_receiver_group_never_reaches_the_solver_input() {
+    let mut checked = 0;
+    for (name, original) in fixtures() {
+        let configs = both_configs(&original);
+        let mesh = mesh_input(&original);
+        let mut p = original.clone();
+        for (i, r) in original.point_receivers.iter().enumerate() {
+            let mut item = serde_json::to_value(r).unwrap();
+            item["group"] = Value::from(if i % 2 == 0 { "Stalls / Front" } else { "Balcony" });
+            replace_op("replace_point_receiver", "receiver", item)
+                .apply(&mut p)
+                .unwrap();
+            checked += 1;
+        }
+        assert!(p.point_receivers.iter().all(|r| r.group.is_some()), "{name}");
+        assert_eq!(
+            both_configs(&p),
+            configs,
+            "{name}: config.xml is byte-identical"
+        );
+        assert_eq!(
+            mesh_input(&p),
+            mesh,
+            "{name}: TetGen's input is byte-identical"
+        );
+        for r in &original.point_receivers {
+            let item = serde_json::to_value(r).unwrap();
+            replace_op("replace_point_receiver", "receiver", item)
+                .apply(&mut p)
+                .unwrap();
+        }
+        assert_eq!(p, original, "{name}: every group cleared again");
+    }
+    assert!(checked >= 10, "{checked}");
+    println!("{checked} receivers grouped, solver input unchanged");
+}

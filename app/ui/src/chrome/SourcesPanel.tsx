@@ -15,6 +15,10 @@
 // M27: a source's group (`data-field="source.group"`), typed as a path (`Stage / Left`) and
 // committed through the checked apply (`replace_source`); empty is the top level. It reaches no
 // solver. The list shows it beside the name (`[data-source-group]`).
+//
+// M37: a point receiver's group the same way (`data-field="receiver.group"`, `replace_point_receiver`),
+// so receiver groups are made and changed here, not only kept from a `.proj` import; the Receivers list
+// shows it beside the name (`[data-receiver-group]`). It reaches no solver either.
 import { useEffect, useRef, useState, type Ref } from 'react';
 import * as actions from '../actions';
 import type { PointReceiver, SceneState, Source, UiIssue } from '../bindings/ipc';
@@ -232,16 +236,17 @@ function PointEditor({ scene, kind, point }: { scene: SceneState; kind: Kind; po
     return out.applied;
   };
 
-  // M27: a source's group, typed as a path (`Stage / Left`); empty is the top level.
+  // M27 and M37: a source's or a receiver's group, typed as a path (`Stage / Left`); empty is the top level.
   const commitGroup = async (text: string) => {
-    const now = current('source', id) as Source | undefined;
+    const now = current(kind, id);
     if (!now) return false;
     const group = groupPath(text);
-    if (group === now.group) {
+    if (group === (now.group ?? null)) {
       hide(keyOf('group'), true);
       return true;
     }
-    const out = await actions.apply(replaceSource({ ...now, group }), keyOf('group'));
+    const op = kind === 'source' ? replaceSource({ ...(now as Source), group }) : replaceReceiver({ ...(now as PointReceiver), group });
+    const out = await actions.apply(op, keyOf('group'));
     if (!out.applied) hide(keyOf('group'), false);
     return out.applied;
   };
@@ -295,15 +300,22 @@ function PointEditor({ scene, kind, point }: { scene: SceneState; kind: Kind; po
           />
         </label>
         <Issues refused={nameRefused} current={nameIssues} />
-        {source && (
+        {(source || receiver) && (
           <>
-            <label className="field-row" title="The source group it sits in, as upstream groups sources: names from the outermost, joined by /. It reaches no solver; names need be unique only within one group">
+            <label
+              className="field-row"
+              title={
+                source
+                  ? 'The source group it sits in, as upstream groups sources: names from the outermost, joined by /. It reaches no solver; names need be unique only within one group'
+                  : 'The receiver group it sits in, as upstream groups point receivers: names from the outermost, joined by /. A new name makes a new group. It reaches no solver'
+              }
+            >
               <span className="label">Group</span>
               <CommitInput
-                field="source.group"
-                label="Source group"
+                field={source ? 'source.group' : 'receiver.group'}
+                label={source ? 'Source group' : 'Receiver group'}
                 className="name-input"
-                value={source.group ?? ''}
+                value={point.group ?? ''}
                 placeholder="None (top level)"
                 invalid={refusedFor(keyOf('group')).length > 0}
                 commit={commitGroup}
@@ -480,6 +492,11 @@ function PointRow({ scene, kind, point, on }: { scene: SceneState; kind: Kind; p
       {source?.group && (
         <span className="row-folder" data-source-group={source.group} title={`In the source group ${source.group}`}>
           {source.group}
+        </span>
+      )}
+      {kind === 'point_receiver' && point.group && (
+        <span className="row-folder" data-receiver-group={point.group} title={`In the receiver group ${point.group}`}>
+          {point.group}
         </span>
       )}
       <span className="point-pos mono">
