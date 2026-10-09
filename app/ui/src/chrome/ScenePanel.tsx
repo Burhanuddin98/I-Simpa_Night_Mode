@@ -525,7 +525,10 @@ export function ScenePanel() {
                 >
                   <span className="marker env" aria-hidden />
                   <span className="row-name">Air</span>
-                  <span className="row-detail mono">{envText}</span>
+                  {/* A project input with its units (the scene list is an input region, m10-h). */}
+                  <span className="row-detail mono" data-input>
+                    {envText}
+                  </span>
                 </button>
               </>
             )}
