@@ -10,7 +10,8 @@
 //
 //   - The mesh comes from `meshStore`: f64 positions sent to the GPU as f32, indexed in project
 //     face order. Faces are drawn BackSide, so the near walls drop away (the inside view), and
-//     every raycast honours BackSide.
+//     every raycast honours BackSide; View style > Faces (G43, faces.ts) draws them DoubleSide
+//     (Outside) or not at all (None), and picks follow what is drawn.
 //   - Picking is three-mesh-bvh built with `indirect: true` (finding F6), so a hit's faceIndex
 //     is the project's face index. A click selects a face, a double-click its flat surface
 //     (floodfill.ts, upstream's rule).
@@ -61,6 +62,8 @@ import {
   Vector2,
   Vector3,
   type Camera,
+  type Material,
+  type Side,
 } from 'three';
 import {
   LineBasicNodeMaterial,
@@ -85,6 +88,7 @@ import { buildTopology, coplanarFaces, faceNormalOf, type FaceTopology } from '.
 import { bgraToRgba, flipRows, unpadRows } from './snapshot';
 import { animatorStore } from './animator';
 import { firstFace, modelGeometry, pickingBvh } from './pick';
+import { facePlan, faceShowOf, type FacePlan, type FaceShow } from './faces';
 import { ResultsLayer, type MapMeta, type ParticleMeta } from './resultsLayer';
 import { faceBounds, faceCentroid, fitOrtho, gizmoAxes, isFloorLike, placementPoint, planDimensions, rayOnFacePlane, type Box, type Vec } from './geometry';
 import { BG, glowPixels, RED, ringPixels, WHITE } from './sprites';
@@ -163,6 +167,8 @@ export type SurfaceStyle = 'colour' | 'grey' | 'glass' | 'wire';
 export type EdgeStyle = 'all' | 'feature';
 export interface ViewStyle {
   surfaces: SurfaceStyle;
+  /** Which faces are drawn (G43, faces.ts): inside (the near walls gone), outside (every face), none. */
+  faces: FaceShow;
   edges: EdgeStyle;
   /** The near walls' opacity in see-through, percent, 0 to 60. */
   glass: number;
@@ -176,13 +182,14 @@ export interface ViewStyle {
   dims: boolean;
 }
 const STYLE_KEY = 'nm.viewStyle';
-const DEFAULT_STYLE: ViewStyle = { surfaces: 'colour', edges: 'all', glass: 15, corners: true, fade: true, ground: true, dims: false };
+const DEFAULT_STYLE: ViewStyle = { surfaces: 'colour', faces: 'inside', edges: 'all', glass: 15, corners: true, fade: true, ground: true, dims: false };
 function loadStyle(): ViewStyle {
   try {
     const v = JSON.parse(localStorage.getItem(STYLE_KEY) ?? 'null') as Partial<ViewStyle> | null;
     if (!v) return DEFAULT_STYLE;
     return {
       surfaces: (['colour', 'grey', 'glass', 'wire'] as const).includes(v.surfaces as SurfaceStyle) ? (v.surfaces as SurfaceStyle) : DEFAULT_STYLE.surfaces,
+      faces: faceShowOf(v.faces),
       edges: v.edges === 'feature' ? 'feature' : 'all',
       glass: typeof v.glass === 'number' ? Math.min(60, Math.max(0, v.glass)) : DEFAULT_STYLE.glass,
       corners: v.corners !== false,
@@ -539,6 +546,14 @@ class ViewportEngine {
   private readonly tintColour: MeshMatcapNodeMaterial;
   private readonly tintGrey: MeshMatcapNodeMaterial;
   private readonly tintWire: MeshLambertNodeMaterial;
+  /** G43: the same three, and the depth and selection-wash materials, on both sides (Faces > Outside). */
+  private readonly bothColour: MeshMatcapNodeMaterial;
+  private readonly bothGrey: MeshMatcapNodeMaterial;
+  private readonly bothWire: MeshLambertNodeMaterial;
+  private readonly facesBack: Material;
+  private readonly facesBoth: Material;
+  private readonly washBack: Material;
+  private readonly washBoth: Material;
   private triangleEdges: BufferGeometry = emptyGeometry();
   private featureEdges: BufferGeometry = emptyGeometry();
   private readonly edges: LineSegments;
@@ -624,12 +639,18 @@ class ViewportEngine {
     // The old look, kept as Wireframe in the menu: near-black Lambert faces under every edge.
     this.tintWire = new MeshLambertNodeMaterial({ color: 0x19191d, ...flat });
     this.tint = new Mesh(emptyTint(), this.tintColour);
+    const both = { ...flat, side: DoubleSide } as const;
+    this.bothColour = new MeshMatcapNodeMaterial({ matcap, vertexColors: true, ...both });
+    this.bothGrey = new MeshMatcapNodeMaterial({ matcap, ...both });
+    this.bothWire = new MeshLambertNodeMaterial({ color: 0x19191d, ...both });
+    this.facesBack = this.faces.material as Material;
+    this.facesBoth = new MeshMatcapNodeMaterial({ matcap, ...both, colorWrite: false });
     // See-through: the near walls drawn again as glass on top, writing no depth, so nothing behind
     // them is hidden (the proof page's layer 2, decision 59).
     const ghostMaterial = new MeshMatcapNodeMaterial({ matcap, vertexColors: true, side: FrontSide, flatShading: true, transparent: true, opacity: 0.15, depthWrite: false });
     this.ghost = new Mesh(this.tint.geometry, ghostMaterial);
     this.ghost.visible = false;
-    for (const m of [this.tintColour, this.tintGrey, this.tintWire, ghostMaterial]) shaded(m, this.shared);
+    for (const m of [this.tintColour, this.tintGrey, this.tintWire, this.bothColour, this.bothGrey, this.bothWire, ghostMaterial]) shaded(m, this.shared);
     // The glass case (glass.ts): the see-through layer's opacity by view angle.
     ghostMaterial.opacityNode = glassOpacity(materialOpacity);
     this.edges = new LineSegments(emptyGeometry(), fadingLines(new LineBasicNodeMaterial({ color: LINE, transparent: true, opacity: 0.3, depthWrite: false }), this.shared));
@@ -641,6 +662,8 @@ class ViewportEngine {
       emptyGeometry(),
       inSrgb(new MeshBasicNodeMaterial({ color: SELECT, transparent: true, opacity: 0.3, side: BackSide, depthWrite: false })),
     );
+    this.washBack = this.selectionWash.material as Material;
+    this.washBoth = inSrgb(new MeshBasicNodeMaterial({ color: SELECT, transparent: true, opacity: 0.3, side: DoubleSide, depthWrite: false }));
     // The red outlines are fat lines (a GPU draws 1 px lines whatever is asked): the selection 2 px, a sound-level
     // plane's outline 3.5 px and its grid 1.5 px (Burhan 2026-10-06: "the red lines need to be a bit thicker ... like the sound-level plane").
     this.selectionEdges = new LineSegments2(emptyFat(), new FatLineMaterial({ color: SELECT, linewidth: 2, opacity: 1 }));
@@ -979,6 +1002,7 @@ class ViewportEngine {
       this.easeDim(fx, liveFx);
       if (resultsFx) this.results.computeFrame();
       if (liveFx) this.live.computeFrame();
+      this.useFaces(this.facePlanFor(main === this.plan));
       r.render(this.scene, main);
       if (fx) {
         this.fxParticles(r, main);
@@ -1021,7 +1045,7 @@ class ViewportEngine {
   private setGhosted(on: boolean): void {
     if (on === this.ghosted) return;
     this.ghosted = on;
-    for (const m of [this.tintColour, this.tintGrey, this.tintWire]) {
+    for (const m of [this.tintColour, this.tintGrey, this.tintWire, this.bothColour, this.bothGrey, this.bothWire]) {
       m.transparent = on;
       m.depthWrite = !on;
       m.needsUpdate = true;
@@ -1322,6 +1346,7 @@ class ViewportEngine {
     this.dimLines.visible = false;
     this.fitPlan(b.width / b.height);
     this.setMarkerScale(INSET_MARKER_SCALE);
+    this.useFaces(this.facePlanFor(true));
     r.render(this.scene, this.plan);
     r.setScissorTest(false);
   }
@@ -1624,11 +1649,38 @@ class ViewportEngine {
     return g;
   }
 
+  /** G43: how a pass draws and picks the faces, as View style > Faces is set; `plan` for the plan camera. */
+  private facePlanFor(plan: boolean): FacePlan {
+    const st = viewStyle.get();
+    return facePlan(st.faces, st.surfaces === 'glass', plan);
+  }
+
+  /** The main view's face plan, which a pick follows. */
+  private mainFacePlan(): FacePlan {
+    return this.facePlanFor(this.view === 'plan');
+  }
+
+  /** Sets the surface, depth and wash materials and what is visible for one pass's face plan. */
+  private useFaces(p: FacePlan): void {
+    const st = viewStyle.get();
+    const [colour, grey, wire] = p.bothSides ? [this.bothColour, this.bothGrey, this.bothWire] : [this.tintColour, this.tintGrey, this.tintWire];
+    this.tint.material = st.surfaces === 'wire' ? wire : st.surfaces === 'grey' ? grey : colour;
+    this.faces.material = p.bothSides ? this.facesBoth : this.facesBack;
+    this.selectionWash.material = p.drawn && !p.bothSides ? this.washBack : this.washBoth;
+    this.tint.visible = p.drawn;
+    this.faces.visible = p.drawn && !this.ghosted;
+    this.ghost.visible = p.glass;
+  }
+
+  /** The side a pick ray meets, as the main view draws the faces. */
+  private pickSide(): Side {
+    return this.mainFacePlan().pickSide === 'double' ? DoubleSide : BackSide;
+  }
+
   /** Applies `viewStyle`: the surface material, the glass layer and the edge set. */
   private applyStyle(): void {
     const st = viewStyle.get();
-    this.tint.material = st.surfaces === 'wire' ? this.tintWire : st.surfaces === 'grey' ? this.tintGrey : this.tintColour;
-    this.ghost.visible = st.surfaces === 'glass';
+    this.useFaces(this.mainFacePlan());
     (this.ghost.material as MeshMatcapNodeMaterial).opacity = st.glass / 100;
     this.edges.geometry = st.edges === 'feature' ? this.featureEdges : this.triangleEdges;
     this.shared.nmAoMix.value = st.corners ? 1 : 0;
@@ -2024,7 +2076,7 @@ class ViewportEngine {
     if (!this.bvh) return null;
     const ray = this.rayAt(clientX, clientY);
     if (!ray) return null;
-    const hit = firstFace(this.bvh, ray);
+    const hit = firstFace(this.bvh, ray, this.pickSide());
     if (!hit) return null;
     return {
       face: hit.face,
@@ -2057,7 +2109,7 @@ class ViewportEngine {
       const ray = this.rayAt(q.x, q.y);
       if (!ray) continue;
       const along = m.p.clone().sub(ray.origin).dot(ray.direction);
-      const hit = this.bvh ? firstFace(this.bvh, ray) : null;
+      const hit = this.bvh && this.mainFacePlan().occludes ? firstFace(this.bvh, ray, this.pickSide()) : null;
       if (hit && hit.distance < along - 1e-3) continue;
       best = m;
       bestD = d;
@@ -2080,7 +2132,7 @@ class ViewportEngine {
     if (!ray) return null;
     const hit = this.results.pickMap(ray);
     if (!hit) return null;
-    const wall = this.bvh ? firstFace(this.bvh, ray) : null;
+    const wall = this.bvh && this.mainFacePlan().occludes ? firstFace(this.bvh, ray, this.pickSide()) : null;
     // A surface receiver's map lies on the model's own faces: the same distance is not in front.
     if (wall && wall.distance < hit.distance - (1e-3 + 1e-4 * hit.distance)) return null;
     return hit.face;

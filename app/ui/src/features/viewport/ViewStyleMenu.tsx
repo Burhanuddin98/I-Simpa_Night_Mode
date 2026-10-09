@@ -2,10 +2,15 @@
 // view style to be changed as per the users needs"): surfaces in colour, grey, see-through with the
 // near walls' opacity, or the old wireframe; edges at every triangle or only the features. The
 // choice is `viewStyle` in the engine, remembered per viewer.
+//
+// Parity G43: Faces, upstream's View > Faces (faces.ts): Inside (the near walls drop away, the
+// default), Outside (every face, the room as a closed shell) or None (the edges only). See-through
+// is glass over the near walls the inside view removes, so it is offered with Inside only.
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../../store';
 import { closingProps, usePresence } from '../../chrome/usePresence';
 import { viewStyle, type EdgeStyle, type SurfaceStyle } from './engine';
+import { FACE_SHOWS } from './faces';
 
 const SURFACES: { key: SurfaceStyle; label: string; hint: string }[] = [
   { key: 'colour', label: 'Colour', hint: 'Each surface in its material colour, shaded by its angle' },
@@ -55,19 +60,23 @@ export function ViewStyleMenu() {
       {listed.shown && (
         <div className="view-style-menu float-panel" role="menu" data-part="view-style-menu" {...closingProps(listed.closing)}>
           <div className="view-style-head">Surfaces</div>
-          {SURFACES.map((s) => (
-            <button
-              key={s.key}
-              role="menuitemradio"
-              aria-checked={style.surfaces === s.key}
-              data-surfaces={s.key}
-              title={s.hint}
-              onClick={() => set({ surfaces: s.key })}
-            >
-              {s.label}
-            </button>
-          ))}
-          {style.surfaces === 'glass' && (
+          {SURFACES.map((s) => {
+            const off = s.key === 'glass' && style.faces !== 'inside';
+            return (
+              <button
+                key={s.key}
+                role="menuitemradio"
+                aria-checked={style.surfaces === s.key}
+                data-surfaces={s.key}
+                disabled={off}
+                title={off ? 'See-through puts glass over the near walls the Inside view removes: choose Faces, Inside first' : s.hint}
+                onClick={() => set({ surfaces: s.key })}
+              >
+                {s.label}
+              </button>
+            );
+          })}
+          {style.surfaces === 'glass' && style.faces === 'inside' && (
             <label className="view-style-glass">
               Near walls
               <input
@@ -81,6 +90,19 @@ export function ViewStyleMenu() {
               <span>{style.glass} %</span>
             </label>
           )}
+          <div className="view-style-head">Faces</div>
+          {FACE_SHOWS.map((f) => (
+            <button
+              key={f.key}
+              role="menuitemradio"
+              aria-checked={style.faces === f.key}
+              data-faces={f.key}
+              title={f.hint}
+              onClick={() => set({ faces: f.key })}
+            >
+              {f.label}
+            </button>
+          ))}
           <div className="view-style-head">Edges</div>
           {EDGES.map((e) => (
             <button

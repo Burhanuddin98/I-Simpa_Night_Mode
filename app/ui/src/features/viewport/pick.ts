@@ -6,8 +6,9 @@
 // - The BVH is built with `indirect: true`: it sorts its own buffer and leaves the geometry's
 //   index alone, so a hit's faceIndex is the project's face index. Without it, three-mesh-bvh
 //   reorders the index in place and a pick names the wrong face (and the wrong group).
-// - Picks honour BackSide, as the faces are drawn: a face is hit only from the room's side.
-import { BackSide, BufferAttribute, BufferGeometry, type Ray, type Vector3 } from 'three';
+// - Picks honour the side the faces are drawn on: BackSide by default, a face hit only from the
+//   room's side; DoubleSide when the view draws every face (View style > Faces > Outside, G43).
+import { BackSide, BufferAttribute, BufferGeometry, type Ray, type Side, type Vector3 } from 'three';
 import { MeshBVH } from 'three-mesh-bvh';
 
 /** The model as three.js draws it: f32 positions, the project's index. */
@@ -23,9 +24,10 @@ export function pickingBvh(geometry: BufferGeometry): MeshBVH {
   return new MeshBVH(geometry, { indirect: true });
 }
 
-/** The first face a ray meets from the room's side (BackSide), in project face numbering. */
-export function firstFace(bvh: MeshBVH, ray: Ray): { face: number; distance: number; point: Vector3 } | null {
-  const hit = bvh.raycastFirst(ray, BackSide);
+/** The first face a ray meets from the room's side (BackSide), or from either side (`side`
+ * DoubleSide), in project face numbering. */
+export function firstFace(bvh: MeshBVH, ray: Ray, side: Side = BackSide): { face: number; distance: number; point: Vector3 } | null {
+  const hit = bvh.raycastFirst(ray, side);
   if (!hit || typeof hit.faceIndex !== 'number') return null;
   return { face: hit.faceIndex, distance: hit.distance, point: hit.point };
 }

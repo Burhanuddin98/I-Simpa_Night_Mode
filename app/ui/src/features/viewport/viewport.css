@@ -585,6 +585,11 @@
 .view-style-menu button:hover {
   background: var(--raised-2);
 }
+.view-style-menu button:disabled {
+  color: var(--text-3);
+  cursor: default;
+  background: transparent;
+}
 .view-style-menu button[aria-checked='true']::before {
   content: '';
   position: absolute;
