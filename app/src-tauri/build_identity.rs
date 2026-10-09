@@ -2,9 +2,27 @@
 
 /// Parity A23: the commit this build was made from and its profile, for About
 /// (`SIMPA_BUILD_COMMIT`, `SIMPA_BUILD_PROFILE`). A tree with no git gives "unknown"; uncommitted
-/// changes are named, since such a build is not the commit alone. Rebuilt when HEAD, the branch
-/// it points to or the index moves.
+/// changes are named, since such a build is not the commit alone. Rerun when HEAD, the branch it
+/// points to or the index moves, and when any source compiled into app.exe changes (the app's
+/// Rust, its pages and examples, the UI, the core crates, the solver manifest): without that, a
+/// build of an edited tree kept the clean commit of the build before it (A23's bed, 17:28).
 pub fn emit() {
+    let manifest =
+        std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default());
+    for watched in [
+        "src",
+        "manual",
+        "examples",
+        "about",
+        "../ui/src",
+        "../../crates",
+        "../../solvers/manifest.json",
+    ] {
+        println!(
+            "cargo:rerun-if-changed={}",
+            manifest.join(watched).display()
+        );
+    }
     let git = |args: &[&str]| -> Option<String> {
         let out = std::process::Command::new("git").args(args).output().ok()?;
         out.status
