@@ -26,7 +26,7 @@ import { boxRoomRequestStore, groupRenameStore, reportStore, runStore, sceneStor
 import { ADD_GROUP_LABEL, DELETE_GROUP_LABEL, MERGE_LABEL, mergePlan, RENAME_GROUP_LABEL, renameTarget } from './groupsModel';
 import { clipboardStore, copySelected, deleteGroup, pasteCopied } from './sceneUi';
 import { Search } from './icons';
-import { recentStore } from './recent';
+import { recentStore, reopenLastStore, setReopenLast } from './recent';
 import { recentLabel } from './recentModel';
 import { RunButton } from './RunButton';
 import { closingProps, usePresence } from './usePresence';
@@ -53,6 +53,7 @@ export function MenuBar() {
   const hidden = useStore(hideStore);
   const copied = useStore(clipboardStore);
   const recent = useStore(recentStore);
+  const reopen = useStore(reopenLastStore);
   // W9: what the export items say depends on the step, the run and its report, and the view.
   useStore(stepStore);
   useStore(selectedRunStore);
@@ -118,6 +119,15 @@ export function MenuBar() {
         disabled: running,
         title: running ? RUN_ACTIVE_TITLE : p,
       })),
+      // A33: a view of the start, said as what choosing it does (as Roof off / Put the roof back).
+      {
+        id: 'reopen-last',
+        label: reopen ? 'Start on the landing page' : 'Start on the last project',
+        run: () => setReopenLast(!reopen),
+        title: reopen
+          ? 'Night Mode now opens the last project when it starts; choose this to start on the landing page again'
+          : 'Open the last project when Night Mode starts, as upstream does',
+      },
       { id: 'save', label: 'Save', keys: 'Ctrl+S', run: () => actions.fire(actions.save()), disabled: !info },
       { id: 'save-as', label: 'Save as…', keys: 'Ctrl+Shift+S', run: () => actions.fire(actions.saveAs()), disabled: !info },
       {

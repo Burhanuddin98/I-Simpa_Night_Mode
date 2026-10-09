@@ -1,7 +1,17 @@
 // A7: the recent projects list's rules (recentModel.ts).
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { RECENT_MAX, readRecent, recentLabel, withoutRecent, withRecent } from './recentModel.ts';
+import { projectAtStart, RECENT_MAX, readRecent, recentLabel, withoutRecent, withRecent } from './recentModel.ts';
+
+test('projectAtStart (A33): the newest recent project, only when chosen, nothing else opened, not the self-test', () => {
+  const recent = ['C:\\a.simpa', 'C:\\b.simpa'];
+  const on = { reopen: true, opened: false, selftest: false, recent };
+  assert.equal(projectAtStart(on), 'C:\\a.simpa');
+  assert.equal(projectAtStart({ ...on, reopen: false }), null, 'off: the landing page');
+  assert.equal(projectAtStart({ ...on, opened: true }), null, '--project wins');
+  assert.equal(projectAtStart({ ...on, selftest: true }), null);
+  assert.equal(projectAtStart({ ...on, recent: [] }), null);
+});
 
 test('withRecent: the newest first, once whatever its case or slashes, at most five', () => {
   let l: string[] = [];

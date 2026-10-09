@@ -24,6 +24,18 @@ export function readRecent(value: unknown): string[] {
   return value.filter((p): p is string => typeof p === 'string' && p.length > 0).reduceRight<string[]>((acc, p) => withRecent(acc, p), []);
 }
 
+/**
+ * A33, upstream's start on the last project (projet.cpp:1986-2000 reloads it at every start), here a
+ * choice that is off until ticked, since the landing page with its examples is this app's start: the
+ * project to open at start, or null. Only when the choice is on (off in a fresh profile, so a test
+ * session starts on the landing page), nothing was opened from the command line, it is not the
+ * self-test, and there is a recent project.
+ */
+export function projectAtStart(opts: { reopen: boolean; opened: boolean; selftest: boolean; recent: readonly string[] }): string | null {
+  if (!opts.reopen || opts.opened || opts.selftest) return null;
+  return opts.recent[0] ?? null;
+}
+
 /** A recent entry as a menu shows it: the file's name without `.simpa`, and its folder. */
 export function recentLabel(path: string): { name: string; folder: string } {
   const cut = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'));

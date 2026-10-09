@@ -1253,6 +1253,15 @@
   border-color: var(--edge);
   color: var(--text);
 }
+/* A33: start on the last project, under the recent list. */
+.landing-reopen {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -12px 0 20px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
 .landing-actions {
   display: flex;
   gap: 8px;

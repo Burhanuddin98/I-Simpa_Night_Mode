@@ -10,12 +10,14 @@ import * as actions from '../actions';
 import { boxRoomRequestStore, runStore, sceneStore, useStore } from '../store';
 import { EXAMPLES, EXAMPLES_HEAD, EXAMPLES_NOTE, exampleLine, LANDING_LEAD, LANDING_TITLE, landingShown } from './landingModel';
 import { RUN_ACTIVE_TITLE } from './MenuBar';
-import { forgetRecent, recentStore } from './recent';
+import { forgetRecent, recentStore, reopenLastStore, reopenProblemStore, setReopenLast } from './recent';
 import { recentLabel } from './recentModel';
 
 export function Landing() {
   const scene = useStore(sceneStore);
   const recent = useStore(recentStore);
+  const reopen = useStore(reopenLastStore);
+  const reopenProblem = useStore(reopenProblemStore);
   const running = useStore(runStore) !== null;
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -69,7 +71,17 @@ export function Landing() {
                 );
               })}
             </ul>
+            <label className="landing-reopen" title="Upstream starts on the last project; here it is your choice, kept in this profile">
+              <input type="checkbox" data-field="reopen-last" checked={reopen} onChange={(e) => setReopenLast(e.target.checked)} />
+              <span>Open the last project when Night Mode starts</span>
+            </label>
           </>
+        )}
+        {reopenProblem && (
+          <div className="issue landing-error" role="alert" data-part="reopen-problem">
+            <span className="state">Error</span>
+            <span>{reopenProblem}</span>
+          </div>
         )}
 
         <h2 className="landing-head">{EXAMPLES_HEAD}</h2>

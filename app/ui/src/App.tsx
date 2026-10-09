@@ -21,6 +21,8 @@ import { PropertiesPanel } from './chrome/PropertiesPanel';
 import { SavePrompt } from './chrome/SavePrompt';
 import { ScenePanel } from './chrome/ScenePanel';
 import { clipboardStore, copySelected, pasteCopied } from './chrome/sceneUi';
+import { recentStore, reopenLastStore, reopenProblemStore } from './chrome/recent';
+import { projectAtStart } from './chrome/recentModel';
 import { StatusBar } from './chrome/StatusBar';
 import { StepBar } from './chrome/StepBar';
 import { Dock } from './features/dock/Dock';
@@ -56,6 +58,20 @@ async function boot(): Promise<void> {
     // M11: the close request comes through this channel; the solvers and the library are read
     // once (the solvers again before each run), and a --project's runs are listed.
     await actions.listenAppEvents();
+    // A33: the last project, when the person chose to start on it and nothing else was opened.
+    const last = projectAtStart({
+      reopen: reopenLastStore.get(),
+      opened: sceneStore.get() !== null || !!info.project_error,
+      selftest: !!info.selftest,
+      recent: recentStore.get(),
+    });
+    if (last) {
+      log('INFO', `Opening the last project, as chosen: ${last}`);
+      await actions.openProject(last).catch((e: unknown) => {
+        const err = asCmdError(e);
+        reopenProblemStore.set(`The last project, ${last}, did not open: ${err.message} (${err.code})`);
+      });
+    }
     actions.fire(actions.refreshSolvers());
     actions.fire(actions.refreshGpu());
     actions.fire(actions.loadLibrary());
