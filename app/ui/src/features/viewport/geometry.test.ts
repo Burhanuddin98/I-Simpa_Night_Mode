@@ -8,6 +8,7 @@ import {
   formatMetres,
   gizmoAxes,
   isFloorLike,
+  placeBothSides,
   placeOffFace,
   placementPoint,
   planDimensions,
@@ -82,6 +83,20 @@ test('G48: a raked floor is lifted straight up, a steep face along its normal, a
   const steep = placeOffFace([1, 1, 2], [Math.sin(s), 0, -Math.cos(s)], 1)?.point;
   assert.deepEqual(steep, [0.134, 1, 2.5]);
   assert.equal(placeOffFace([0, 0, 0], [0, 0, 0], 1.2), null);
+});
+
+test('a face wound inward: the other side is the room side, a flipped floor still lifts straight up', () => {
+  // The floor at z = 0 wound the wrong way: its winding says out is +z, so the winding's side is 1.2 m
+  // below it (outside), and the other side is the ear height above it.
+  const floor = placeBothSides([2, 3, 0], [0, 0, 1], 1.2);
+  assert.deepEqual(floor, { winding: { point: [2, 3, -1.2], how: 'off' }, flipped: { point: [2, 3, 1.2], how: 'above' } });
+  // The left wall at y = 6 wound inward (out claimed -y): the other side is 1.2 m into the room.
+  const wall = placeBothSides([3.3, 6, 1.7], [0, -1, 0], 1.2);
+  assert.deepEqual(wall?.winding.point, [3.3, 7.2, 1.7]);
+  assert.deepEqual(wall?.flipped, { point: [3.3, 4.8, 1.7], how: 'off' });
+  // A face wound right: the winding's side is the room's, as placeOffFace.
+  assert.deepEqual(placeBothSides([2, 3, 0], [0, 0, -1], 1.2)?.winding, placeOffFace([2, 3, 0], [0, 0, -1], 1.2));
+  assert.equal(placeBothSides([0, 0, 0], [0, 0, 0], 1.2), null);
 });
 
 test('a ray parallel to the plane, or pointing away from it, gives no point', () => {

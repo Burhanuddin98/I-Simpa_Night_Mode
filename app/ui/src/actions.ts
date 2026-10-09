@@ -471,14 +471,20 @@ export interface Placement {
   lift: number;
   how: 'above' | 'off';
   point: Vec3;
+  /** The face's winding pointed into the room, so the point went to the other side of it. */
+  flipped?: boolean;
 }
 /** G48: this session's placements by source or receiver id (shown while it still stands where it was put). */
 export const placementStore = new Store<ReadonlyMap<string, Placement>>(new Map());
 
-/** G48: a placement in words: "1.2 m above face 4 (Floor)". */
+/** G48: a placement in words: "1.2 m above face 4 (Floor)", and the face's winding when it looked flipped. */
 export function placementText(p: Placement): string {
-  return `${p.lift} m ${p.how === 'above' ? 'above' : 'off'} face ${p.face}${p.group ? ` (${p.group})` : ''}`;
+  const at = `${p.lift} m ${p.how === 'above' ? 'above' : 'off'} face ${p.face}${p.group ? ` (${p.group})` : ''}`;
+  return p.flipped ? `${at}, on the room's side: the face looks flipped (wound facing into the room)` : at;
 }
+
+/** The refusals that mean a placed point is not in the room, the ones the other side of the face may cure. */
+export const OUTSIDE_CODES: ReadonlySet<string> = new Set(['RECEIVER_OUTSIDE', 'SOURCE_OUTSIDE', 'RECEIVER_ON_SURFACE']);
 
 /**
  * Adds a receiver or a source at `point` (already lifted by the caller), at the end of its list,

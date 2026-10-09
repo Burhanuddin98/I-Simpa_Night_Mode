@@ -79,6 +79,19 @@ export function placeOffFace(hit: Vec, outward: Vec, lift: number): { point: Vec
   return { point: [toMillimetre(hit[0] - k * outward[0]), toMillimetre(hit[1] - k * outward[1]), toMillimetre(hit[2] - k * outward[2])], how: 'off' };
 }
 
+/**
+ * The two points a placement click can write, the side the face's winding calls inside first
+ * and the other side second: the winding is only a claim, and a face wound inward would put the
+ * first one out of the room (a flipped floor would send it down). The caller tries the first
+ * through the checked apply, whose inside test is the room's, and the second when the first is
+ * outside. Null for a degenerate face.
+ */
+export function placeBothSides(hit: Vec, outward: Vec, lift: number): { winding: { point: Vec; how: 'above' | 'off' }; flipped: { point: Vec; how: 'above' | 'off' } } | null {
+  const winding = placeOffFace(hit, outward, lift);
+  const flipped = placeOffFace(hit, [-outward[0], -outward[1], -outward[2]], lift);
+  return winding && flipped ? { winding, flipped } : null;
+}
+
 export interface Box {
   min: Vec;
   max: Vec;

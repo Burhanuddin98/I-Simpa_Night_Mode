@@ -98,7 +98,7 @@ import { insideBox, NO_REVEAL, REACH_NONE, reachAlong, reachKeep, revealRadius, 
 import { settingsStore } from '../simulate/runSize';
 import { facePlan, faceShowOf, type FacePlan, type FaceShow } from './faces';
 import { ResultsLayer, type MapMeta, type ParticleMeta } from './resultsLayer';
-import { faceBounds, faceCentroid, fitOrtho, gizmoAxes, placeOffFace, planDimensions, rayOnFacePlane, type Box, type Vec } from './geometry';
+import { faceBounds, faceCentroid, fitOrtho, gizmoAxes, placeBothSides, planDimensions, rayOnFacePlane, type Box, type Vec } from './geometry';
 import { BG, glowPixels, RED, ringPixels, WHITE } from './sprites';
 import { GLOW_MAX, GLOW_RGB, glowLevel, glowRadius, glowTerm, pulsePhase, spriteScale, STILL_PHASE } from './glow';
 import { aoFactor, aoReach, bakeAo } from './ao';
@@ -2866,27 +2866,44 @@ class ViewportEngine {
     const normal = faceNormalOf(mesh.positions, mesh.indices, hit.face);
     const on = rayOnFacePlane(mesh.positions, mesh.indices, hit.face, hit.origin, hit.dir);
     const lift = actions.placeOffsetStore.get()[kind];
-    const placed = on ? placeOffFace(on, normal, lift) : null;
-    if (!placed) {
+    const sides = on ? placeBothSides(on, normal, lift) : null;
+    if (!sides) {
       this.notify(`Face ${hit.face} has no direction (a degenerate face): nothing placed.`);
       return;
     }
     const group = this.groupNames([hit.face])[0] ?? null;
-    const where = actions.placementText({ face: hit.face, group: group === null ? null : displayName(group), lift, how: placed.how, point: placed.point });
+    const placement = (side: 'winding' | 'flipped'): actions.Placement => ({
+      face: hit.face,
+      group: group === null ? null : displayName(group),
+      lift,
+      how: sides[side].how,
+      point: sides[side].point,
+      ...(side === 'flipped' ? { flipped: true } : {}),
+    });
+    const where = actions.placementText(placement('winding'));
+    // The winding's side first; when the room's inside test puts that point outside, the other
+    // side of the face (a face wound inward, or a flipped floor, sends the first one out).
+    const attempt = async () => {
+      const first = await actions.placeAt(kind, sides.winding.point);
+      if (first.applied || !first.refusals.some((r) => actions.OUTSIDE_CODES.has(r.code))) return { outcome: first, first, side: 'winding' as const };
+      return { outcome: await actions.placeAt(kind, sides.flipped.point), first, side: 'flipped' as const };
+    };
     actions.fire(
-      actions.placeAt(kind, placed.point).then((outcome) => {
+      attempt().then(({ outcome, first, side }) => {
         if (!outcome.applied) {
-          this.notify(`Not placed ${where}: ${outcome.refusals[0] ? sentence(outcome.refusals[0].message) : 'the edit was refused'} The project is unchanged.`);
+          const why = first.refusals[0] ? sentence(first.refusals[0].message) : 'the edit was refused';
+          this.notify(`Not placed ${where}: ${why}${side === 'flipped' ? ' The other side of the face is not in the room either.' : ''} The project is unchanged.`);
           return;
         }
         const view = outcome.state.view;
         const list = kind === 'receiver' ? view.point_receivers : view.sources;
         const added = list[list.length - 1];
         if (!added) return;
+        const placed = placement(side);
         const next = new Map(actions.placementStore.get());
-        next.set(added.id, { face: hit.face, group: group === null ? null : displayName(group), lift, how: placed.how, point: placed.point });
+        next.set(added.id, placed);
         actions.placementStore.set(next);
-        this.notify(`${added.name} placed ${where}.`);
+        this.notify(`${added.name} placed ${actions.placementText(placed)}.`);
         selectionStore.set({ kind, id: added.id });
       }),
     );
