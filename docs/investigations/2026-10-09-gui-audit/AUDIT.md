@@ -89,3 +89,21 @@ The choice for A1: where the table is edited.
   response window.
 - **A dock tab**: the table as a "Materials" tab in the bottom dock, which is already full-width and can fill the window.
 - **A wider panel only**: the properties panel made draggable; the table still scrolls with third-octave bands.
+
+## Status, 03:44 (Burhan's order 02:40: the wide sheet, then the rest in order, each shown in the app)
+
+| Item | State | Commit | Check |
+|---|---|---|---|
+| A1 materials table | Built: its own window, every band and the law visible at 1280/1536/1920, 48 px cells, 12.5 px text | 32c1d8a | bed 13/13; m10 materials+viewport+shell+scene 26/26; m11 project+groups 9/9; m13.blank 9/9 |
+| A2 Results numbers | Built: reverberation first, advice last, every card named on the head line, the standards sentence on one line; Results keeps its own dock height, 45 % of the window but leaving the view 640 px (440 px at 1080), so the T30/EDT chart and the decay show | c4576d2, 5acf95e | bed 4/4 + 5/6 (the table sits under the chart, one scroll); m12.acoustics, b80.advisor, dock 13/13 |
+| A3 Results cards on the room | Built (his call 03:13, open by default): map options and playback fold to one line, kept in the profile | 5acf95e | bed |
+| B1 panel widths | Built: grips, stored, double-click resets | a4406eb | bed 11/11 |
+| B2 1280 step bar | Built | a4406eb | bed |
+| B3 sideways 10 px | Gone with A1 (it was the grid's bleed) | 32c1d8a | |
+| C1-C4, C6, C7, C9 | Built | a4406eb | bed |
+| C5 "closed" wording | Built: "watertight" in the step bar, status bar, model check and Run's checks (his word 03:13) | 5acf95e | bed; unit 355/355 |
+| C8 glow through the 35 % dock | Built: the dock at 70 %, the side panels at 35 % (his call 03:13) | 5acf95e | bed |
+
+The focus watcher (m11-focus) failed once during b80-after, 42 s in: app.exe took the foreground with no input.
+Nothing in these changes asks for focus (checked by a sentinel seat, which found 13/13 tests passed); re-run in the
+full M11 pass to see whether it repeats.
