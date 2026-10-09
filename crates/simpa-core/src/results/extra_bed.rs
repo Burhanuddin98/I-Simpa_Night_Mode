@@ -6,6 +6,9 @@
 //! passes only when every case holds; each bed also carries controls, a wrong reference the
 //! same comparison must catch, so a check that cannot fail does not pass.
 //!
+//! R42 ([`r42`]) is the exception: a consistency bed on a real run, the maps against the point
+//! receivers, two Monte-Carlo estimators and no closed form.
+//!
 //! The references are written here from their closed forms, not from the code under test:
 //! - an exponential decay `E(t) = e^{−t/τ}` has a straight Schroeder curve, `−60·t/T` dB, so
 //!   every range gives `T`;
@@ -862,12 +865,16 @@ pub fn r27() -> BedRun {
     )
 }
 
-/// R42 with R73: each parameter map's faces that hold a point receiver's centre, against that
-/// receiver's value of the same parameter in the same band, on a real run (`run`, a run folder
-/// `results::load` verifies). Tolerance: the parameter's difference limen (ISO 3382-1 Table A.1 as
-/// the project carries it: 5 % for EDT and T30, 1 dB for C80, 0.05 for D50), since the face and
-/// the ball are two Monte-Carlo estimators of one quantity at one place. A receiver value or a
-/// face value that is refused leaves the case unheld: the bed passes only on numbers compared.
+/// R42 with R73, a **consistency bed**, not a closed-form one: each parameter map's faces that hold
+/// a point receiver's centre, against that receiver's value of the same parameter in the same band,
+/// on a real run (`run`, a run folder `results::load` verifies). The face and the receiver's ball
+/// are two Monte-Carlo estimators of one quantity at one place, read by the same code; neither is
+/// an analytical reference, so a PASS says the map agrees with the receivers, not that either is
+/// right. Tolerance: a tenth of the difference limen (ISO 3382-1 Table A.1 as the project carries
+/// it) for EDT (0.5 %), C80 (0.1 dB) and D50 (0.005), as the closed-form beds; T30 the limen itself
+/// (5 %), since the two estimators' T30 differ by up to 2.7 % on the bed's run (40,000,000
+/// particles), more than a tenth of it. A receiver value or a face value that is refused leaves
+/// the case unheld: the bed passes only on numbers compared.
 pub fn r42(run: &std::path::Path) -> Result<BedRun, String> {
     use super::maps::{self, MapParameter};
     let r = super::load(run).map_err(|e| format!("{}: {e}", run.display()))?;
@@ -885,9 +892,10 @@ pub fn r42(run: &std::path::Path) -> Result<BedRun, String> {
     }
     for p in MapParameter::ALL {
         let (tol, relative, unit) = match p {
-            MapParameter::T30 | MapParameter::Edt => (0.05, true, "relative"),
-            MapParameter::C80 => (1.0, false, "dB"),
-            MapParameter::D50 => (0.05, false, "fraction"),
+            MapParameter::T30 => (0.05, true, "relative"),
+            MapParameter::Edt => (0.005, true, "relative"),
+            MapParameter::C80 => (0.1, false, "dB"),
+            MapParameter::D50 => (0.005, false, "fraction"),
         };
         for (path, band_hz) in &files {
             let map = maps::parameter_map(&r, path, p)
@@ -984,12 +992,12 @@ pub fn r42(run: &std::path::Path) -> Result<BedRun, String> {
     let mut b = bed(
         "m12c-r42",
         &format!(
-            "R42 with R73: T30, EDT, C80 and D50 maps (results::maps, the receivers' code on each face's series) at the faces holding a point receiver's centre, against that receiver's value, run {}",
+            "R42 with R73, a consistency bed (two Monte-Carlo estimators, no analytical reference): T30, EDT, C80 and D50 maps (results::maps, the receivers' code on each face's series) at the faces holding a point receiver's centre, against that receiver's value, run {}",
             run.display()
         ),
         cases,
     );
-    b.rule = "PASS when every face holding a receiver's centre, in every band stored and for each of T30, EDT, C80 and D50, gives a value within the parameter's difference limen of that receiver's (5 % for T30 and EDT, 1 dB for C80, 0.05 for D50), a face or receiver value refused counts as not holding, and each control (the receiver's value moved by twice the limen) is caught"
+    b.rule = "A consistency bed: the face and the receiver's ball are two Monte-Carlo estimators of one quantity, neither an analytical reference. PASS when every face holding a receiver's centre, in every band stored and for each of T30, EDT, C80 and D50, gives a value within the tolerance of that receiver's (a tenth of the difference limen for EDT, 0.5 %, C80, 0.1 dB, and D50, 0.005; the limen itself for T30, 5 %, as the two estimators' T30 differ by up to 2.7 % on this run), a face or receiver value refused counts as not holding, and each control (the receiver's value moved by twice the tolerance) is caught"
         .into();
     Ok(b)
 }

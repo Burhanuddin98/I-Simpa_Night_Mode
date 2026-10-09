@@ -1,5 +1,6 @@
-//! `simpa bed-extra r15|r20|r27 [--out <file>]` and `simpa bed-extra r42 --run <run folder> [--out <file>]`: M12c's closed-form beds of the numbers parity
-//! added (`simpa_core::results::extra_bed`). The bed's cases go to stdout as JSON and, with
+//! `simpa bed-extra r15|r20|r27 [--out <file>]` and `simpa bed-extra r42 --run <run folder> [--out <file>]`: M12c's beds of the numbers parity
+//! added (`simpa_core::results::extra_bed`): closed-form for r15, r20 and r27; r42 a consistency
+//! bed, the maps against the point receivers on a real run. The bed's cases go to stdout as JSON and, with
 //! `--out`, to the file, with the commit they ran at and whether the tree was edited
 //! (`hashes.head`, `hashes.src_uncommitted`: the shape `tools/bed/summary.py` reads a set's
 //! commit from). Exit 0 only when every case holds; 8 when one does not; 2 usage.

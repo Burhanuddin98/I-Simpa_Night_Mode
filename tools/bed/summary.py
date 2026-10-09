@@ -508,8 +508,8 @@ PARAMETERS = [
 ]
 
 M12C_NOISE = (
-    "Its Monte-Carlo noise is judged with a calibration it carries, not one measured for it: of its "
-    "measured neighbours, the largest calibrated factor, on the narrowest domain "
+    "Its Monte-Carlo noise has no calibration of its own: it borrows the largest calibrated factor "
+    "of the quantities it is computed like, on the narrowest domain of theirs "
     "(params::noise::extra_calibration)."
 )
 M12C_CLOSED_FORM = (
@@ -601,14 +601,17 @@ M12C_MAP_NOTES = [
     "spheres, not on faces (shown as a note on the map); EDT keeps EDT v2.1's own range.",
     "Per band, SPL maps (surf_receiv_method 1) and one source only; the Global map, intensity maps and "
     "several sources are refused with the reason.",
-    "The bed is one real run (beds/m12c-r42.json names it): the faces holding each point receiver's "
-    "centre on two cutting planes of tutorial 1's room, three bands, 40,000,000 particles per source, "
-    "against that receiver's value, within the difference limen. It does not show that a map is right "
-    "far from a receiver, or on walls (scene surface receivers), or at fewer particles.",
+    "The bed is a consistency bed on one real run (beds/m12c-r42.json names it), not an analytical "
+    "reference: the faces holding each point receiver's centre on two cutting planes of tutorial 1's "
+    "room, three bands, 40,000,000 particles per source, against that receiver's value, two Monte-Carlo "
+    "estimators of one quantity; within a tenth of the difference limen for EDT, C80 and D50 and the "
+    "limen for T30, whose two estimators differ by up to 2.7 % there. A PASS says the map agrees with "
+    "the receivers, not that either is right. It does not show that a map is right far from a "
+    "receiver, or on walls (scene surface receivers), or at fewer particles.",
     NO_MEASURED_ROOM,
 ]
 PARAMETERS += [
-    (name, name, "M12c R42 with R73: maps against the receivers on a real run (simpa bed-extra r42)", ["m12c-r42"], M12C_MAP_NOTES)
+    (name, name, "M12c R42 with R73: a consistency bed, maps against the receivers on a real run (simpa bed-extra r42)", ["m12c-r42"], M12C_MAP_NOTES)
     for name in ("map_t30_s", "map_edt_s", "map_c80_db", "map_d50")
 ]
 

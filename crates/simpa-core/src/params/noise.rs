@@ -1363,14 +1363,14 @@ pub fn extra_candidates(x: decay::Extra) -> &'static [usize] {
 }
 
 /// The calibration an extra carries, and the factor its bootstrap standard deviation is multiplied
-/// by. **No extra was calibrated against SPPS's seeds**
-/// (`docs/investigations/2026-09-25-noise-calibration/` measured the eight only), so each takes,
-/// of its candidates ([`extra_candidates`]) under the run's method and walls, the entry whose
-/// calibrated factor at this series' `n` is the largest (its structure, kappa and margin with
-/// it), held to the narrowest domain of them all (the most particles any asks for, the fewest
-/// crossings per particle any allows, the largest margin), naming a particle count only where
-/// every candidate does: the most noise any measured neighbour showed, on the domain where all of
-/// them were measured. `None` for an unknown model.
+/// by. An extra has **no calibration of its own**: none was measured against SPPS's seeds
+/// (`docs/investigations/2026-09-25-noise-calibration/` measured the eight only). It borrows the
+/// largest factor of its candidates ([`extra_candidates`]: EDT/T20/T30 for a decay time, C50/C80
+/// for C, D50 for D) under the run's method and walls at this series' `n` (that entry's structure,
+/// kappa and margin with it), held to the narrowest domain of them all (the most particles any
+/// asks for, the fewest crossings per particle any allows, the largest margin), naming a particle
+/// count only where every candidate does. Whether the borrowed factor covers the extra's own noise
+/// was not measured. `None` for an unknown model.
 pub fn extra_calibration(
     model: &NoiseModel,
     x: decay::Extra,

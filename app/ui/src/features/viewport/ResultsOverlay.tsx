@@ -420,7 +420,7 @@ export function ResultsOverlay() {
                 data-map-quantity={q.key}
                 aria-checked={v.quantity === q.key}
                 disabled={q.withheld !== null || v.diff}
-                title={q.withheld ? `Withheld: ${q.withheld}` : v.diff ? 'A difference is of levels only' : `${q.label} on every face, read from its time series by the code the receivers use`}
+                title={q.withheld ? `Withheld: ${q.withheld}` : v.diff ? 'A difference is of levels only' : `${q.label} on every face, read from its time series by the code the receivers use; its test bed checks it for consistency with the point receivers, not against an analytical reference`}
                 onClick={() => resultsView.setQuantity(q.key)}
               >
                 {q.label}

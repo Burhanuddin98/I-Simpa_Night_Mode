@@ -22,8 +22,9 @@
 //! - **One source**: ISO 3382-1 defines these per source and receiver; with more than one source
 //!   emitting in the band the map is refused, `several_sources`, as a receiver's values are.
 //!
-//! The bed (`results::extra_bed::r42`) holds a map's face to the point receiver whose centre it
-//! holds, on a real run.
+//! The bed (`results::extra_bed::r42`) is a consistency bed: it holds a map's face to the point
+//! receiver whose centre it holds, on a real run, two Monte-Carlo estimators of one quantity and
+//! no analytical reference.
 
 use std::collections::BTreeMap;
 

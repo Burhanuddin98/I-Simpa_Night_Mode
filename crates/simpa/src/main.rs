@@ -54,8 +54,9 @@ const USAGE: &str = "usage:
       time limit (5 to 1000 ms) to every SPPS series, as parameters.custom
   simpa bed-extra r15|r20|r27 [--out <file>]                M12c's closed-form beds of the numbers
       parity added: the cases as JSON on stdout (and in <file>). Exit 0 only when every case holds;
-      8 not passed; 2 usage. simpa bed-extra r42 --run <run folder> holds each parameter map's
-      faces at a point receiver's centre to that receiver's value, on that run
+      8 not passed; 2 usage. simpa bed-extra r42 --run <run folder>, a consistency bed (no closed
+      form): each parameter map's faces at a point receiver's centre held to that receiver's value,
+      on that run
   simpa results --schema                                     the JSON Schemas of results --json
   simpa reband <project.simpa> <out.simpa> --kind octave|third_octave --lo <hz> --hi <hz>
       the project moved onto every nominal band of that kind from --lo to --hi, each new band
