@@ -364,10 +364,7 @@ test('G16: fitting zones are read from the project file, box or scene, on or off
       { id: 'b', name: 'Stage', enabled: false, shape: { kind: 'scene', groups: [] } },
     ],
   });
-  assert.deepEqual(fittingZonesOf(json), [
-    { id: 'a', name: 'Stalls', enabled: true, kind: 'box' },
-    { id: 'b', name: 'Stage', enabled: false, kind: 'scene' },
-  ]);
+  assert.deepEqual(fittingZonesOf(json), JSON.parse(json).fitting_zones, 'whole, as the file holds them');
   assert.deepEqual(fittingZonesOf('{"fitting_zones":[]}'), []);
   assert.equal(fittingZonesOf('{}'), null);
   assert.equal(fittingZonesOf('not json'), null);

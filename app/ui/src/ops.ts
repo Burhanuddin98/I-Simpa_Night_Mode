@@ -5,6 +5,7 @@ import type { LibraryMaterial } from './bindings/ipc.ts';
 import type {
   EntityRef,
   Environment,
+  FittingZone,
   Material,
   MaterialQuantity,
   Op,
@@ -207,6 +208,11 @@ export function newSource(id: string, name: string, position: Vec3, globalDb = 8
 export const addSurfaceReceiver = (index: number, receiver: SurfaceReceiver): Op => ({ op: 'add_surface_receiver', index, receiver });
 export const replaceSurfaceReceiver = (receiver: SurfaceReceiver): Op => ({ op: 'replace_surface_receiver', receiver });
 export const removeSurfaceReceiver = (id: string): Op => ({ op: 'remove_surface_receiver', id });
+
+// ---- fitting zones ------------------------------------------------------------------------------
+
+/** A fitting zone replaced whole, by its id (M43: switched on or off): one undo step. */
+export const replaceFittingZone = (zone: FittingZone): Op => ({ op: 'replace_fitting_zone', zone });
 
 /** An enabled cutting plane through corners `a`, `b`, `c` (upstream's A, B, C), cells of `resolution` m. */
 export function newCuttingPlane(id: string, name: string, a: Vec3, b: Vec3, c: Vec3, resolution: F64): SurfaceReceiver {

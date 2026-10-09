@@ -45,7 +45,9 @@ import {
   newReceiver,
   newSource,
   nextName,
+  replaceFittingZone,
   replaceMaterial,
+  replaceSurfaceReceiver,
   setSourceEnabled as setSourceEnabledOp,
   type Vec3,
   withLaw,
@@ -79,6 +81,7 @@ import {
   type SppsDevice,
   repairStore,
   meshNowStore,
+  fittingZonesStore,
   Store,
 } from './store';
 
@@ -922,6 +925,24 @@ export async function addFromLibrary(entry: LibraryMaterial): Promise<EditOutcom
 /** Switches a source on or off (row 22, M26). */
 export async function setSourceEnabled(id: string, enabled: boolean): Promise<EditOutcome> {
   return apply(setSourceEnabledOp(id, enabled), `source:${id}:enabled`);
+}
+
+/**
+ * M43: switches a cutting plane or a surface receiver on or off, the receiver replaced whole: one
+ * undo step, refusals filed under `surface_receiver:<id>:enabled`. A receiver switched off is left
+ * out of the solver's input, as a source is; its solver id is kept, so nothing else renumbers.
+ */
+export async function setSurfaceReceiverEnabled(id: string, enabled: boolean): Promise<EditOutcome> {
+  const r = sceneStore.get()?.view.surface_receivers.find((x) => x.id === id);
+  if (!r) throw new Error(`setSurfaceReceiverEnabled: no surface receiver ${id}`);
+  return apply(replaceSurfaceReceiver({ ...r, enabled }), `surface_receiver:${id}:enabled`);
+}
+
+/** M43: switches a fitting zone on or off, as `setSurfaceReceiverEnabled`; refusals under `fitting_zone:<id>:enabled`. */
+export async function setFittingZoneEnabled(id: string, enabled: boolean): Promise<EditOutcome> {
+  const z = fittingZonesStore.get()?.find((x) => x.id === id);
+  if (!z) throw new Error(`setFittingZoneEnabled: no fitting zone ${id}`);
+  return apply(replaceFittingZone({ ...z, enabled }), `fitting_zone:${id}:enabled`);
 }
 
 /** Sets one reflection law for every band of a material (row 22, M5): one undo step. */

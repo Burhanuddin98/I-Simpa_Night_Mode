@@ -17,6 +17,7 @@ import type {
   SolversStatus,
   UiIssue,
 } from './bindings/ipc';
+import type { FittingZone } from './bindings/schema';
 import type { ProgressPoint } from './features/simulate/runTime';
 import type { SceneMesh } from './mesh';
 import type { StepKey } from './steps';
@@ -105,8 +106,8 @@ export const repairStore = new Store<RepairReport | null>(null);
 /** G32: the last Mesh now, with the basis it was made on (`meshNowBasis`): shown while the project still has that basis. */
 export const meshNowStore = new Store<{ report: MeshNowReport; basis: string } | null>(null);
 
-/** G16: the open project's fitting zones as the scene list shows them (read from the project file on every scene change); null when unknown. */
-export const fittingZonesStore = new Store<{ id: string; name: string; enabled: boolean; kind: 'box' | 'scene' }[] | null>(null);
+/** G16: the open project's fitting zones, whole (read from the project file on every scene change); null when unknown. */
+export const fittingZonesStore = new Store<FittingZone[] | null>(null);
 
 /** Commands in flight (the backend wrapper counts them); the `idle()` hook waits for 0. */
 export const busyStore = new Store<number>(0);

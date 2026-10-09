@@ -12,7 +12,7 @@ import type {
   SpectrumShape,
   UiIssue,
 } from '../bindings/ipc.ts';
-import type { Op } from '../bindings/schema.ts';
+import type { FittingZone, Op } from '../bindings/schema.ts';
 import { nextName, setDescription, setProjectName } from '../ops.ts';
 
 /** A number as the schema stores it: finite values as numbers, non-finite ones as strings. */
@@ -386,25 +386,15 @@ export function displayName(raw: string): string {
 
 // ---- G16: the scene list's other nodes (upstream's Data and Project trees) ----------------------
 
-/** A fitting zone as the scene list reads it from the project file: no more than the list shows. */
-export interface ZoneRow {
-  id: string;
-  name: string;
-  enabled: boolean;
-  kind: 'box' | 'scene';
-}
-
-/** G16: the project file's fitting zones (`project_json`'s text), in project order; null when the text holds no list. */
-export function fittingZonesOf(json: string): ZoneRow[] | null {
+/**
+ * G16: the project file's fitting zones (`project_json`'s text), in project order, whole (M43 and
+ * G28 send a zone back changed through `replace_fitting_zone`); null when the text holds no list.
+ */
+export function fittingZonesOf(json: string): FittingZone[] | null {
   try {
     const p = JSON.parse(json) as { fitting_zones?: unknown } | null;
     if (!p || !Array.isArray(p.fitting_zones)) return null;
-    return p.fitting_zones.map((z: { id?: unknown; name?: unknown; enabled?: unknown; shape?: { kind?: unknown } }) => ({
-      id: String(z.id ?? ''),
-      name: String(z.name ?? ''),
-      enabled: z.enabled !== false,
-      kind: z.shape?.kind === 'box' ? 'box' : 'scene',
-    }));
+    return p.fitting_zones as FittingZone[];
   } catch {
     return null;
   }

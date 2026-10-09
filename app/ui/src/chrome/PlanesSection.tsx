@@ -4,7 +4,8 @@
 // cell size are edited here, committed through the checked apply (the core's
 // `cutting_plane_invalid` refuses inline, the project unchanged), and a plane is removed with its
 // button. A tilted plane (only a `.proj` import makes one) is shown, not edited. Every edit says
-// what it costs: a new or moved plane has no map until SPPS runs again.
+// what it costs: a new or moved plane has no map until SPPS runs again. M43: each plane has an
+// on/off switch; off, the view hides it and the run leaves it out.
 import { cubeText, REFUSE_GB, resultCube, settingsStore, WARN_GB } from '../features/simulate/runSize';
 import { useState } from 'react';
 import * as actions from '../actions';
@@ -13,7 +14,7 @@ import { fieldKey, issuesByEntity } from '../issues';
 import { removeSurfaceReceiver, replaceSurfaceReceiver } from '../ops';
 import { refusalStore, useStore } from '../store';
 import { heightAboveFloor, parseHeightAboveFloor, parseResolution, planeCells, roomBox, withLevelHeight, type Box3 } from './planes';
-import { IssueTag } from './ScenePanel';
+import { EnabledRefusals, EnabledSwitch, IssueTag } from './ScenePanel';
 import { CommitInput, Issues } from './SourcesPanel';
 import { exact } from './sceneModel';
 
@@ -75,6 +76,7 @@ function PlaneRow({ scene, plane, box }: { scene: SceneState; plane: Plane; box:
       <div className="section-head plane-head">
         <span className="point-name mono">{plane.name}</span>
         <IssueTag issues={issues} />
+        <EnabledSwitch kind="surface_receiver" id={id} name={plane.name} on={plane.enabled} off="the view hides it and the run makes no map for it" />
         <button
           className="small-button"
           data-part="remove-plane"
@@ -143,6 +145,7 @@ function PlaneRow({ scene, plane, box }: { scene: SceneState; plane: Plane; box:
         })()}
       </div>
       <Issues refused={refused} current={[]} />
+      <EnabledRefusals kind="surface_receiver" id={id} />
     </div>
   );
 }

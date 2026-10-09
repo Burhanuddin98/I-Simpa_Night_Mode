@@ -415,6 +415,11 @@
 .marker.zone {
   border-style: dotted;
 }
+/* M43: a receiver or zone switched off reads faint (and says "off" in words). */
+.marker.grid.off,
+.marker.zone.off {
+  opacity: 0.45;
+}
 .marker.env,
 .marker.display {
   width: 8px;

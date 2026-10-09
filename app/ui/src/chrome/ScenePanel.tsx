@@ -27,9 +27,13 @@
 // last row it read as a refusal of whichever group happened to be last.
 //
 // G16: after the receivers, upstream's other nodes as far as the project holds them: Volumes (the
-// room's air, from the model check, read-only), Fitting zones (from the project file, read-only:
-// editing them is P1's G28/G29), Environment (the air; a click opens Simulate, where it is edited)
-// and Display (the 3D view's View style menu). Each says plainly what cannot be done here.
+// room's air, from the model check, read-only), Fitting zones (from the project file), Environment
+// (the air; a click opens Simulate, where it is edited) and Display (the 3D view's View style
+// menu). Each says plainly what cannot be done here.
+//
+// M43: each surface receiver, cutting plane and fitting zone has an on/off switch,
+// `[data-enabled-toggle="<kind>:<id>"]`, as a source has (EnabledSwitch); off leaves it out of the
+// solver's input.
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import * as actions from '../actions';
 import type { Source, UiIssue } from '../bindings/ipc';
@@ -98,11 +102,52 @@ export function SourceSwitch({ source, compact = false }: { source: Source; comp
   );
 }
 
+/**
+ * M43: the on/off switch of a cutting plane, a surface receiver or a fitting zone, drawn as the
+ * source's: through the checked apply (the receiver or zone replaced whole, one undo step), its
+ * refusals filed under `<kind>:<id>:enabled` and shown by `EnabledRefusals`. Off leaves it out of
+ * the solver's input; `off` says what that costs.
+ */
+export function EnabledSwitch({ kind, id, name, on, off, compact = false }: { kind: 'surface_receiver' | 'fitting_zone'; id: string; name: string; on: boolean; off: string; compact?: boolean }) {
+  const [pending, setPending] = useState(false);
+  return (
+    <button
+      type="button"
+      role="switch"
+      className={`switch${compact ? ' compact' : ''}`}
+      aria-checked={on}
+      aria-label={`${name} on`}
+      data-enabled-toggle={`${kind}:${id}`}
+      data-state={on ? 'on' : 'off'}
+      disabled={pending}
+      title={on ? `Switch ${name} off: ${off}` : `Switch ${name} on`}
+      onClick={(e) => {
+        e.stopPropagation();
+        setPending(true);
+        (kind === 'surface_receiver' ? actions.setSurfaceReceiverEnabled(id, !on) : actions.setFittingZoneEnabled(id, !on))
+          .catch(() => {})
+          .finally(() => setPending(false));
+      }}
+    >
+      <span className="switch-track" aria-hidden>
+        <span className="switch-knob" />
+      </span>
+      {!compact && <span className="switch-text">{on ? 'on' : 'off'}</span>}
+    </button>
+  );
+}
+
+/** M43: a refused on/off switch of one surface receiver or fitting zone, under its row. */
+export function EnabledRefusals({ kind, id }: { kind: 'surface_receiver' | 'fitting_zone'; id: string }) {
+  const refusals = useStore(refusalStore);
+  return <ToggleRefusalLines issues={refusals.get(`${kind}:${id}:enabled`) ?? []} part="enabled-toggle-issues" />;
+}
+
 /** A refused switch, inline: FAIL and the UI code as text, then the message. */
-export function ToggleRefusalLines({ issues }: { issues: readonly UiIssue[] }) {
+export function ToggleRefusalLines({ issues, part = 'source-toggle-issues' }: { issues: readonly UiIssue[]; part?: string }) {
   if (!issues.length) return null;
   return (
-    <div className="issues toggle-issues" data-part="source-toggle-issues">
+    <div className="issues toggle-issues" data-part={part}>
       {issues.map((i) => (
         <div key={`${i.code}|${i.path}|${i.message}`} className="issue" data-issue-code={i.code} role="alert">
           <span className="code">FAIL {i.code}</span>
@@ -472,12 +517,19 @@ export function ScenePanel() {
               </div>
             ))}
             {grids.map((r) => (
-              <div key={r.id} className="scene-row static" data-entity={`surface_receiver:${r.id}`}>
-                <span className="marker grid" />
-                <span className="row-name">{r.name}</span>
-                <IssueTag issues={issuesOf('surface_receiver', r.id)} />
-                <span className="row-detail">{r.shape.kind === 'scene' ? 'surface map' : 'cutting plane'}</span>
-              </div>
+              <Fragment key={r.id}>
+                <div className="scene-line">
+                  <div className="scene-row static" data-entity={`surface_receiver:${r.id}`}>
+                    <span className={`marker grid${r.enabled ? '' : ' off'}`} />
+                    <span className="row-name">{r.name}</span>
+                    <IssueTag issues={issuesOf('surface_receiver', r.id)} />
+                    {!r.enabled && <span className="row-detail row-off">off</span>}
+                    <span className="row-detail">{r.shape.kind === 'scene' ? 'surface map' : 'cutting plane'}</span>
+                  </div>
+                  <EnabledSwitch kind="surface_receiver" id={r.id} name={r.name} on={r.enabled} off="the run leaves it out and makes no map for it" compact />
+                </div>
+                <EnabledRefusals kind="surface_receiver" id={r.id} />
+              </Fragment>
             ))}
             {!view.point_receivers.length && !view.surface_receivers.length && (
               <div className="scene-empty empty">No receivers</div>
@@ -499,17 +551,23 @@ export function ScenePanel() {
               <>
             <Head title="Fitting zones" shown={zones.length} total={zoneList?.length ?? 0} />
             {zones.map((z) => (
-              <div key={z.id} className="scene-row static" data-entity={`fitting_zone:${z.id}`} title="As the project holds it; editing a fitting zone is not in this version">
-                <span className="marker zone" aria-hidden />
-                <span className="row-name">{z.name}</span>
-                <IssueTag issues={issuesOf('fitting_zone', z.id)} />
-                {!z.enabled && <span className="row-detail row-off">off</span>}
-                <span className="row-detail">{z.kind === 'box' ? 'box' : 'scene volume'}</span>
-              </div>
+              <Fragment key={z.id}>
+                <div className="scene-line">
+                  <div className="scene-row static" data-entity={`fitting_zone:${z.id}`} title="As the project holds it; it is switched on or off here">
+                    <span className={`marker zone${z.enabled ? '' : ' off'}`} aria-hidden />
+                    <span className="row-name">{z.name}</span>
+                    <IssueTag issues={issuesOf('fitting_zone', z.id)} />
+                    {!z.enabled && <span className="row-detail row-off">off</span>}
+                    <span className="row-detail">{z.shape.kind === 'box' ? 'box' : 'scene volume'}</span>
+                  </div>
+                  <EnabledSwitch kind="fitting_zone" id={z.id} name={z.name} on={z.enabled} off="the run leaves its fittings out, as if the space were empty" compact />
+                </div>
+                <EnabledRefusals kind="fitting_zone" id={z.id} />
+              </Fragment>
             ))}
             <div className="scene-empty empty" data-scene-node="fitting-zones-note">
               {zonesKnown && zones.length === 0 ? 'No fitting zones. ' : ''}
-              Adding or editing a fitting zone is not in this version; an imported project keeps its own.
+              A zone is switched on or off here; adding or editing one is not in this version, and an imported project keeps its own.
             </div>
               </>
             )}

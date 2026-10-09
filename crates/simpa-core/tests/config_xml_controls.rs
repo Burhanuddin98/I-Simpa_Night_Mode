@@ -435,3 +435,154 @@ fn the_project_name_and_description_never_reach_the_solver_input() {
         );
     }
 }
+
+// ---- M43: the on/off switches of surface receivers, cutting planes and fitting zones ----------
+//
+// The app sends the receiver or zone back whole with `enabled` changed (`replace_surface_receiver`,
+// `replace_fitting_zone`, actions.ts). Off, config.xml loses exactly that element (solver ids do
+// not depend on the enabled flags, so nothing else renumbers); on again, it is byte-identical.
+
+/// `xml` without the element `<tag id="<id>" ...>` (and its children), an emptied list folded to
+/// `<list/>` as the writer folds one.
+fn without_element(xml: &str, tag: &str, id: i32) -> String {
+    let start = format!("<{tag} id=\"{id}\"");
+    let lines: Vec<&str> = xml.lines().collect();
+    let at = lines
+        .iter()
+        .position(|l| l.trim_start().starts_with(&start))
+        .unwrap_or_else(|| panic!("{start} is written"));
+    let end = if lines[at].trim_end().ends_with("/>") {
+        at
+    } else {
+        at + lines[at..]
+            .iter()
+            .position(|l| l.trim() == format!("</{tag}>"))
+            .expect("the element closes")
+    };
+    let mut kept: Vec<String> = lines[..at].iter().map(|l| l.to_string()).collect();
+    kept.extend(lines[end + 1..].iter().map(|l| l.to_string()));
+    // An emptied list: `<list>` straight followed by `</list>` folds to `<list/>`.
+    let mut out: Vec<String> = Vec::new();
+    for l in kept {
+        let close = l
+            .trim()
+            .strip_prefix("</")
+            .and_then(|s| s.strip_suffix('>'));
+        if let (Some(name), Some(prev)) = (close, out.last())
+            && prev.trim() == format!("<{name}>")
+        {
+            let folded = prev.replace(&format!("<{name}>"), &format!("<{name}/>"));
+            *out.last_mut().unwrap() = folded;
+            continue;
+        }
+        out.push(l);
+    }
+    let mut s = out.join("\n");
+    if xml.ends_with('\n') {
+        s.push('\n');
+    }
+    s
+}
+
+/// `a == b`, or a panic naming the first line that differs (not the whole of two files).
+fn same_text(a: &str, b: &str, what: &str) {
+    if a == b {
+        return;
+    }
+    let (la, lb): (Vec<&str>, Vec<&str>) = (a.lines().collect(), b.lines().collect());
+    let i = (0..la.len().max(lb.len()))
+        .find(|&i| la.get(i) != lb.get(i))
+        .unwrap_or(0);
+    panic!(
+        "{what}: line {} differs:\n  got  {:?}\n  want {:?}",
+        i + 1,
+        la.get(i),
+        lb.get(i)
+    );
+}
+
+fn replace_op(kind: &str, field: &str, item: Value) -> Op {
+    let text = serde_json::json!({ "op": kind, field: item }).to_string();
+    Op::from_json(&text).unwrap_or_else(|e| panic!("{text}: {e}"))
+}
+
+#[test]
+fn every_enabled_switch_turned_back_leaves_the_solver_input_byte_identical() {
+    let mut checked = 0;
+    for (name, original) in fixtures() {
+        let ids = simpa_core::config_xml::SolverIds::assign(&original).unwrap();
+        let configs = both_configs(&original);
+        let mesh = mesh_input(&original);
+        let mut items: Vec<(String, &str, &str, i32, Value)> = Vec::new();
+        for r in &original.surface_receivers {
+            let tag = match r.shape {
+                schema::SurfaceReceiverShape::Scene { .. } => "recepteur_surfacique",
+                schema::SurfaceReceiverShape::CuttingPlane { .. } => "recepteur_surfacique_coupe",
+            };
+            items.push((
+                r.name.clone(),
+                "replace_surface_receiver",
+                tag,
+                ids.surface_receiver_id(r.id).unwrap(),
+                serde_json::json!({ "receiver": r }),
+            ));
+        }
+        for z in &original.fitting_zones {
+            items.push((
+                z.name.clone(),
+                "replace_fitting_zone",
+                "encombrement",
+                ids.fitting_zone_id(z.id).unwrap(),
+                serde_json::json!({ "zone": z }),
+            ));
+        }
+        for (what, op, tag, id, holder) in items {
+            let field = if op == "replace_fitting_zone" {
+                "zone"
+            } else {
+                "receiver"
+            };
+            let mut item = holder[field].clone();
+            assert_eq!(item["enabled"], Value::Bool(true), "{name} {what}");
+            item["enabled"] = Value::Bool(false);
+            let mut p = original.clone();
+            let undo = replace_op(op, field, item.clone()).apply(&mut p).unwrap();
+            let off = both_configs(&p);
+            // The last enabled box zone off takes the drawn zones' material 0 with it (config.xml
+            // declares it only while drawn zone triangles exist, write.rs).
+            let drawn_left = p
+                .fitting_zones
+                .iter()
+                .any(|z| z.enabled && matches!(z.shape, schema::FittingShape::Box { .. }));
+            let drawn_went = tag == "encombrement" && !drawn_left;
+            for (k, solver) in [SolverKind::Spps, SolverKind::Tcr].into_iter().enumerate() {
+                assert_ne!(off[k], configs[k], "{name} {what} off ({solver:?})");
+                let mut want = without_element(&configs[k], tag, id);
+                if drawn_went {
+                    want = without_element(&want, "type_surface", 0);
+                }
+                same_text(
+                    &off[k],
+                    &want,
+                    &format!("{name} {what} off ({solver:?}): exactly its element goes"),
+                );
+            }
+            item["enabled"] = Value::Bool(true);
+            let mut back = p.clone();
+            replace_op(op, field, item).apply(&mut back).unwrap();
+            assert_eq!(back, original, "{name} {what}: switched back");
+            assert_eq!(
+                both_configs(&back),
+                configs,
+                "{name} {what}: switched back, byte-identical"
+            );
+            assert_eq!(mesh_input(&back), mesh, "{name} {what}: TetGen's input");
+            undo.apply(&mut p).unwrap();
+            assert_eq!(both_configs(&p), configs, "{name} {what}: undone");
+            println!("{name}: M43 {what} ({tag} id {id}) off and on, bytes identical");
+            checked += 1;
+        }
+    }
+    assert!(checked >= 15, "{checked}");
+    println!("{checked} switches checked");
+}
