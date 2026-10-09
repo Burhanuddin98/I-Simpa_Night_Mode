@@ -4,8 +4,8 @@
 //
 // Pure: MenuBar.tsx draws it; helpModel.test.ts holds every topic to help.rs's list.
 
-/** A topic `help_open` takes (help.rs). */
-export type HelpTopic = 'upstream-guide' | 'upstream-site' | 'source';
+/** A topic `help_open` takes (help.rs): a web page (`LINKS`) or a page shipped in the app (`PAGES`). */
+export type HelpTopic = 'manual' | 'upstream-guide' | 'upstream-site' | 'source';
 
 export interface HelpLink {
   topic: HelpTopic;
@@ -17,6 +17,18 @@ export interface HelpLink {
   /** What the Console says was opened: `Opened <what> in your browser`. */
   what: string;
 }
+
+/** A22: the user manual, shipped inside app.exe (help.rs `PAGES`), the Help menu's first item. */
+export const HELP_MANUAL: HelpLink = {
+  topic: 'manual',
+  id: 'help-manual',
+  label: 'User manual',
+  title: 'This version’s user manual, in your browser. It ships with the app and needs no network',
+  what: 'the user manual',
+};
+
+/** The pages shipped in the app, in help.rs `PAGES`'s order. */
+export const HELP_PAGES: readonly HelpLink[] = [HELP_MANUAL];
 
 /** The web destinations, in the menu's order. */
 export const HELP_LINKS: readonly HelpLink[] = [
@@ -45,7 +57,7 @@ export const HELP_LINKS: readonly HelpLink[] = [
 ];
 
 export function helpLink(topic: HelpTopic): HelpLink {
-  const l = HELP_LINKS.find((x) => x.topic === topic);
+  const l = [...HELP_PAGES, ...HELP_LINKS].find((x) => x.topic === topic);
   if (!l) throw new Error(`no Help topic ${topic}`);
   return l;
 }

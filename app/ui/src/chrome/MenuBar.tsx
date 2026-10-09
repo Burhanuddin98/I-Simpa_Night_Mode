@@ -25,7 +25,7 @@ import { joinBlockers } from '../flow';
 import { boxRoomRequestStore, groupRenameStore, reportStore, runStore, sceneStore, selectedRunStore, selectionStore, solversStatusStore, solverStore, stepStore, useStore, viewportStore } from '../store';
 import { ADD_GROUP_LABEL, DELETE_GROUP_LABEL, MERGE_LABEL, mergePlan, RENAME_GROUP_LABEL, renameTarget } from './groupsModel';
 import { clipboardStore, copySelected, deleteGroup, pasteCopied } from './sceneUi';
-import { HELP_LINKS } from './helpModel';
+import { HELP_LINKS, HELP_MANUAL } from './helpModel';
 import { Search } from './icons';
 import { recentStore, reopenLastStore, setReopenLast } from './recent';
 import { recentMenuLabel } from './recentModel';
@@ -250,8 +250,9 @@ export function MenuBar() {
         title: hidden.isolate ? 'Show the faces Isolate hid' : (isolateWhyNot() ?? 'Show only the picked faces or surface groups'),
       },
     ],
-    // A20: the Help menu, its pages opened by the core in the default browser (help.rs).
-    Help: HELP_LINKS.map((l) => ({
+    // A20: the Help menu, its pages opened by the core in the default browser (help.rs); A22: the
+    // user manual first, shipped inside app.exe.
+    Help: [HELP_MANUAL, ...HELP_LINKS].map((l) => ({
       id: l.id,
       label: l.label,
       title: l.title,

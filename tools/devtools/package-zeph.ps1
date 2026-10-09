@@ -37,7 +37,7 @@ $pages | ForEach-Object { Copy-Item $_.FullName "$dest\manual\$($_.Name)" }
 I-Simpa Night Mode, portable build $stamp ($Branch branch $Sha)
 
 Run:   app.exe            (double-click, or app.exe --project <file.simpa>)
-Read:  manual\manual.html (the user manual)
+Read:  manual\manual.html (the user manual; Help > User manual opens the copy app.exe carries)
 The solvers (spps, spps-gpu, classicalTheory, preprocess, tetgen) are in solvers\ beside app.exe and
 are found there; no environment variable is needed. They are the verified build of
 solvers\manifest.json (upstream 929a5c8 + patches 0001 time bin, 0002 sparse maps; spps-gpu from
