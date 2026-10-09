@@ -115,7 +115,8 @@ project name and description.
 - Runs and results: R2 label a run, R3 delete a run, R4 open a run's folder, R7 receiver level table, R9 spectrum
   chart, R15 T15 and chosen decay ranges, R20 custom C/D limits, R27 Schroeder table, R45 map opacity, R52 difference
   map with a run picker, R58 copy table cells, R62 chart zoom and series hide, R63 export a chart as an image, R72
-  chart axes by hand.
+  chart axes by hand, and **R42 maps of T30, EDT, C80 and D50 with a test bed** (with R73's time-valued map
+  ranges; added 03:15 on Burhan's answer "v1, with a test bed", decision 77; STI maps stay v1.1).
 - Scene, sources, receivers: G11 new box room, G37 mesh-diagnosed faces highlighted, G44 lines none, G46 XZ/YZ grids
   (v1.1-backlog 11), G50 per-element colour and names, M5 per-band reflection law (v1.1-backlog 20), M17 user
   spectrum library, M18 and M46 dB(A) entry with the linked Global row, M30 markers, M37 receiver groups created and
@@ -128,11 +129,12 @@ project name and description.
 **Stays v1.1 or later (a v1.1-backlog row, 105):** every niche row; and these common ones, each needing a bed, a
 format or a product call first: G3 3DS import, G9 average-model remesh, G39 mesh preview (with G49), G45 CAD colours,
 M3 material folders, M12 copy/paste across projects, M13/M14 CATT and Odeon import, M28/M38/M39 group actions and
-the receiver grid, R28 LF/LFC, R42/R44/R73 parameter and STI maps (v1.1-backlog 76), R49 palettes, R60 charts from a
+the receiver grid, R28 LF/LFC, R44 STI maps (v1.1-backlog 76), R49 palettes, R60 charts from a
 selection, R68/R71 the report document, A12/A52 preferences, A13 languages, A24 update check, A41 macOS/Linux, A47
 project archive.
 
-**The cut counts 66 items:** P0 9, P1 15, P2 42 (14 results, 13 scene/sources/receivers, 3 calculation, 12 app).
+**The cut counts 67 items:** P0 9, P1 15, P2 43 (15 results, 13 scene/sources/receivers, 3 calculation, 12 app);
+it was 66 until R42 joined at 03:15.
 **03:14, Burhan, verbatim: "parity, first, like let me know what those final features for v1 are, we continue
 building a hubrid engine in this chat".** Parity goes before the hybrid engine.
 
