@@ -85,7 +85,7 @@ import * as actions from '../../actions';
 import type { SceneMesh } from '../../mesh';
 import type { Particles, SurfaceMap } from '../../resultsData';
 import { displayName, effectiveMaterial, sentence } from '../../chrome/sceneModel';
-import { log, meshStore, sceneStore, selectionStore, stepStore, Store, toolStore, viewportStore, type Selection } from '../../store';
+import { fittingZonesStore, log, meshStore, sceneStore, selectionStore, stepStore, Store, toolStore, viewportStore, type Selection } from '../../store';
 import { registerHook } from '../../testhooks';
 import { buildTopology, coplanarFaces, faceNormalOf, type FaceTopology } from './floodfill';
 import { bgraToRgba, flipRows, unpadRows } from './snapshot';
@@ -110,6 +110,7 @@ import { emptyFat, emptyGeometry, FatLineMaterial, inSrgb, rawColor } from './no
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import type { ParticleLook } from './rays';
 import { planeCells, roomBox } from '../../chrome/planes';
+import { zoneEdges } from '../../chrome/zones';
 import { dimensionLines } from './dims';
 
 const { acesFilmicToneMapping, attribute, clamp, Fn, max, screenUV, texture, float, instancedBufferAttribute, materialOpacity, mix, output, positionGeometry, sRGBTransferOETF, uniform, uniformArray, vec3, vec4 } = T;
@@ -609,6 +610,9 @@ class ViewportEngine {
   private readonly planeOutline: LineSegments2;
   private readonly planeGrid: LineSegments2;
   private planeSummary: { name: string; corners: Vec[]; u: number; v: number; gridLines: number }[] = [];
+  /** G28: every enabled box fitting zone's 12 edges (zones.ts `zoneEdges`). */
+  private readonly zoneOutline: LineSegments2;
+  private zoneSummary: { name: string; min: Vec; max: Vec; edges: number }[] = [];
   /**
    * The surface and edge materials' shared uniforms: the corner shading's switch (ao.ts), the
    * distance fade (fade.ts, set before each render) and the sources' glow (glow.ts).
@@ -727,6 +731,8 @@ class ViewportEngine {
     this.receiverStems = new LineSegments(emptyGeometry(), inSrgb(new LineBasicNodeMaterial({ color: LINE, transparent: true, opacity: 0.5 })));
     this.planeOutline = new LineSegments2(emptyFat(), new FatLineMaterial({ color: SELECT, linewidth: 3.5, opacity: 0.95, depthWrite: false }));
     this.planeGrid = new LineSegments2(emptyFat(), new FatLineMaterial({ color: SELECT, linewidth: 1.5, opacity: 0.45, depthWrite: false }));
+    // G28: a fitting zone's box, in the line colour (the planes and the selection are red), dashed by its opacity.
+    this.zoneOutline = new LineSegments2(emptyFat(), new FatLineMaterial({ color: LINE, linewidth: 2.5, opacity: 0.8, depthWrite: false }));
     // The ground (ground.ts) writes its colour raw, as its WebGL ShaderMaterial did.
     const groundMaterial = new MeshBasicNodeMaterial({ transparent: true, depthWrite: false, side: DoubleSide });
     groundMaterial.fragmentNode = groundColour(this.groundU);
@@ -763,6 +769,7 @@ class ViewportEngine {
       [this.receiverStems, 5],
       [this.planeGrid, 4],
       [this.planeOutline, 5],
+      [this.zoneOutline, 5],
       [this.receiverPoints.sprite, 6],
       [this.sourcePoints.sprite, 7],
       [this.halo.sprite, 8],
@@ -781,6 +788,7 @@ class ViewportEngine {
       this.receiverStems,
       this.planeGrid,
       this.planeOutline,
+      this.zoneOutline,
       this.receiverPoints.sprite,
       this.sourcePoints.sprite,
       this.halo.sprite,
@@ -837,6 +845,10 @@ class ViewportEngine {
     this.detachers = [
       meshStore.subscribe(() => this.setMesh(meshStore.get())),
       sceneStore.subscribe(() => this.onScene()),
+      fittingZonesStore.subscribe(() => {
+        this.updateZones();
+        this.invalidate();
+      }),
       selectionStore.subscribe(() => this.onSelection()),
       viewStyle.subscribe(() => this.applyStyle()),
       toolStore.subscribe(() => this.applyTool()),
@@ -881,6 +893,8 @@ class ViewportEngine {
       registerHook('highlightPixels', () => this.highlightPixels()),
       // W1: the cutting planes the view draws (outline corners, cells, grid lines drawn).
       registerHook('planeOutlines', () => this.planeSummary),
+      // G28: the fitting zones the view draws (name, box, edges drawn).
+      registerHook('zoneOutlines', () => this.zoneSummary),
       // Items 7 and 8: the faces the view leaves out now (Roof off, Isolate), in project face numbering.
       registerHook('viewHidden', () => ({ ...hideStore.get(), faces: this.out ? [...this.out.keys()].filter((f) => this.out?.[f]) : [] })),
       // Item 10: the map's reveal front (null when the whole map draws) and the wavefront as drawn this frame.
@@ -2094,6 +2108,7 @@ class ViewportEngine {
     this.updateSelection();
     this.updateMarkers();
     this.updatePlanes();
+    this.updateZones();
     this.setUi({
       hasModel: !!this.mesh && this.mesh.faceCount > 0,
       highlightCount: this.highlightCount,
@@ -2338,6 +2353,17 @@ class ViewportEngine {
     this.planeOutline.geometry = g1;
     this.planeGrid.geometry = g2;
     this.planeSummary = summary;
+  }
+
+  /** G28: every enabled box fitting zone as its 12 edges; a zone of surfaces shows as its own faces. */
+  private updateZones(): void {
+    const drawn = zoneEdges(fittingZonesStore.get() ?? []);
+    this.zoneOutline.geometry.dispose();
+    const g = emptyFat();
+    const all = drawn.flatMap((z) => z.segments);
+    if (all.length > 0) g.setPositions(all);
+    this.zoneOutline.geometry = g;
+    this.zoneSummary = drawn.map((z) => ({ name: z.name, min: z.min as Vec, max: z.max as Vec, edges: z.segments.length / 6 }));
   }
 
   // ---- cameras --------------------------------------------------------------------------

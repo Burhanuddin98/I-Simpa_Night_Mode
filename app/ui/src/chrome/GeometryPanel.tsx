@@ -13,6 +13,7 @@
 //   it. When the faces enclose more, the row's title says how much more and why.
 // - Import model… waits while a run is active (PQ4), saying why.
 // - A31: the project's name and description head the panel, editable (one undo step each).
+// - G28/G29: the fitting zones, added and edited below the model (ZonesSection.tsx).
 import { useEffect, useState } from 'react';
 import * as actions from '../actions';
 import type { UiIssue } from '../bindings/ipc';
@@ -20,6 +21,7 @@ import { refusalStore, repairStore, runStore, sceneStore, useStore } from '../st
 import { RUN_ACTIVE_TITLE } from './MenuBar';
 import { checkRows, descriptionEdit, fact, fileLabel, projectNameEdit, repairSummary, unitsText, unrepairable } from './sceneModel';
 import { CommitInput, Issues } from './SourcesPanel';
+import { ZonesSection } from './ZonesSection';
 
 /** Decimals of every dimension (the design's "10.00 m"). */
 const DIMENSION_DECIMALS = 2;
@@ -313,6 +315,8 @@ export function GeometryPanel() {
       </div>
 
       <RepairBlock ok={ok} />
+
+      <ZonesSection scene={scene} />
 
       {info.imported_ungrouped && (
         <div className="props-section" data-part="ungrouped-note">

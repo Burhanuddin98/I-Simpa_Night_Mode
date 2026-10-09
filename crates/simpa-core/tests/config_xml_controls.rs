@@ -698,3 +698,181 @@ fn a_surface_map_added_and_undone_leaves_the_solver_input_byte_identical() {
     }
     assert!(checked >= 10, "{checked}");
 }
+
+// ---- G28/G29: fitting zones added and edited ----------------------------------------------------
+//
+// "+ Box zone" sends `add_fitting_zone` with upstream's new zone (zones.ts `newBoxZone`: absorption
+// 0, mean free path 1 m, uniform diffusion in every band, a 1 m box on the floor); a band is
+// `set_fitting_band`, every band at once or the box `replace_fitting_zone`. Not used, nothing
+// changes; used, config.xml moves by exactly what upstream writes for it; turned back or undone,
+// byte-identical.
+
+/// The one `bfreq` line of encombrement `id` at band `band`.
+fn zone_band_line(xml: &str, id: i32, band: usize) -> String {
+    let start = format!("<encombrement id=\"{id}\">");
+    let at = xml.find(&start).expect("the zone is written");
+    xml[at..]
+        .lines()
+        .skip(1)
+        .nth(band)
+        .expect("one line a band")
+        .to_string()
+}
+
+#[test]
+fn a_new_box_zone_added_and_undone_leaves_the_solver_input_byte_identical() {
+    let mut checked = 0;
+    for (name, original) in fixtures() {
+        let configs = both_configs(&original);
+        let mesh = mesh_input(&original);
+        let n = original.bands.len();
+        let zone = serde_json::json!({
+            "id": "1b2c3d4e-5f60-4718-8a9b-0c1d2e3f4a5b", "name": "Fitting zone 1", "enabled": true,
+            "shape": { "kind": "box", "min": [0.5, 0.5, 0.0], "max": [1.5, 1.5, 1.0], "destination": null },
+            "absorption": vec![0.0; n], "mean_free_path_m": vec![1.0; n],
+            "diffusion_law": vec!["uniform"; n], "solver_id": null
+        });
+        let text = serde_json::json!({
+            "op": "add_fitting_zone", "index": original.fitting_zones.len(), "zone": zone
+        })
+        .to_string();
+        let mut p = original.clone();
+        let undo = Op::from_json(&text).unwrap().apply(&mut p).unwrap();
+        let id = simpa_core::config_xml::SolverIds::assign(&p)
+            .unwrap()
+            .fitting_zone_id(p.fitting_zones.last().unwrap().id)
+            .unwrap();
+        let drawn_before = original
+            .fitting_zones
+            .iter()
+            .any(|z| z.enabled && matches!(z.shape, schema::FittingShape::Box { .. }));
+        let added = both_configs(&p);
+        for k in 0..2 {
+            let line = zone_band_line(&added[k], id, 0);
+            assert!(
+                line.contains(" alpha=\"0\" lambda=\"1\" loi_diff=\"0\""),
+                "{name}: upstream's new zone: {line}"
+            );
+            let mut back = without_element(&added[k], "encombrement", id);
+            if !drawn_before {
+                back = without_element(&back, "type_surface", 0);
+            }
+            same_text(&back, &configs[k], &format!("{name}: only the zone is new"));
+        }
+        assert_ne!(mesh_input(&p), mesh, "{name}: the box is meshed");
+        undo.apply(&mut p).unwrap();
+        assert_eq!(p, original, "{name}: undone");
+        assert_eq!(both_configs(&p), configs, "{name}: undone, byte-identical");
+        assert_eq!(mesh_input(&p), mesh, "{name}: undone, TetGen's input");
+        checked += 1;
+    }
+    println!("{checked} fixtures: a box zone added and undone");
+}
+
+#[test]
+fn a_zone_band_edited_and_turned_back_changes_only_that_band() {
+    let (name, original) = fixtures()
+        .into_iter()
+        .find(|(_, p)| !p.fitting_zones.is_empty())
+        .expect("a fixture with a fitting zone");
+    let z = &original.fitting_zones[0];
+    let id = simpa_core::config_xml::SolverIds::assign(&original)
+        .unwrap()
+        .fitting_zone_id(z.id)
+        .unwrap();
+    let configs = both_configs(&original);
+    let mesh = mesh_input(&original);
+    let band = 3;
+    for (quantity, attr, to) in [
+        ("absorption", "alpha", 0.35),
+        ("mean_free_path", "lambda", 2.5),
+    ] {
+        let stored = match quantity {
+            "absorption" => z.absorption[band].get(),
+            _ => z.mean_free_path_m[band].get(),
+        };
+        let op = |v: f64| {
+            let text = serde_json::json!({
+                "op": "set_fitting_band", "zone": z.id, "quantity": quantity, "band": band, "value": v
+            })
+            .to_string();
+            Op::from_json(&text).unwrap()
+        };
+        let mut p = original.clone();
+        op(to).apply(&mut p).unwrap();
+        let turned = both_configs(&p);
+        for k in 0..2 {
+            let was = zone_band_line(&configs[k], id, band);
+            let now = zone_band_line(&turned[k], id, band);
+            assert_eq!(
+                now,
+                was.replace(
+                    &format!(" {attr}=\"{stored}\""),
+                    &format!(" {attr}=\"{to}\"")
+                ),
+                "{name}: {quantity} band {band}"
+            );
+            assert_eq!(
+                turned[k],
+                configs[k].replacen(&was, &now, 1),
+                "{name}: only that line"
+            );
+        }
+        assert_eq!(mesh_input(&p), mesh, "{name}: a band value is not meshed");
+        op(stored).apply(&mut p).unwrap();
+        assert_eq!(p, original, "{name}: turned back");
+        assert_eq!(
+            both_configs(&p),
+            configs,
+            "{name}: turned back, byte-identical"
+        );
+        println!(
+            "{name}: G28 {quantity} band {band} {stored} -> {to} -> {stored}, one attribute, bytes identical"
+        );
+    }
+
+    // Every band's law at once (the "Diffusion law" choice), and back.
+    let mut item = serde_json::to_value(z).unwrap();
+    let laws = item["diffusion_law"].clone();
+    item["diffusion_law"] = Value::from(vec!["lambert_reflection"; original.bands.len()]);
+    let mut p = original.clone();
+    replace_op("replace_fitting_zone", "zone", item.clone())
+        .apply(&mut p)
+        .unwrap();
+    for (k, t) in both_configs(&p).iter().enumerate() {
+        assert_eq!(
+            *t,
+            configs[k].replace(" loi_diff=\"0\"/>", " loi_diff=\"2\"/>"),
+            "{name}: every band's loi_diff, nothing else"
+        );
+    }
+    item["diffusion_law"] = laws;
+    replace_op("replace_fitting_zone", "zone", item.clone())
+        .apply(&mut p)
+        .unwrap();
+    assert_eq!(both_configs(&p), configs, "{name}: the law turned back");
+
+    // The box moved: TetGen's input moves, config.xml does not; moved back, byte-identical.
+    let min = item["shape"]["min"].clone();
+    item["shape"]["min"][2] = Value::from(0.25);
+    let mut p = original.clone();
+    replace_op("replace_fitting_zone", "zone", item.clone())
+        .apply(&mut p)
+        .unwrap();
+    assert_eq!(
+        both_configs(&p),
+        configs,
+        "{name}: a box is not in config.xml"
+    );
+    assert_ne!(
+        mesh_input(&p),
+        mesh,
+        "{name}: the moved box is meshed again"
+    );
+    item["shape"]["min"] = min;
+    replace_op("replace_fitting_zone", "zone", item)
+        .apply(&mut p)
+        .unwrap();
+    assert_eq!(p, original, "{name}: moved back");
+    assert_eq!(mesh_input(&p), mesh, "{name}: moved back, TetGen's input");
+}

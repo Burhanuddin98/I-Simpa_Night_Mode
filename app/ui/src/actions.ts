@@ -29,6 +29,7 @@ import type { Setting, UiIssue } from './bindings/ipc';
 import type { BandKind, Op, ReflectionLaw } from './bindings/schema';
 import { regroupFaces } from './chrome/sceneModel';
 import { mapOfGroup, surfaceMapPlan } from './chrome/groupsModel';
+import { newBoxZone } from './chrome/zones';
 import { emptyLog, endLine, foldEvent, needsSavePrompt, progressText } from './flow';
 import { logProgress } from './features/simulate/runTime';
 import { decodeMesh } from './mesh';
@@ -38,6 +39,7 @@ import {
   addReceiver,
   addSource,
   addSurfaceReceiver,
+  addFittingZone,
   mergeGroups,
   moveFaces,
   newCuttingPlane,
@@ -947,6 +949,23 @@ export async function setSurfaceReceiverEnabled(id: string, enabled: boolean): P
     return null;
   }
   return apply(replaceSurfaceReceiver({ ...r, enabled }), key);
+}
+
+/**
+ * G29: a new box fitting zone, 1 m on a side, on the room's floor at the middle of its plan, with
+ * upstream's values (zones.ts `newBoxZone`), named `Fitting zone <n>`, at the end of the zones:
+ * one checked edit, refusals under `fitting_zone:new:shape`. Null without a checked model.
+ */
+export async function addBoxZone(): Promise<EditOutcome | null> {
+  const state = sceneStore.get();
+  const box = roomBox(state?.check);
+  if (!state || !box) return null;
+  const zones = fittingZonesStore.get() ?? [];
+  const name = nextName('Fitting zone ', zones.map((z) => z.name));
+  const zone = newBoxZone(crypto.randomUUID(), name, box, state.view.bands.frequencies_hz.length);
+  const outcome = await apply(addFittingZone(zones.length, zone), 'fitting_zone:new:shape');
+  if (outcome.applied) log('OK', `Added ${name}: a 1 m box on the floor; set its corners and values in the Geometry step`);
+  return outcome;
 }
 
 /** A refusal the UI makes itself, filed under `key` as the checked apply files one. */

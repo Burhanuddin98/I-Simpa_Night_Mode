@@ -27,7 +27,8 @@
 // last row it read as a refusal of whichever group happened to be last.
 //
 // G16: after the receivers, upstream's other nodes as far as the project holds them: Volumes (the
-// room's air, from the model check, read-only), Fitting zones (from the project file), Environment
+// room's air, from the model check, read-only), Fitting zones (from the project file; a click
+// opens the Geometry step, where G28/G29 edit them), Environment
 // (the air; a click opens Simulate, where it is edited) and Display (the 3D view's View style
 // menu). Each says plainly what cannot be done here.
 //
@@ -611,13 +612,21 @@ export function ScenePanel() {
             {zones.map((z) => (
               <Fragment key={z.id}>
                 <div className="scene-line">
-                  <div className="scene-row static" data-entity={`fitting_zone:${z.id}`} title="As the project holds it; it is switched on or off here">
+                  <button
+                    className="scene-row"
+                    data-entity={`fitting_zone:${z.id}`}
+                    title="Edited in the Geometry step, under the model: a click opens it"
+                    onClick={() => {
+                      stepStore.set('geometry');
+                      requestAnimationFrame(() => document.querySelector(`[data-zone="${CSS.escape(z.id)}"]`)?.scrollIntoView({ block: 'nearest' }));
+                    }}
+                  >
                     <span className={`marker zone${z.enabled ? '' : ' off'}`} aria-hidden />
                     <span className="row-name">{z.name}</span>
                     <IssueTag issues={issuesOf('fitting_zone', z.id)} />
                     {!z.enabled && <span className="row-detail row-off">off</span>}
                     <span className="row-detail">{z.shape.kind === 'box' ? 'box' : 'scene volume'}</span>
-                  </div>
+                  </button>
                   <EnabledSwitch kind="fitting_zone" id={z.id} name={z.name} on={z.enabled} off="the run leaves its fittings out, as if the space were empty" compact />
                 </div>
                 <EnabledRefusals kind="fitting_zone" id={z.id} />
@@ -625,7 +634,7 @@ export function ScenePanel() {
             ))}
             <div className="scene-empty empty" data-scene-node="fitting-zones-note">
               {zonesKnown && zones.length === 0 ? 'No fitting zones. ' : ''}
-              A zone is switched on or off here; adding or editing one is not in this version, and an imported project keeps its own.
+              Fitting zones are added and edited in the Geometry step, under the model; a click on one opens it.
             </div>
               </>
             )}
