@@ -404,6 +404,24 @@
   height: 10px;
   border: 1.5px dashed var(--text-3);
 }
+/* G16: the scene list's read-only nodes. */
+.marker.volume,
+.marker.zone {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1.5px solid var(--text-3);
+}
+.marker.zone {
+  border-style: dotted;
+}
+.marker.env,
+.marker.display {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
 /* A row's issue: Error or Warning as a word, and how many more; the codes are in its tooltip. */
 .issue-tag {
   flex-shrink: 0;

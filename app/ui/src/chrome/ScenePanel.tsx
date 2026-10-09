@@ -25,16 +25,22 @@
 // selected group) deletes it when it is empty, and otherwise says why not and what to do, under
 // that group's own row (`[data-part="group-issues"][data-group]`), scrolled into view: under the
 // last row it read as a refusal of whichever group happened to be last.
+//
+// G16: after the receivers, upstream's other nodes as far as the project holds them: Volumes (the
+// room's air, from the model check, read-only), Fitting zones (from the project file, read-only:
+// editing them is P1's G28/G29), Environment (the air; a click opens Simulate, where it is edited)
+// and Display (the 3D view's View style menu). Each says plainly what cannot be done here.
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import * as actions from '../actions';
 import type { Source, UiIssue } from '../bindings/ipc';
 import { issuesByEntity, projectIssues } from '../issues';
-import { groupRenameStore, refusalStore, sceneStore, selectionStore, useStore } from '../store';
+import { fittingZonesStore, groupRenameStore, refusalStore, sceneStore, selectionStore, stepStore, useStore } from '../store';
+import { settingsStore } from '../features/simulate/runSize';
 import { ADD_GROUP_LABEL, groupPicked, mergePlan, renameProblem, toggleGroup } from './groupsModel';
 import { FoldButton, useFold } from './fold';
 import { usePanelWidth } from './panelWidth';
 import { Search, Trash2 } from './icons';
-import { coord, displayName, effectiveMaterial, matchesFilter, receiverFolder, sentence, uniqueIssues, worstSeverity } from './sceneModel';
+import { coord, displayName, effectiveMaterial, environmentText, matchesFilter, receiverFolder, sentence, uniqueIssues, volumeRow, worstSeverity } from './sceneModel';
 import { deleteGroup, type GroupProblem, groupProblemStore, onEntityKey, removeEntity, selectGroup, selectPoint } from './sceneUi';
 
 // ---- the source switch (M26) -------------------------------------------------------------------
@@ -250,6 +256,12 @@ export function ScenePanel() {
   const receivers = (view?.point_receivers ?? []).filter((r) => matchesFilter(query, r.name, receiverFolder(r)));
   const grids = (view?.surface_receivers ?? []).filter((r) => matchesFilter(query, r.name));
   const general = projectIssues(scene?.issues ?? []);
+  const zoneList = useStore(fittingZonesStore);
+  const settings = useStore(settingsStore);
+  const zonesKnown = zoneList !== null;
+  const zones = (zoneList ?? []).filter((z) => matchesFilter(query, z.name));
+  const volume = volumeRow(scene?.check);
+  const envText = environmentText(settings?.environment);
   const merge = view ? mergePlan(selection, view.surface_groups) : null;
   // The latest group edit's refusals (rename, merge, move), from the checked apply.
   const groupRefusals = uniqueIssues(
@@ -469,6 +481,64 @@ export function ScenePanel() {
             ))}
             {!view.point_receivers.length && !view.surface_receivers.length && (
               <div className="scene-empty empty">No receivers</div>
+            )}
+
+            {/* G16: upstream's other scene nodes, as far as the project holds them; what cannot be edited here says so. */}
+            {(!query || matchesFilter(query, 'Volumes', volume.text)) && (
+              <>
+                <Head title="Volumes" shown={scene?.check?.verdict === 'ok' ? 1 : 0} total={scene?.check?.verdict === 'ok' ? 1 : 0} />
+                <div className="scene-row static" data-scene-node="volume" title={`${volume.detail}. Volumes are found by the model check; naming one or making it a fitting zone is not in this version.`}>
+                  <span className="marker volume" aria-hidden />
+                  <span className="row-name">{volume.text}</span>
+                  <span className="row-detail">read-only</span>
+                </div>
+              </>
+            )}
+
+            {(!query || zones.length > 0) && (
+              <>
+            <Head title="Fitting zones" shown={zones.length} total={zoneList?.length ?? 0} />
+            {zones.map((z) => (
+              <div key={z.id} className="scene-row static" data-entity={`fitting_zone:${z.id}`} title="As the project holds it; editing a fitting zone is not in this version">
+                <span className="marker zone" aria-hidden />
+                <span className="row-name">{z.name}</span>
+                <IssueTag issues={issuesOf('fitting_zone', z.id)} />
+                {!z.enabled && <span className="row-detail row-off">off</span>}
+                <span className="row-detail">{z.kind === 'box' ? 'box' : 'scene volume'}</span>
+              </div>
+            ))}
+            <div className="scene-empty empty" data-scene-node="fitting-zones-note">
+              {zonesKnown && zones.length === 0 ? 'No fitting zones. ' : ''}
+              Adding or editing a fitting zone is not in this version; an imported project keeps its own.
+            </div>
+              </>
+            )}
+
+            {(!query || matchesFilter(query, 'Environment', envText)) && (
+              <>
+                <Head title="Environment" shown={1} total={1} />
+                <button
+                  className="scene-row"
+                  data-scene-node="environment"
+                  title="Temperature, humidity and pressure: edited in Simulate, under the solver's settings"
+                  onClick={() => stepStore.set('simulate')}
+                >
+                  <span className="marker env" aria-hidden />
+                  <span className="row-name">Air</span>
+                  <span className="row-detail mono">{envText}</span>
+                </button>
+              </>
+            )}
+
+            {(!query || matchesFilter(query, 'Display', 'View style')) && (
+              <>
+                <Head title="Display" shown={1} total={1} />
+                <div className="scene-row static" data-scene-node="display" title="Faces, lines and what is hidden are set in the 3D view's View style menu; per-element colour and Show name are not in this version">
+                  <span className="marker display" aria-hidden />
+                  <span className="row-name">View style</span>
+                  <span className="row-detail">in the 3D view</span>
+                </div>
+              </>
             )}
 
             {general.length > 0 && (

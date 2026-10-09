@@ -3,6 +3,9 @@ import { test } from 'node:test';
 import type { CheckSummary, Material, ProjectView, SceneState, UiIssue } from '../bindings/ipc.ts';
 import {
   directionTo,
+  environmentText,
+  fittingZonesOf,
+  volumeRow,
   blockerText,
   displayName,
   checkRows,
@@ -350,4 +353,34 @@ test('M32: the direction toward a point is of length one; none toward the same p
   assert.deepEqual(directionTo([0, 0, 0], [3, -4, 0]), [0.6, -0.8, 0]);
   assert.equal(directionTo([1, 1, 1], [1, 1, 1]), null);
   assert.equal(directionTo([1, 1, 1], ['NaN', 1, 1]), null);
+});
+
+test('G16: fitting zones are read from the project file, box or scene, on or off; none without a list', () => {
+  const json = JSON.stringify({
+    fitting_zones: [
+      { id: 'a', name: 'Stalls', enabled: true, shape: { kind: 'box', min: [0, 0, 0], max: [1, 1, 1], destination: null } },
+      { id: 'b', name: 'Stage', enabled: false, shape: { kind: 'scene', groups: [] } },
+    ],
+  });
+  assert.deepEqual(fittingZonesOf(json), [
+    { id: 'a', name: 'Stalls', enabled: true, kind: 'box' },
+    { id: 'b', name: 'Stage', enabled: false, kind: 'scene' },
+  ]);
+  assert.deepEqual(fittingZonesOf('{"fitting_zones":[]}'), []);
+  assert.equal(fittingZonesOf('{}'), null);
+  assert.equal(fittingZonesOf('not json'), null);
+});
+
+test('G16: the volume row is the Geometry panel number, and none for a refused model', () => {
+  const ok = { verdict: 'ok', air_volume_m3: 180.04 } as unknown as CheckSummary;
+  assert.equal(volumeRow(ok).text, 'Room air · 180 m³');
+  const refused = { verdict: 'refused', air_volume_m3: null } as unknown as CheckSummary;
+  assert.equal(volumeRow(refused).text, 'None: the model is refused');
+  assert.ok(!/\d/.test(volumeRow(refused).text), 'no digit for a refused model');
+  assert.equal(volumeRow(null).text, 'No model');
+});
+
+test('G16: the environment row spells the air as stored', () => {
+  assert.equal(environmentText({ temperature_c: 20, relative_humidity_percent: 50, pressure_pa: 101325 }), '20 °C · 50 % · 101325 Pa');
+  assert.equal(environmentText(null), '—');
 });

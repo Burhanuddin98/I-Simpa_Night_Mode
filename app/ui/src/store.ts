@@ -97,6 +97,9 @@ export const toolStore = new Store<Tool>('select');
  * by the next accepted edit filed under the same key. */
 export const refusalStore = new Store<ReadonlyMap<string, UiIssue[]>>(new Map());
 
+/** G16: the open project's fitting zones as the scene list shows them (read from the project file on every scene change); null when unknown. */
+export const fittingZonesStore = new Store<{ id: string; name: string; enabled: boolean; kind: 'box' | 'scene' }[] | null>(null);
+
 /** Commands in flight (the backend wrapper counts them); the `idle()` hook waits for 0. */
 export const busyStore = new Store<number>(0);
 

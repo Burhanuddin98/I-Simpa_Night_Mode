@@ -367,3 +367,43 @@ export function displayName(raw: string): string {
     .toLowerCase();
   return words ? words.charAt(0).toUpperCase() + words.slice(1) : raw;
 }
+
+// ---- G16: the scene list's other nodes (upstream's Data and Project trees) ----------------------
+
+/** A fitting zone as the scene list reads it from the project file: no more than the list shows. */
+export interface ZoneRow {
+  id: string;
+  name: string;
+  enabled: boolean;
+  kind: 'box' | 'scene';
+}
+
+/** G16: the project file's fitting zones (`project_json`'s text), in project order; null when the text holds no list. */
+export function fittingZonesOf(json: string): ZoneRow[] | null {
+  try {
+    const p = JSON.parse(json) as { fitting_zones?: unknown } | null;
+    if (!p || !Array.isArray(p.fitting_zones)) return null;
+    return p.fitting_zones.map((z: { id?: unknown; name?: unknown; enabled?: unknown; shape?: { kind?: unknown } }) => ({
+      id: String(z.id ?? ''),
+      name: String(z.name ?? ''),
+      enabled: z.enabled !== false,
+      kind: z.shape?.kind === 'box' ? 'box' : 'scene',
+    }));
+  } catch {
+    return null;
+  }
+}
+
+/** G16: the Volumes node's one row: the room's air as the model check gives it (the Geometry panel's number), or why there is none. */
+export function volumeRow(check: CheckSummary | null | undefined): { text: string; detail: string } {
+  if (!check) return { text: 'No model', detail: 'Import a room model; its air volume comes from the model check' };
+  const v = check.air_volume_m3;
+  if (check.verdict !== 'ok' || v == null) return { text: 'None: the model is refused', detail: 'A refused model encloses no volume anyone should read' };
+  return { text: `Room air · ${fact(v, 1)} m³`, detail: 'The air the model check finds inside the faces, closed obstacles left out' };
+}
+
+/** G16: the Environment node's row: the air as the solvers are given it. */
+export function environmentText(env: { temperature_c: F64; relative_humidity_percent: F64; pressure_pa: F64 } | null | undefined): string {
+  if (!env) return '—';
+  return `${exact(env.temperature_c)} °C · ${exact(env.relative_humidity_percent)} % · ${exact(env.pressure_pa)} Pa`;
+}

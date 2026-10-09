@@ -8,6 +8,7 @@
 // the step bar's boxes).
 import { blockersWithSize, settingsStore } from './features/simulate/runSize';
 import { projectSettings } from './features/simulate/model';
+import { fittingZonesOf } from './chrome/sceneModel';
 import { useEffect } from 'react';
 import * as actions from './actions';
 import { asCmdError, backend } from './backend';
@@ -26,7 +27,7 @@ import { Viewport } from './features/viewport/Viewport';
 import { isReloadKey, joinBlockers } from './flow';
 import { probeWebGL } from './gpu';
 import { runSelftest } from './selftest';
-import { log, runStore, sceneStore, solversStatusStore, solverStore, statusStore, useStore } from './store';
+import { fittingZonesStore, log, runStore, sceneStore, solversStatusStore, solverStore, statusStore, useStore } from './store';
 import { installTestHooks } from './testhooks';
 
 let booted = false;
@@ -67,8 +68,20 @@ async function boot(): Promise<void> {
 // The run-size check (runSize.ts) needs the project's settings, which live in the project file's text: read
 // them again on every scene change, so Run's blockers and the Simulate step see the cube as set now.
 sceneStore.subscribe(() => {
-  if (!sceneStore.get()) return void settingsStore.set(null);
-  actions.projectJson().then((json) => settingsStore.set(projectSettings(json))).catch(() => settingsStore.set(null));
+  if (!sceneStore.get()) {
+    fittingZonesStore.set(null);
+    return void settingsStore.set(null);
+  }
+  actions
+    .projectJson()
+    .then((json) => {
+      settingsStore.set(projectSettings(json));
+      fittingZonesStore.set(fittingZonesOf(json));
+    })
+    .catch(() => {
+      settingsStore.set(null);
+      fittingZonesStore.set(null);
+    });
 });
 
 /** Keys that stay with a text field while it has focus. */
