@@ -14,6 +14,14 @@ export const ZONE_DEFAULTS = { absorption: 0, mean_free_path_m: 1, diffusion_law
 /** The side of a new box zone, metres: upstream's new box is (0, 0, 0) to (1, 1, 1). */
 export const NEW_BOX_SIDE_M = 1;
 
+/**
+ * How far a new box zone stands above the room's lowest point, metres. A box face lying on a floor
+ * that is only nearly flat (BRAS CR4's: vertices at z = -1.25 and -1.249999) crosses the floor's
+ * own faces, and TetGen stops on the self-intersection (bed v1q-p1b, the run 20261009-094510-515-tcr);
+ * clear of the floor its faces touch nothing of the room.
+ */
+export const NEW_BOX_LIFT_M = 0.1;
+
 /** The diffusion laws, as upstream lists them (coreTypes.h:108-113), with their words. */
 export const DIFFUSION_LAWS: readonly { key: DiffusionLaw; label: string }[] = [
   { key: 'uniform', label: 'Uniform' },
@@ -29,14 +37,14 @@ const finite = (v: F64): v is number => typeof v === 'number' && Number.isFinite
 const mm = (v: number) => Math.round(v * 1000) / 1000 + 0;
 
 /**
- * A new enabled box zone, `NEW_BOX_SIDE_M` on a side, standing on the room's floor at the middle
+ * A new enabled box zone, `NEW_BOX_SIDE_M` on a side, `NEW_BOX_LIFT_M` above the room's floor at the middle
  * of its plan (upstream puts its new box at the origin, which in most models is a corner or
  * outside the room), upstream's values in each of `bands` bands, nothing pinned.
  */
 export function newBoxZone(id: string, name: string, room: Box3, bands: number): BoxZone {
   const c = [0, 1].map((i) => (room.min[i] + room.max[i]) / 2);
   const h = NEW_BOX_SIDE_M / 2;
-  const z0 = room.min[2];
+  const z0 = room.min[2] + NEW_BOX_LIFT_M;
   return {
     id,
     name,
