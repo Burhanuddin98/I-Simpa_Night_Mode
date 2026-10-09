@@ -4,9 +4,13 @@
 //! as a WAV the UI plays and saves: mono, 48 kHz, 32-bit float, peak −1 dBFS, with the seed and the
 //! gain to the run's scale in its comment.
 //!
-//! The recordings offered are [`CLIPS`]: dry recordings, close-miked: not anechoic, so the room they were recorded in adds a little. They are embedded with `include_bytes!`
-//! as the examples are (`examples.rs`); each has a provenance file beside it in `examples/clips/` (source,
-//! author, licence quoted, sha256), and `examples/ATTRIBUTION.md` lists them. The UI's list
+//! The clips offered are [`CLIPS`] (decision 84): three made by this repository's own code
+//! (`tools/clips/make_dry_clips.py`: claps and rim clicks, a plucked-string melody, a drum groove),
+//! anechoic by construction and GPL-3.0 like the app, each event's own tail measured in its
+//! provenance; and one recording, speech, dry and close-miked but not anechoic, so the room it was
+//! recorded in adds a little. They are embedded with `include_bytes!` as the examples are
+//! (`examples.rs`); each has a provenance file beside it in `examples/clips/` (how it was made, or
+//! source, author and licence quoted; its sha256), and `examples/ATTRIBUTION.md` lists them. The UI's list
 //! (`ui/src/features/acoustics/aural.ts`) is held to this one by its test. "Open your own WAV…"
 //! passes a path instead.
 //!
@@ -20,7 +24,7 @@ use simpa_core::auralize::{self, AuralError, Pick, SAMPLE_RATE, SEED, wav};
 
 use crate::guard::{CmdError, CmdResult};
 
-/// One shipped recording: dry and close-miked, not anechoic.
+/// One shipped clip: generated (anechoic by construction) or a dry recording (module docs).
 pub struct Clip {
     /// The id the UI asks for.
     pub id: &'static str,
@@ -31,16 +35,20 @@ pub struct Clip {
 /// Every shipped recording, in the UI's order.
 pub const CLIPS: &[Clip] = &[
     Clip {
+        id: "clap-pattern",
+        bytes: include_bytes!("../examples/clips/clap-pattern.wav"),
+    },
+    Clip {
+        id: "pluck-melody",
+        bytes: include_bytes!("../examples/clips/pluck-melody.wav"),
+    },
+    Clip {
+        id: "drum-groove",
+        bytes: include_bytes!("../examples/clips/drum-groove.wav"),
+    },
+    Clip {
         id: "speech-lv-hislastbow",
         bytes: include_bytes!("../examples/clips/speech-lv-hislastbow.wav"),
-    },
-    Clip {
-        id: "tenorsax-vcsl-c3",
-        bytes: include_bytes!("../examples/clips/tenorsax-vcsl-c3.wav"),
-    },
-    Clip {
-        id: "harp-vcsl-c5",
-        bytes: include_bytes!("../examples/clips/harp-vcsl-c5.wav"),
     },
 ];
 
@@ -140,7 +148,7 @@ mod tests {
             let w = wav::read(c.bytes).unwrap_or_else(|e| panic!("{}: {e}", c.id));
             assert_eq!((w.rate, w.channels), (SAMPLE_RATE, 1), "{}", c.id);
             let secs = w.samples.len() as f64 / f64::from(w.rate);
-            assert!((2.0..=12.0).contains(&secs), "{}: {secs} s", c.id);
+            assert!((2.0..=20.0).contains(&secs), "{}: {secs} s", c.id);
             total += c.bytes.len();
             let prov = std::fs::read_to_string(
                 Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -148,7 +156,13 @@ mod tests {
                     .join(format!("{}.provenance.md", c.id)),
             )
             .unwrap();
-            for word in ["Licence", "sha256", "Source page", "Date fetched"] {
+            // Generated: the script and its measured dryness; recorded: where it came from.
+            let words: &[&str] = if prov.contains("- Made by: tools/clips/make_dry_clips.py") {
+                &["Licence: GPL-3.0", "sha256", "seed", "Dryness: anechoic by construction"]
+            } else {
+                &["Licence", "sha256", "Source page", "Date fetched", "NOT anechoic"]
+            };
+            for word in words {
                 assert!(prov.contains(word), "{}: no {word}", c.id);
             }
         }

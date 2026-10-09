@@ -12,23 +12,32 @@ export const AURAL_TITLE = 'Listen: impulse response (synthesised)';
 export const AURAL_NOTE =
   'Synthesised from the SPPS energy echogram: the room’s decay and spectrum per band, with a random fine structure. Not a measured or wave-based impulse response.';
 
-/** A shipped recording, dry and close-miked (not anechoic): `id` as `src-tauri/src/aural.rs` names it (aural.test.ts holds the
- * two lists to each other and to the files and their provenance). */
+/** A shipped clip, `id` as `src-tauri/src/aural.rs` names it (aural.test.ts holds the two lists to each
+ * other and to the files and their provenance). Decision 84: `generated` clips are made by the
+ * repository's own code (`tools/clips/make_dry_clips.py`), anechoic by construction and synthetic;
+ * a `recorded` one is dry and close-miked, not anechoic. */
 export interface Clip {
   id: string;
   title: string;
-  /** Its licence, in a few words (the provenance file beside it quotes the licence page). */
+  made: 'generated' | 'recorded';
+  /** Its licence, in a few words (the provenance file beside it says how it was made, or quotes the licence page). */
   licence: string;
 }
 
 /** What the bundled clips are, said where they are offered. */
-export const CLIPS_NOTE = 'The bundled clips are dry recordings, close-miked: not anechoic, so the room they were recorded in adds a little. Your own file is best dry or anechoic.';
+export const CLIPS_NOTE =
+  'The claps, the melody and the groove are made by the app’s own code: anechoic, but synthetic. The speech is a dry recording, close-miked: not anechoic, so the room it was recorded in adds a little. Your own file is best dry or anechoic.';
 
+/** The percussive clip first: its silences let the room's tail be heard on its own. */
 export const CLIPS: readonly Clip[] = [
-  { id: 'speech-lv-hislastbow', title: 'Speech (English, male reader)', licence: 'public domain, LibriVox' },
-  { id: 'tenorsax-vcsl-c3', title: 'Tenor saxophone, one note', licence: 'CC0, VCSL' },
-  { id: 'harp-vcsl-c5', title: 'Concert harp, one note', licence: 'CC0, VCSL' },
+  { id: 'clap-pattern', title: 'Claps and rim clicks, with gaps', made: 'generated', licence: 'GPL-3.0' },
+  { id: 'pluck-melody', title: 'Plucked-string melody', made: 'generated', licence: 'GPL-3.0' },
+  { id: 'drum-groove', title: 'Drum groove', made: 'generated', licence: 'GPL-3.0' },
+  { id: 'speech-lv-hislastbow', title: 'Speech (English, male reader)', made: 'recorded', licence: 'public domain, LibriVox' },
 ];
+
+/** A clip as the picker lists it: what it is, how it was made, its licence. */
+export const clipText = (c: Clip): string => `${c.title} (${c.made === 'generated' ? 'synthesised, anechoic' : 'recorded, close-miked'}; ${c.licence})`;
 
 /** A WAV as the core writes it (`simpa_core::auralize::wav`): mono IEEE float 32-bit, or 16/24-bit
  * PCM, read back here for playback. */

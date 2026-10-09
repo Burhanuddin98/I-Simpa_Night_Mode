@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import * as actions from '../../actions';
-import { AURAL_NOTE, AURAL_TITLE, CLIPS, CLIPS_NOTE, dbText, meter, readWav, type WavData, wavName } from './aural';
+import { AURAL_NOTE, AURAL_TITLE, CLIPS, CLIPS_NOTE, clipText, dbText, meter, readWav, type WavData, wavName } from './aural';
 import type { SourceSel } from './model';
 
 type What = 'ir' | 'aural';
@@ -284,7 +284,7 @@ export function AuralWindow({
           <select data-part="aural-dry" value={dry.startsWith('clip:') ? dry : 'file'} onChange={(e) => e.target.value !== 'file' && setDry(e.target.value)} title="A dry recording to hear through the room (the bundled clips are close-miked, not anechoic)">
             {CLIPS.map((c) => (
               <option key={c.id} value={`clip:${c.id}`}>
-                {`${c.title} (${c.licence})`}
+                {clipText(c)}
               </option>
             ))}
             {ownName ? <option value="file">{ownName}</option> : null}

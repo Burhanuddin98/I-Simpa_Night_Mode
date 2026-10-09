@@ -160,7 +160,8 @@ describe('C5: listening to CR4: the synthesised impulse response and a dry clip 
     assert.match(w.note, /not a measured or wave-based impulse response/i);
     assert.match(w.text, /Auralize/);
     assert.match(w.text, /Open your own WAV/);
-    assert.match(w.text, /dry recordings, close-miked: not anechoic/, 'the bundled clips said to be what they are');
+    assert.match(w.text, /anechoic, but synthetic/, 'the generated clips said to be what they are');
+    assert.match(w.text, /dry recording, close-miked: not anechoic/, 'the recorded clip said to be what it is');
     await clickSelector(`${WIN} [data-action="close-aural"]`);
     await browser.waitUntil(async () => !(await $(WIN).isExisting()), { timeout: 10_000 });
     await clickSelector(`${PANEL} [data-action="open-aural"]`);
@@ -226,14 +227,14 @@ describe('C5: listening to CR4: the synthesised impulse response and a dry clip 
 
   it('c5-aural: a bundled clip and an own 44.1 kHz WAV through the room play and save at 48 kHz', async () => {
     const dry = await $(`${WIN} select[data-part="aural-dry"]`).getValue();
-    assert.match(dry, /^clip:speech-/, 'the first clip offered is speech');
+    assert.equal(dry, 'clip:clap-pattern', 'the first clip offered is the claps');
     await clickSelector(`${WIN} [data-action="aural-play-conv"]`);
     const v = await waitView((x) => x.aural !== null && x.playing === 'aural', 'the auralization playing');
     assert.equal(v.aural?.rate, RATE);
     assert.ok((v.aural?.seconds ?? 0) > 5, `${v.aural?.seconds} s: the clip and the room's tail`);
     await clickSelector(`${WIN} [data-action="aural-play-conv"]`);
     await waitView((x) => x.playing === null, 'stopped', 10_000);
-    const file = path.join(WORK(), 'aural-speech.wav');
+    const file = path.join(WORK(), 'aural-clap.wav');
     await hook('auralSave', 'aural', file);
     await m10.idle();
     const h = wavHeader(file);
@@ -250,6 +251,6 @@ describe('C5: listening to CR4: the synthesised impulse response and a dry clip 
     assert.ok((o.aural?.samples ?? 0) >= Math.round(0.6 * RATE), `${o.aural?.samples} samples`);
     await clickSelector(`${WIN} [data-action="aural-play-conv"]`);
     await waitView((x) => x.playing === null, 'stopped', 10_000);
-    console.log(`c5-aural receipt: speech clip -> ${v.aural?.samples} samples (${v.aural?.seconds.toFixed(2)} s) at ${v.aural?.rate} Hz, saved ${file} (${h.frames} frames, ${h.rate} Hz); own 44.1 kHz WAV -> ${o.aural?.samples} samples at ${o.aural?.rate} Hz`);
+    console.log(`c5-aural receipt: clap clip -> ${v.aural?.samples} samples (${v.aural?.seconds.toFixed(2)} s) at ${v.aural?.rate} Hz, saved ${file} (${h.frames} frames, ${h.rate} Hz); own 44.1 kHz WAV -> ${o.aural?.samples} samples at ${o.aural?.rate} Hz`);
   });
 });

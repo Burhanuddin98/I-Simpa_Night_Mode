@@ -4,11 +4,11 @@
 // is not; the meter shows a clip, never hides one.
 import { strict as assert } from 'node:assert';
 import { createHash } from 'node:crypto';
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { AURAL_NOTE, CLIPS, CLIPS_NOTE, dbText, meter, peakDbfs, readWav, wavName } from './aural.ts';
+import { AURAL_NOTE, CLIPS, CLIPS_NOTE, clipText, dbText, meter, peakDbfs, readWav, wavName } from './aural.ts';
 
 const TAURI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', 'src-tauri');
 const SHIPPED = path.join(TAURI, 'examples', 'clips');
@@ -32,9 +32,21 @@ test('aural: the clips offered are aural.rs\'s, in its order, each shipped with 
     const sha = createHash('sha256').update(wav).digest('hex');
     assert.ok(prov.includes(sha), `${c.id}: the provenance does not hold the file's sha256 ${sha}`);
     const licence = prov.split('\n').find((l) => l.startsWith('- Licence:')) ?? '';
-    assert.match(licence, /Public domain|CC0/, `${c.id}: ${licence}`);
-    assert.match(prov, /Licence text, quoted from https?:\/\//, `${c.id}: the licence page is quoted`);
-    assert.match(c.licence, /public domain|CC0/);
+    if (c.made === 'generated') {
+      // Decision 84: made by the repository's script, GPL like the app, its dryness measured.
+      assert.match(prov, /^- Made by: tools\/clips\/make_dry_clips\.py/m, `${c.id}: the script named`);
+      assert.ok(existsSync(path.join(TAURI, '..', '..', 'tools', 'clips', 'make_dry_clips.py')), 'the script is in the repository');
+      assert.match(licence, /GPL-3\.0/, `${c.id}: ${licence}`);
+      assert.match(c.licence, /GPL-3\.0/);
+      assert.match(prov, /Dryness: anechoic by construction/, `${c.id}`);
+      const tail = /at most (\d+) ms, median \d+ ms \(criterion: within 50 ms\)/.exec(prov);
+      assert.ok(tail && Number(tail[1]) <= 50, `${c.id}: each event's own tail measured within 50 ms`);
+    } else {
+      assert.match(licence, /Public domain|CC0/, `${c.id}: ${licence}`);
+      assert.match(prov, /Licence text, quoted from https?:\/\//, `${c.id}: the licence page is quoted`);
+      assert.match(prov, /NOT anechoic/, `${c.id}: a recording says it is not anechoic`);
+      assert.match(c.licence, /public domain|CC0/);
+    }
     const w = readWav(ab(wav));
     assert.equal(w.rate, 48000, c.id);
     assert.equal(w.channels, 1, c.id);
@@ -109,7 +121,12 @@ test('aural: the meter shows a clip and silence, and the words say what this is'
   assert.match(AURAL_NOTE, /synthesised from the SPPS energy echogram/i);
   assert.match(AURAL_NOTE, /not a measured or wave-based impulse response/i);
   assert.match(CLIPS_NOTE, /not anechoic/);
-  for (const c of CLIPS) assert.doesNotMatch(`${c.title} ${c.licence}`, /anechoic/i, 'a bundled clip called anechoic');
+  assert.match(CLIPS_NOTE, /anechoic, but synthetic/);
+  assert.equal(CLIPS[0].id, 'clap-pattern', 'the percussive clip first');
+  for (const c of CLIPS) {
+    if (c.made === 'recorded') assert.doesNotMatch(`${c.title} ${c.licence} ${clipText(c)}`, /anechoic/i, 'a recorded clip called anechoic');
+    else assert.match(clipText(c), /synthesised, anechoic/);
+  }
   assert.equal(wavName('CR4', 2, 'MP1', null, 'ir', null), 'CR4 - run 2 - MP1 - sources summed - impulse response.wav');
   assert.equal(wavName(null, null, 'a/b', 'LS1', 'aural', 'harp'), 'Untitled - a_b - LS1 - auralization harp.wav');
 });

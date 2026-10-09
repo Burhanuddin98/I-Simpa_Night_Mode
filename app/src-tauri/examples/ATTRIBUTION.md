@@ -98,15 +98,26 @@ the room. Both files pass `simpa validate` with no issue.
 only under CC BY-SA 4.0, with this attribution. The share-alike term covers these data files. It
 does not cover the app's code, which is GPL-3.0.
 
-## Dry clips (C5, decision 75)
+## Dry clips (C5, decisions 75 and 84)
 
-Three short recordings ship in `clips/` (`src/aural.rs`, `include_bytes!`) for the Results step's Listen
-window. Each has a provenance file beside it: the source page, the file fetched, the author, the licence
+Four short clips ship in `clips/` (`src/aural.rs`, `include_bytes!`) for the Results step's Listen
+window, each with a provenance file beside it.
+
+Three are made by this repository's own code, `tools/clips/make_dry_clips.py` (seeded, deterministic;
+`--check` regenerates them byte for byte). They are anechoic by construction, synthetic, and GPL-3.0 like
+the app. Each provenance file says how the clip was made and gives its sha256 and its own tail, as
+measured on the file: every event falls 60 dB within 50 ms of its end.
+
+One is a recording. Its provenance file gives the source page, the file fetched, the author, the licence
 quoted from its page, the date fetched, both sha256s and the processing (trim, mono, 48 kHz, fades, peak
--1 dBFS, 16-bit). None is a measured anechoic recording; each is close-miked and dry, and its file says so.
+-1 dBFS, 16-bit). It is close-miked and dry but not a measured anechoic recording, and its file says so.
+
+The two VCSL single notes shipped until 2026-10-09 (tenor saxophone C3, concert harp C5) were dropped: one
+note says less about a room than the plucked-string melody, and the four clips must stay under 5 MB together.
 
 | file | what | author | licence |
 |---|---|---|---|
+| `clips/clap-pattern.wav` | Claps and rim clicks with silences of 0.5-1.5 s, 12.0 s, generated | this repository | GPL-3.0 |
+| `clips/pluck-melody.wav` | A plucked-string melody (modal string, staccato and held notes), 16.9 s, generated | this repository | GPL-3.0 |
+| `clips/drum-groove.wav` | A drum groove (kick, snare, closed hi-hat), 10.2 s, generated | this repository | GPL-3.0 |
 | `clips/speech-lv-hislastbow.wav` | Speech, 7.95 s, from LibriVox's "His Last Bow" | Zachary Brewster-Geisz (reader), Arthur Conan Doyle (text) | Public domain (LibriVox: "all our recordings are public domain") |
-| `clips/tenorsax-vcsl-c3.wav` | Tenor saxophone, one note, 7.37 s | Versilian Studios / Sam Gossner, VCSL | CC0 1.0 |
-| `clips/harp-vcsl-c5.wav` | Concert harp, one note, 7.01 s | Versilian Studios / Sam Gossner, VCSL | CC0 1.0 |

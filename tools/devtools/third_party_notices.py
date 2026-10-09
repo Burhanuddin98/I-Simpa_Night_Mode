@@ -62,9 +62,9 @@ SHIPPED = [
      "Derived from the Benchmark for Room Acoustical Simulation (BRAS), L. Aspoeck, M. Vorlaender, "
      "F. Brinkmann, D. Ackermann, S. Weinzierl (RWTH Aachen University, TU Berlin). "
      "https://creativecommons.org/licenses/by-sa/4.0/ ; app/src-tauri/examples/ATTRIBUTION.md."),
-    ("Dry clips for Listen: speech, tenor saxophone, concert harp",
-     "Public domain (LibriVox); CC0-1.0 (Versilian Studios VCSL)",
-     "app/src-tauri/examples/clips/*.provenance.md."),
+    ("Dry clip for Listen: speech (the claps, melody and groove beside it are the app's own, GPL-3.0)",
+     "Public domain (LibriVox)",
+     "app/src-tauri/examples/clips/speech-lv-hislastbow.provenance.md."),
 ]
 # Licence texts kept in this repository, printed with the hand-written rows.
 SHIPPED_TEXTS = [

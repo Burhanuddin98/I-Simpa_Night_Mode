@@ -36,9 +36,9 @@ Example rooms: BRAS CR1, CR2, CR3, CR4
   Licence: CC-BY-SA-4.0
   Derived from the Benchmark for Room Acoustical Simulation (BRAS), L. Aspoeck, M. Vorlaender, F. Brinkmann, D. Ackermann, S. Weinzierl (RWTH Aachen University, TU Berlin). https://creativecommons.org/licenses/by-sa/4.0/ ; app/src-tauri/examples/ATTRIBUTION.md.
 
-Dry clips for Listen: speech, tenor saxophone, concert harp
-  Licence: Public domain (LibriVox); CC0-1.0 (Versilian Studios VCSL)
-  app/src-tauri/examples/clips/*.provenance.md.
+Dry clip for Listen: speech (the claps, melody and groove beside it are the app's own, GPL-3.0)
+  Licence: Public domain (LibriVox)
+  app/src-tauri/examples/clips/speech-lv-hislastbow.provenance.md.
 
 
 2. Rust crates compiled into app.exe (250)
