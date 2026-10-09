@@ -7,6 +7,9 @@
 // default), Outside (every face, the room as a closed shell) or None (the edges only). See-through
 // is glass over the near walls the inside view removes, so it is offered with Inside only.
 //
+// Parity G46: XZ grid and YZ grid, upstream's View > XZ Grid and YZ Grid (off by default, as there):
+// upright grids behind the room on the floor grid's spacing (ground.ts `wallGridSegments`).
+//
 // Parity G44: Edges > None, upstream's View > Lines > None: no edge of the model is drawn.
 //
 // Item 7: Hide > Roof off (R): the faces that close the room from above left out of the view (hide.ts),
@@ -154,6 +157,24 @@ export function ViewStyleMenu() {
             onClick={() => set({ ground: !style.ground })}
           >
             Floor grid
+          </button>
+          <button
+            role="menuitemcheckbox"
+            aria-checked={style.gridXz}
+            data-grid-xz=""
+            title="Upstream's XZ grid: an upright grid behind the room, in the plane of its lowest y, spaced as the floor grid"
+            onClick={() => set({ gridXz: !style.gridXz })}
+          >
+            XZ grid
+          </button>
+          <button
+            role="menuitemcheckbox"
+            aria-checked={style.gridYz}
+            data-grid-yz=""
+            title="Upstream's YZ grid: an upright grid beside the room, in the plane of its lowest x, spaced as the floor grid"
+            onClick={() => set({ gridYz: !style.gridYz })}
+          >
+            YZ grid
           </button>
           <div className="view-style-head">Show</div>
           <button

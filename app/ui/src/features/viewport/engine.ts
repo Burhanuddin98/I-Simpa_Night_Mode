@@ -105,7 +105,7 @@ import { aoFactor, aoReach, bakeAo } from './ao';
 import { FADE_BG, FADE_MAX, fadeAmount, fadeRange } from './fade';
 import { glassOpacity } from './glass';
 import { BUILD_MS, buildHeight, buildKeep, buildLine, NO_CUT, swingAngle } from './build';
-import { groundColour, groundLayout } from './ground';
+import { groundColour, groundLayout, wallGridSegments } from './ground';
 import { emptyFat, emptyGeometry, FatLineMaterial, inSrgb, rawColor } from './nodes';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import type { ParticleLook } from './rays';
@@ -204,11 +204,14 @@ export interface ViewStyle {
   fade: boolean;
   /** The floor grid and shadow under the room (ground.ts) on. */
   ground: boolean;
+  /** G46: upstream's XZ Grid and YZ Grid, upright behind the room (ground.ts `wallGridSegments`); off by default, as upstream's. */
+  gridXz: boolean;
+  gridYz: boolean;
   /** The dimensions overlay (dims.ts) on: length, width and height beside the room. */
   dims: boolean;
 }
 const STYLE_KEY = 'nm.viewStyle';
-const DEFAULT_STYLE: ViewStyle = { surfaces: 'colour', faces: 'inside', edges: 'all', glass: 15, corners: true, fade: true, ground: true, dims: false };
+const DEFAULT_STYLE: ViewStyle = { surfaces: 'colour', faces: 'inside', edges: 'all', glass: 15, corners: true, fade: true, ground: true, gridXz: false, gridYz: false, dims: false };
 function loadStyle(): ViewStyle {
   try {
     const v = JSON.parse(localStorage.getItem(STYLE_KEY) ?? 'null') as Partial<ViewStyle> | null;
@@ -221,6 +224,8 @@ function loadStyle(): ViewStyle {
       corners: v.corners !== false,
       fade: v.fade !== false,
       ground: v.ground !== false,
+      gridXz: v.gridXz === true,
+      gridYz: v.gridYz === true,
       dims: v.dims === true,
     };
   } catch {
@@ -640,6 +645,10 @@ class ViewportEngine {
   /** The floor grid and shadow under the room (ground.ts), and the height it sits at. */
   private readonly ground: Mesh;
   private groundZ = 0;
+  /** G46: the XZ and YZ grids switched on, as one set of lines (ground.ts `wallGridSegments`). */
+  private readonly wallGrid: LineSegments;
+  private wallGridSegments = 0;
+  private wallGridKinds: ('xz' | 'yz')[] = [];
   /** The build-up (build.ts): the model it last played for, and its frame while running. */
   private builtKey = '';
   private buildFrame = 0;
@@ -739,6 +748,9 @@ class ViewportEngine {
     const groundMaterial = new MeshBasicNodeMaterial({ transparent: true, depthWrite: false, side: DoubleSide });
     groundMaterial.fragmentNode = groundColour(this.groundU);
     this.ground = new Mesh(new PlaneGeometry(1, 1), groundMaterial);
+    // G46: the upright grids, in the floor grid's grey; drawing aids that hide nothing behind them.
+    this.wallGrid = new LineSegments(emptyGeometry(), inSrgb(new LineBasicNodeMaterial({ color: LINE, transparent: true, opacity: 0.16, depthWrite: false })));
+    this.wallGrid.visible = false;
     // The plan inset's background (decision-log row 50: a floating panel, see-through), as WebGL's
     // scissored clear wrote it: the panel colour at 35 %, premultiplied, and the far depth.
     const panel = rawColor(PANEL);
@@ -758,6 +770,7 @@ class ViewportEngine {
     this.dimLines.visible = false;
     const order: [{ renderOrder: number }, number][] = [
       [this.ground, 0.2],
+      [this.wallGrid, 0.2],
       [this.dimLines, 9],
       [this.faces, 0],
       [this.tint, 0.5],
@@ -795,6 +808,7 @@ class ViewportEngine {
       this.sourcePoints.sprite,
       this.halo.sprite,
       this.ground,
+      this.wallGrid,
       this.dimLines,
       this.results.group,
       this.live.group,
@@ -897,6 +911,8 @@ class ViewportEngine {
       registerHook('planeOutlines', () => this.planeSummary),
       // G28: the fitting zones the view draws (name, box, edges drawn).
       registerHook('zoneOutlines', () => this.zoneSummary),
+      // G44 and G46: whether the model's edges are drawn, and the upright grids laid out (kind, line count).
+      registerHook('styleLayers', () => ({ edges: this.edges.visible, wallGrids: this.wallGridKinds, wallGridLines: this.wallGridSegments })),
       // Items 7 and 8: the faces the view leaves out now (Roof off, Isolate), in project face numbering.
       registerHook('viewHidden', () => ({ ...hideStore.get(), faces: this.out ? [...this.out.keys()].filter((f) => this.out?.[f]) : [] })),
       // Item 10: the map's reveal front (null when the whole map draws) and the wavefront as drawn this frame.
@@ -1138,6 +1154,7 @@ class ViewportEngine {
       this.setFade(main === this.persp);
       // The ground only from above, in the perspective view; never in plan, where it would be a second grid.
       this.ground.visible = main === this.persp && !!this.bounds && viewStyle.get().ground && this.persp.position.z > this.groundZ;
+      this.wallGrid.visible = main === this.persp && this.wallGridSegments > 0;
       this.updateDims(main === this.persp);
       const resultsFx = stepStore.get() === 'results' && this.results.gpu.active();
       const liveFx = this.liveShown() && this.live.gpu.active();
@@ -1602,6 +1619,7 @@ class ViewportEngine {
     r.render(this.insetClear, this.plan);
     this.setFade(false);
     this.ground.visible = false;
+    this.wallGrid.visible = false;
     this.dimLines.visible = false;
     this.fitPlan(b.width / b.height);
     this.setMarkerScale(INSET_MARKER_SCALE);
@@ -1769,6 +1787,7 @@ class ViewportEngine {
       this.featureEdges = this.allEdges.feature;
     }
     this.builtRev = mesh?.geometryRev ?? null;
+    this.layoutWallGrid();
     this.applyHidden();
     // A face selection names faces of the geometry it was made on.
     if (previousRev !== this.builtRev && selectionStore.get().kind === 'faces') selectionStore.set({ kind: 'none' });
@@ -1831,6 +1850,25 @@ class ViewportEngine {
     u.footMin.value.set(box.min[0], box.min[1]);
     u.footMax.value.set(box.max[0], box.max[1]);
     u.soft.value = g.soft;
+  }
+
+  /** G46: the XZ and YZ grids switched on in the style, laid out for the model's box (none without a model). */
+  private layoutWallGrid(): void {
+    const st = viewStyle.get();
+    const b = this.bounds;
+    const parts = b ? [st.gridXz ? wallGridSegments(b, 'xz') : null, st.gridYz ? wallGridSegments(b, 'yz') : null].filter((x): x is Float32Array => x !== null) : [];
+    const all = new Float32Array(parts.reduce((n, p) => n + p.length, 0));
+    let o = 0;
+    for (const p of parts) {
+      all.set(p, o);
+      o += p.length;
+    }
+    this.wallGrid.geometry.dispose();
+    const g = emptyGeometry();
+    if (all.length > 0) g.setAttribute('position', new Float32BufferAttribute(all, 3));
+    this.wallGrid.geometry = g;
+    this.wallGridSegments = all.length / 6;
+    this.wallGridKinds = [st.gridXz && b ? 'xz' : null, st.gridYz && b ? 'yz' : null].filter((x): x is 'xz' | 'yz' => x !== null);
   }
 
   /**
@@ -2076,6 +2114,7 @@ class ViewportEngine {
     this.edges.geometry = st.edges === 'feature' ? this.featureEdges : this.triangleEdges;
     // G44: Lines > None draws no edge of the model; the overlays (selection, planes, zones) keep theirs.
     this.edges.visible = st.edges !== 'none';
+    this.layoutWallGrid();
     this.shared.nmAoMix.value = st.corners ? 1 : 0;
     this.invalidate();
   }

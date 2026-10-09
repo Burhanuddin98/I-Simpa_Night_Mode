@@ -40,6 +40,49 @@ export function groundLayout(box: Box): GroundLayout {
   };
 }
 
+/** Parity G46: the two upright grids, upstream's XZ Grid and YZ Grid (View menu, off by default). */
+export type WallGrid = 'xz' | 'yz';
+
+/**
+ * The lines of an upright grid behind the room (parity G46), as segments (six numbers each): the XZ
+ * grid in the plane y = the room's lowest y, the YZ grid in x = its lowest x, so the two stand on the
+ * floor grid's edge like the walls of a drawing board. Spaced as the floor grid (`gridStep`, at
+ * multiples of the step in world metres, so their lines meet the floor's), from the ground's height to
+ * the first step at or above the room's top, and across the room's span on the other axis to whole steps.
+ * Upstream draws its grids through the origin, which lies inside or far outside most rooms; here they
+ * frame the room wherever it is. A drawing aid only: grey, never picked.
+ */
+export function wallGridSegments(box: Box, which: WallGrid): Float32Array {
+  const g = groundLayout(box);
+  const step = g.step;
+  const across = which === 'xz' ? 0 : 1;
+  const at = which === 'xz' ? box.min[1] : box.min[0];
+  const lo = Math.floor(box.min[across] / step) * step;
+  const hi = Math.ceil(box.max[across] / step) * step;
+  const bottom = g.z;
+  const top = Math.ceil(box.max[2] / step) * step;
+  const out: number[] = [];
+  const point = (u: number, z: number) => (which === 'xz' ? out.push(u, at, z) : out.push(at, u, z));
+  const nu = Math.round((hi - lo) / step);
+  for (let i = 0; i <= nu; i++) {
+    const u = lo + i * step;
+    point(u, bottom);
+    point(u, top);
+  }
+  const first = Math.ceil(bottom / step) * step;
+  const nz = Math.round((top - first) / step);
+  // The bottom edge, at the ground's own height, then every whole step up to the top.
+  point(lo, bottom);
+  point(hi, bottom);
+  for (let j = 0; j <= nz; j++) {
+    const z = first + j * step;
+    if (z <= bottom) continue;
+    point(lo, z);
+    point(hi, z);
+  }
+  return new Float32Array(out);
+}
+
 /** The ground's uniforms (engine.ts lays them out per model). */
 export interface GroundUniforms {
   centre: any;
