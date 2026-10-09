@@ -27,6 +27,7 @@
 import {
   AddEquation,
   AlwaysDepth,
+  AdditiveBlending,
   AmbientLight,
   CustomBlending,
   HalfFloatType,
@@ -53,6 +54,8 @@ import {
   PerspectiveCamera,
   PlaneGeometry,
   Ray,
+  SphereGeometry,
+  Group,
   REVISION,
   Raycaster,
   RGBAFormat,
@@ -90,6 +93,8 @@ import { animatorStore } from './animator';
 import { firstFace, modelGeometry, pickingBvh } from './pick';
 import { ARC_MS, arcPose, easeInOut, type Pose } from './arc';
 import { groupNamesOf, indexOf, isolateRefusal, leftOut, roofFaces, shownPerVertex } from './hide';
+import { insideBox, NO_REVEAL, revealRadius, rimOpacity, speedOfSound, SPREAD_MAX, wavefrontInRoom, wavefrontRadius } from './spread';
+import { settingsStore } from '../simulate/runSize';
 import { facePlan, faceShowOf, type FacePlan, type FaceShow } from './faces';
 import { ResultsLayer, type MapMeta, type ParticleMeta } from './resultsLayer';
 import { faceBounds, faceCentroid, fitOrtho, gizmoAxes, isFloorLike, placementPoint, planDimensions, rayOnFacePlane, type Box, type Vec } from './geometry';
@@ -648,6 +653,14 @@ class ViewportEngine {
    */
   readonly live = new ResultsLayer();
   private liveOn = false;
+  /** Item 10 (spread.ts): the map's reveal from the sources (its run, its frame while running). */
+  private revealRun: string | null = null;
+  private revealFrame = 0;
+  /** Item 10: the wavefront spheres, one a source, shown while particle playback plays. */
+  private readonly wavefront = new Group();
+  private readonly waveLo = uniform(new Vector3());
+  private readonly waveHi = uniform(new Vector3());
+  private waveState: { shown: boolean; radius: number | null; c: number | null; sources: number } = { shown: false, radius: null, c: null, sources: 0 };
 
   constructor() {
     this.persp.up.set(0, 0, 1);
@@ -771,6 +784,19 @@ class ViewportEngine {
       this.results.group,
       this.live.group,
     );
+    // Item 10: a sphere a source, scaled to the wavefront's radius each frame; a faint rim, clipped to the room's box.
+    const waveMat = inSrgb(new MeshBasicNodeMaterial({ color: LINE, transparent: true, depthWrite: false, side: DoubleSide, blending: AdditiveBlending }));
+    waveMat.opacityNode = rimOpacity(0.55);
+    waveMat.maskNode = insideBox(this.waveLo, this.waveHi);
+    const waveGeom = new SphereGeometry(1, 96, 48);
+    for (let i = 0; i < SPREAD_MAX; i++) {
+      const m = new Mesh(waveGeom, waveMat);
+      m.visible = false;
+      m.frustumCulled = false;
+      m.renderOrder = 8.5;
+      this.wavefront.add(m);
+    }
+    this.scene.add(this.wavefront);
     this.results.setShown(stepStore.get() === 'results');
     this.showLayers();
     this.defaultCamera();
@@ -803,6 +829,11 @@ class ViewportEngine {
       viewStyle.subscribe(() => this.applyStyle()),
       toolStore.subscribe(() => this.applyTool()),
       stepStore.subscribe(() => {
+        // Item 10: the map, already loaded or about to be, spreads from the sources as the step opens.
+        if (stepStore.get() === 'results') {
+          if (this.results.mapMeta) this.startReveal(this.results.mapMeta.run);
+          else this.revealRun = null;
+        }
         this.results.setShown(stepStore.get() === 'results');
         this.showLayers();
         if (stepStore.get() !== 'results') mapPointerStore.set(null);
@@ -840,6 +871,22 @@ class ViewportEngine {
       registerHook('planeOutlines', () => this.planeSummary),
       // Items 7 and 8: the faces the view leaves out now (Roof off, Isolate), in project face numbering.
       registerHook('viewHidden', () => ({ ...hideStore.get(), faces: this.out ? [...this.out.keys()].filter((f) => this.out?.[f]) : [] })),
+      // Item 10: the map's reveal front (null when the whole map draws) and the wavefront as drawn this frame.
+      registerHook('spreadState', () => ({ reveal: this.results.revealRadius() >= NO_REVEAL ? null : this.results.revealRadius(), wavefront: this.waveState })),
+      // The wavefront's radius the view would draw at timeline step `t` (whether or not it plays), metres.
+      registerHook('wavefrontAt', (t: number) => {
+        const a = animatorStore.get();
+        return wavefrontRadius(t, a.start, a.dtMs ? a.dtMs / 1000 : null, speedOfSound(settingsStore.get()?.environment.temperature_c));
+      }),
+      // The reveal held at a front of `r` metres (null: the whole map), to look at one moment of it.
+      registerHook('revealAt', (r: number | null) => {
+        if (this.revealFrame) cancelAnimationFrame(this.revealFrame);
+        this.revealFrame = 0;
+        this.results.setRevealSources(this.sourcePositions());
+        this.results.setRevealRadius(r === null ? NO_REVEAL : r);
+        this.renderNow();
+        return this.results.revealRadius();
+      }),
       registerHook('setRoofOff', (on: boolean) => {
         this.setRoofOff(on);
         return hideStore.get();
@@ -899,6 +946,9 @@ class ViewportEngine {
     if (this.buildFrame) cancelAnimationFrame(this.buildFrame);
     this.buildFrame = 0;
     this.stopFlight();
+    if (this.revealFrame) cancelAnimationFrame(this.revealFrame);
+    this.revealFrame = 0;
+    this.results.setRevealRadius(NO_REVEAL);
     this.shared.nmBuildZ.value = NO_CUT;
     if (this.dom) this.dom.labels.replaceChildren();
     this.markers = [];
@@ -1051,6 +1101,7 @@ class ViewportEngine {
       if (resultsFx) this.results.computeFrame();
       if (liveFx) this.live.computeFrame();
       this.useFaces(this.facePlanFor(main === this.plan));
+      this.updateWavefront();
       r.render(this.scene, main);
       if (fx) {
         this.fxParticles(r, main);
@@ -1068,6 +1119,82 @@ class ViewportEngine {
     const live = this.canvas !== null;
     const drawnRev = this.renderer ? this.builtRev : vp.drawnRev;
     if (vp.live !== live || vp.drawnRev !== drawnRev) viewportStore.set({ live, drawnRev });
+  }
+
+  /** The enabled sources' positions, the first SPREAD_MAX (the glow's list). */
+  private sourcePositions(): Vec[] {
+    const n = Math.min(this.shared.glowCount.value as number, SPREAD_MAX);
+    return Array.from({ length: n }, (_, i) => {
+      const v = this.shared.glowPos.array[i] as Vector3;
+      return [v.x, v.y, v.z] as Vec;
+    });
+  }
+
+  /**
+   * Item 10: the map of run `run` revealed from the sources outward over REVEAL_MS (spread.ts), a mask that
+   * never touches a value; at once under prefers-reduced-motion or WebDriver, or with no source.
+   */
+  startReveal(run: string): void {
+    if (this.revealFrame) cancelAnimationFrame(this.revealFrame);
+    this.revealFrame = 0;
+    this.revealRun = run;
+    const reach = this.results.setRevealSources(this.sourcePositions());
+    if (stillMotion() || !this.dom || !(reach > 0)) {
+      this.results.setRevealRadius(NO_REVEAL);
+      this.invalidate();
+      return;
+    }
+    const t0 = performance.now();
+    this.results.setRevealRadius(0);
+    const tick = (now: number) => {
+      const r = revealRadius(now - t0, reach);
+      this.results.setRevealRadius(r);
+      this.invalidate();
+      this.revealFrame = r >= NO_REVEAL ? 0 : requestAnimationFrame(tick);
+    };
+    this.revealFrame = requestAnimationFrame(tick);
+  }
+
+  /** A map shown: revealed when it is another run's than the last one revealed (a band or a look change is not). */
+  mapShown(run: string | null): void {
+    if (run === null) {
+      if (this.revealFrame) cancelAnimationFrame(this.revealFrame);
+      this.revealFrame = 0;
+      this.results.setRevealRadius(NO_REVEAL);
+      return;
+    }
+    if (run !== this.revealRun) this.startReveal(run);
+  }
+
+  /**
+   * Item 10: the wavefront about each source at c·t while particle playback plays (spread.ts): t from the
+   * shared timeline since the emission, c from the project's temperature. Not drawn when paused, off the
+   * Results step, without particles, under prefers-reduced-motion or WebDriver, or once a sphere encloses
+   * the room's box.
+   */
+  private updateWavefront(): void {
+    const a = animatorStore.get();
+    const b = this.bounds;
+    const c = speedOfSound(settingsStore.get()?.environment.temperature_c);
+    const sources = this.sourcePositions();
+    const on = stepStore.get() === 'results' && a.playing && !!this.results.particleMeta && !!b && !stillMotion();
+    const r = on ? wavefrontRadius(a.step + a.carry, a.start, a.dtMs ? a.dtMs / 1000 : null, c) : null;
+    let shown = false;
+    this.wavefront.children.forEach((m, i) => {
+      const s = sources[i];
+      const vis = !!s && !!b && r !== null && wavefrontInRoom(s, r, b.min, b.max);
+      m.visible = vis;
+      if (vis && r !== null) {
+        m.position.set(s[0], s[1], s[2]);
+        m.scale.setScalar(r);
+        shown = true;
+      }
+    });
+    if (b) {
+      (this.waveLo.value as Vector3).set(b.min[0], b.min[1], b.min[2]);
+      (this.waveHi.value as Vector3).set(b.max[0], b.max[1], b.max[2]);
+    }
+    this.waveState = { shown, radius: shown ? r : null, c, sources: sources.length };
   }
 
   /** The room dimmed while the light plays (or is held for a still, or the live solve plays), eased over about a third of a second. */
@@ -2776,6 +2903,8 @@ export function setView(view: ViewMode): void {
 /** The Results step's map: `m` drawn with `meta` (a difference when `base` is given); null clears it. Returns why it cannot be drawn, or null. */
 export function showMap(m: SurfaceMap | null, meta?: MapMeta, base: SurfaceMap | null = null): string | null {
   const err = m && meta ? engine.results.setMap(m, meta, base) : (engine.results.clearMap(), null);
+  // Item 10: a new run's map spreads from the sources (spread.ts).
+  engine.mapShown(m && meta && !err ? meta.run : null);
   engine.results.setStep(animatorStore.get().step);
   engine.invalidate();
   return err;

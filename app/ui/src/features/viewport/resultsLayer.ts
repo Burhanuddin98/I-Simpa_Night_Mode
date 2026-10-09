@@ -33,6 +33,7 @@
 import {
   AddEquation,
   BufferAttribute,
+  Vector3,
   BufferGeometry,
   CustomBlending,
   DataTexture,
@@ -66,9 +67,10 @@ import { MAX_WINDOW_STEPS } from './window';
 import { keptRecord, keptTrail, recordSteps, TRAIL_BYTES_PER_SEGMENT, trailRefusal, trailSegments } from './particles';
 import { GpuParticles, type ParticleLook } from './rays';
 import { particleAt } from './raysData';
+import { NO_REVEAL, revealKeep, revealReach, SPREAD_MAX } from './spread';
 import { diffDb, faceLevel, faceValue, hot, lookUniforms, mapColour, mapTexel, mapUniforms, nodeEnergy, nodeLevel, NODE_OPS, rampPlaceNode, trailAlphaNode, type MapUniforms } from './mapNodes';
 
-const { attribute, dot, float, Fn, instancedBufferAttribute, int, modelViewProjection, screenDPR, select, uniform, uv, varying, vec4 } = T;
+const { attribute, dot, float, Fn, instancedBufferAttribute, int, modelViewProjection, screenDPR, select, uniform, uniformArray, uv, varying, vec4 } = T;
 
 /** Particle size on screen, device px. */
 const PARTICLE_PX = 4;
@@ -167,6 +169,10 @@ export class ResultsLayer {
   private readonly lu = lookUniforms();
   /** The map's opacity: 1 (opaque, as measured) except while the particles' light plays (round 2: 25 %). */
   private readonly mapAlpha = uniform(1);
+  /** Item 10 (spread.ts): the reveal's sources and its front, metres (NO_REVEAL: the whole map). */
+  private readonly revealPos = uniformArray(Array.from({ length: SPREAD_MAX }, () => new Vector3()), 'vec3');
+  private readonly revealCount = uniform(0, 'int');
+  private readonly revealR = uniform(NO_REVEAL);
   private readonly map: Mesh<BufferGeometry, MeshBasicNodeMaterial>;
   /** The playback: one sprite instance per record, its size 0 unless the record is at the step. */
   private particles: Sprite;
@@ -210,7 +216,7 @@ export class ResultsLayer {
     const face = int(attribute('aFace', 'float').add(0.5));
     const flat = varying(faceLevel(this.mu, this.lu, face)).setInterpolation('flat');
     const smooth = varying(nodeLevel(this.mu, this.lu, int(attribute('aAdj', 'float').add(0.5)), int(attribute('aAdjN', 'float').add(0.5))));
-    mat.fragmentNode = mapColour(this.lu, flat, smooth, this.mapAlpha);
+    mat.fragmentNode = mapColour(this.lu, flat, smooth, this.mapAlpha, revealKeep(this.revealPos, this.revealCount, this.revealR));
     this.map = new Mesh(emptyGeometry(), mat);
     this.particles = new Sprite(new PointsNodeMaterial());
     const trailMat = new LineBasicNodeMaterial({ transparent: true, depthWrite: false });
@@ -587,6 +593,24 @@ export class ResultsLayer {
       m.needsUpdate = true;
     }
     this.mapAlpha.value = a;
+  }
+
+  /** Item 10: the reveal's sources (the first SPREAD_MAX) and how far the front must go to pass every map vertex; 0 without a map. */
+  setRevealSources(sources: readonly (readonly number[])[]): number {
+    const n = Math.min(sources.length, SPREAD_MAX);
+    for (let i = 0; i < n; i++) (this.revealPos.array[i] as Vector3).set(sources[i][0], sources[i][1], sources[i][2]);
+    this.revealCount.value = n;
+    const p = this.map.geometry.getAttribute('position');
+    return p && this.mapMeta ? revealReach(p.array as Float32Array, sources.slice(0, n)) : 0;
+  }
+
+  /** Item 10: the reveal's front, metres from the nearest source; NO_REVEAL draws the whole map. */
+  setRevealRadius(r: number): void {
+    this.revealR.value = r;
+  }
+
+  revealRadius(): number {
+    return this.revealR.value as number;
   }
 
   /** Hides the map for one draw (the m12 pixel hook); returns the restore. */
