@@ -218,3 +218,17 @@ test('withSppsSwitch: the transmission switch (C17) moves trans_calc only', () =
   assert.deepEqual({ ...off, spps: { ...off.spps, transmission: true } }, s);
   assert.match(opText(setSolverSettings(off)), /"transmission":false/);
 });
+
+// C20: the sound maps' quantity, upstream's surf_receiv_method.
+import { withSoundMap } from './settings.ts';
+
+test('withSoundMap: no op when stored; otherwise sound_map only', () => {
+  const s = solvers();
+  assert.equal(withSoundMap(s, 'intensity'), null);
+  const spl = withSoundMap(s, 'spl');
+  assert.ok(spl);
+  assert.equal(spl.spps.sound_map, 'spl');
+  assert.deepEqual({ ...spl, spps: { ...spl.spps, sound_map: 'intensity' } }, s);
+  assert.match(opText(setSolverSettings(spl)), /"sound_map":"spl"/);
+  assert.equal(withSoundMap(spl, 'spl'), null);
+});

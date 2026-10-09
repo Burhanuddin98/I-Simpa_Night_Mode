@@ -7,7 +7,8 @@
 // file's size (C8), duration (C10), time step in ms with the step count (C11), the receiver
 // radius, the particle extinction and "Preserve walls when meshing (-Y)" (backlog 80: every value
 // the run-quality advisor's Apply sets has its field), the method (C12),
-// sound maps per band (C21), echogram per source (C22), transmission through walls (C17), the bands it computes (C25) and the band
+// sound maps per band (C21) and what they show (C20), echogram per source (C22), transmission
+// through walls (C17), the bands it computes (C25) and the band
 // presets (C26), and the air (C27) with the switch that lets it absorb (C14). TCR: its method as
 // drawn, its bands and the air with TCR's own absorb switch (C23).
 // Under the particles (and TCR's method), the run-time forecast (runTime.ts, Burhan's 10-05 UI
@@ -22,7 +23,7 @@
 import { useEffect, useState } from 'react';
 import * as actions from '../../actions';
 import type { SceneState, UiIssue } from '../../bindings/ipc';
-import type { ComputationMethod, Op } from '../../bindings/schema';
+import type { ComputationMethod, Op, SoundMapQuantity } from '../../bindings/schema';
 import type { F64 } from '../../chrome/sceneModel';
 import { CommitInput, Issues } from '../../chrome/SourcesPanel';
 import { fieldKey } from '../../issues';
@@ -48,6 +49,7 @@ import {
   withAir,
   withMeshing,
   withSpps,
+  withSoundMap,
   withSppsSwitch,
   withTcrAirAbsorption,
   type SppsSwitch,
@@ -208,6 +210,12 @@ function Toggle(props: { field: string; label: string; checked: boolean; onChang
     </label>
   );
 }
+
+/** What SPPS writes on its sound maps (C20), upstream's two choices in its order. */
+const SOUND_MAPS: readonly { key: SoundMapQuantity; label: string }[] = [
+  { key: 'intensity', label: 'Intensity' },
+  { key: 'spl', label: 'Sound level' },
+];
 
 const METHODS: readonly { key: ComputationMethod; label: string }[] = [
   { key: 'energetic', label: 'Energetic' },
@@ -447,6 +455,13 @@ export function SettingsEditor({ scene, settings, solver }: { scene: SceneState 
         now.solvers.meshing.preserve_boundary === on ? null : setSolverSettings(withMeshing(now.solvers, { preserve_boundary: on })),
       ),
     );
+  const setSoundMap = (q: SoundMapQuantity) =>
+    actions.fire(
+      edit(keyOf('spps', 'sound_map'), (now) => {
+        const next = withSoundMap(now.solvers, q);
+        return next ? setSolverSettings(next) : null;
+      }),
+    );
   const setMethod = (m: ComputationMethod) =>
     actions.fire(edit(keyOf('spps', 'method'), (now) => (now.solvers.spps.method === m ? null : setSolverSettings(withSpps(now.solvers, { method: m })))));
 
@@ -584,6 +599,31 @@ export function SettingsEditor({ scene, settings, solver }: { scene: SceneState 
       <div className="sim-setting sim-block" data-setting="sound_maps">
         <Toggle field="sound_maps_per_band" label="Sound maps per band" checked={spps.sound_maps_per_band} onChange={toggle('sound_maps_per_band')} />
         <Issues refused={refusals.get(keyOf('spps', 'sound_maps_per_band')) ?? []} current={[]} />
+      </div>
+      <div className="sim-setting sim-block" data-setting="sound_map">
+        <div className="sim-field-line">
+          <span className="k">Sound maps show</span>
+          <span className="sim-methods" role="radiogroup" aria-label="Sound maps show">
+            {SOUND_MAPS.map((m) => (
+              <button
+                key={m.key}
+                className="sim-method"
+                role="radio"
+                aria-checked={spps.sound_map === m.key}
+                data-sound-map={m.key}
+                onClick={() => setSoundMap(m.key)}
+              >
+                {m.label}
+              </button>
+            ))}
+          </span>
+        </div>
+        <div className="sim-hint" data-part="sound-map-hint">
+          Intensity: the sound energy flowing through each cell of a surface receiver or cutting plane, so sound that arrives
+          along the surface counts little. Sound level: the energy at each cell whatever direction it arrives from, as a sound
+          pressure level. Intensity is upstream's default.
+        </div>
+        <Issues refused={refusals.get(keyOf('spps', 'sound_map')) ?? []} current={issuesAt(issues, ['/solvers/spps/sound_map'])} />
       </div>
       <div className="sim-setting sim-block" data-setting="echogram_per_source">
         <Toggle field="echogram_per_source" label="Echogram per source" checked={spps.echogram_per_source} onChange={toggle('echogram_per_source')} />

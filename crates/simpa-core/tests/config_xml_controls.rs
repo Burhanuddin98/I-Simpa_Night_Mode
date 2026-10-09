@@ -79,6 +79,24 @@ fn flag(v: &Value) -> String {
     }
 }
 
+fn other_quantity(v: &Value) -> Value {
+    match v.as_str() {
+        Some("intensity") => Value::from("spl"),
+        Some("spl") => Value::from("intensity"),
+        other => panic!("sound_map {other:?}"),
+    }
+}
+
+/// Upstream's `surf_receiv_method` list (`e_core_sppscore.h:58-64`): 0 "Soundmap: intensity",
+/// 1 "Soundmap: SPL".
+fn quantity_code(v: &Value) -> String {
+    match v.as_str() {
+        Some("intensity") => "0".to_string(),
+        Some("spl") => "1".to_string(),
+        other => panic!("sound_map {other:?}"),
+    }
+}
+
 fn controls() -> Vec<Control> {
     vec![
         Control {
@@ -104,6 +122,14 @@ fn controls() -> Vec<Control> {
             turn: flip,
             written: flag,
             attr: "trans_calc",
+        },
+        Control {
+            row: "C20 SPPS sound-map quantity",
+            solver: SolverKind::Spps,
+            field: &["spps", "sound_map"],
+            turn: other_quantity,
+            written: quantity_code,
+            attr: "surf_receiv_method",
         },
     ]
 }

@@ -6,7 +6,7 @@
 // Numbers. A typed value is read by `parseStrictDecimal` (Rust's reader rounds the same way), and
 // a time step typed in milliseconds becomes seconds by moving the decimal point in the text, never
 // by dividing a float: `2.1 / 1000` is 0.0021000000000000003, not the 0.0021 the user wrote.
-import type { BandKind, BandSet, Environment, MeshSettings, SolverSettings, SppsSettings } from '../../bindings/schema.ts';
+import type { BandKind, BandSet, Environment, MeshSettings, SolverSettings, SoundMapQuantity, SppsSettings } from '../../bindings/schema.ts';
 import { NOT_A_NUMBER, parseStrictDecimal, type Parsed } from '../../numbers.ts';
 
 /** A number as the schema stores it: finite values as numbers, non-finite ones as strings. */
@@ -223,6 +223,14 @@ export function withSppsSwitch(s: SolverSettings, field: SppsSwitch, on: boolean
 export function withTcrAirAbsorption(s: SolverSettings, on: boolean): SolverSettings | null {
   if (s.tcr.air_absorption === on) return null;
   return { ...s, tcr: { ...s.tcr, air_absorption: on } };
+}
+
+/**
+ * The solver settings with what SPPS writes on its sound maps set (C20, `simulation@surf_receiv_method`:
+ * 0 intensity, 1 sound pressure level), everything else as stored; null when it already is.
+ */
+export function withSoundMap(s: SolverSettings, quantity: SoundMapQuantity): SolverSettings | null {
+  return s.spps.sound_map === quantity ? null : withSpps(s, { sound_map: quantity });
 }
 
 /** The solver settings with meshing fields replaced (`-Y`, backlog 80); everything else as stored. */
