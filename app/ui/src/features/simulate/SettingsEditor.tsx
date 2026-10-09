@@ -7,7 +7,7 @@
 // file's size (C8), duration (C10), time step in ms with the step count (C11), the receiver
 // radius, the particle extinction and "Preserve walls when meshing (-Y)" (backlog 80: every value
 // the run-quality advisor's Apply sets has its field), the method (C12),
-// sound maps per band (C21), echogram per source (C22), the bands it computes (C25) and the band
+// sound maps per band (C21), echogram per source (C22), transmission through walls (C17), the bands it computes (C25) and the band
 // presets (C26), and the air (C27) with the switch that lets it absorb (C14). TCR: its method as
 // drawn, its bands and the air with TCR's own absorb switch (C23).
 // Under the particles (and TCR's method), the run-time forecast (runTime.ts, Burhan's 10-05 UI
@@ -588,6 +588,15 @@ export function SettingsEditor({ scene, settings, solver }: { scene: SceneState 
       <div className="sim-setting sim-block" data-setting="echogram_per_source">
         <Toggle field="echogram_per_source" label="Echogram per source" checked={spps.echogram_per_source} onChange={toggle('echogram_per_source')} />
         <Issues refused={refusals.get(keyOf('spps', 'echogram_per_source')) ?? []} current={[]} />
+      </div>
+      <div className="sim-setting sim-block" data-setting="transmission">
+        <Toggle field="transmission" label="Transmission through walls" checked={spps.transmission} onChange={toggle('transmission')} />
+        <div className="sim-hint" data-part="transmission-hint">
+          On, sound passes through a surface whose material has a transmission loss, as much as that loss lets through; off,
+          every surface only reflects or absorbs, whatever its material says. A material with no transmission loss passes nothing
+          either way. On is upstream's default.
+        </div>
+        <Issues refused={refusals.get(keyOf('spps', 'transmission')) ?? []} current={issuesAt(issues, ['/solvers/spps/transmission'])} />
       </div>
       <div className="sim-setting sim-block" data-setting="bands">
         <BandsEditor scene={scene} s={s} solver="spps" />

@@ -97,6 +97,14 @@ fn controls() -> Vec<Control> {
             written: flag,
             attr: "abs_atmo_calc",
         },
+        Control {
+            row: "C17 SPPS transmission",
+            solver: SolverKind::Spps,
+            field: &["spps", "transmission"],
+            turn: flip,
+            written: flag,
+            attr: "trans_calc",
+        },
     ]
 }
 

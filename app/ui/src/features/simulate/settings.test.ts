@@ -209,3 +209,12 @@ test("withTcrAirAbsorption: no op when stored; otherwise TCR's switch only, SPPS
   assert.deepEqual({ ...off, tcr: s.tcr }, s);
   assert.equal(s.tcr.air_absorption, true, 'the input is not changed');
 });
+
+test('withSppsSwitch: the transmission switch (C17) moves trans_calc only', () => {
+  const s = solvers();
+  assert.equal(withSppsSwitch(s, 'transmission', true), null);
+  const off = withSppsSwitch(s, 'transmission', false);
+  assert.ok(off);
+  assert.deepEqual({ ...off, spps: { ...off.spps, transmission: true } }, s);
+  assert.match(opText(setSolverSettings(off)), /"transmission":false/);
+});
