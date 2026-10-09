@@ -27,6 +27,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Report } from '../../bindings/ipc';
+import { CopyTable } from './CopyTable';
 import { N, S } from './Marked';
 import type { SourceSel } from './model';
 import { pngDataUrl } from './png';
@@ -154,9 +155,10 @@ function LevelTable({ v, range, colStepS }: { v: ResponseView; range: ColRange; 
             {' '}
             Listing the first <span data-label="readout">{LEVEL_ROWS_MAX}</span> of <span data-label="readout">{n}</span> time bins: zoom in or pick a wider time bin for the rest.
           </span>
-        ) : null}
+        ) : null}{' '}
+        <CopyTable part="response-levels" what="levels" />
       </div>
-      <table className="ac-table rw-table">
+      <table className="ac-table rw-table" data-part="response-levels">
         <thead>
           <tr>
             <th>Time, s</th>

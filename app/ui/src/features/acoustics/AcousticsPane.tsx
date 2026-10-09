@@ -69,6 +69,7 @@ import {
   type Str,
 } from './model';
 import './acoustics.css';
+import { CopyTable } from './CopyTable';
 import { N, S } from './Marked';
 import { auralHookOpen, auralHookSave, auralHookView, AuralWindow } from './AuralWindow';
 import { responseHookView, ResponseWindow } from './ResponseWindow';
@@ -582,6 +583,7 @@ export function AcousticsPane() {
                 ))}
               </select>
             </label>
+            {series.length ? <CopyTable part="rt-table" what="reverberation time" /> : null}
           </div>
           <div className="ac-legend">
             {series.map((s) => (
@@ -666,6 +668,7 @@ export function AcousticsPane() {
                 <option value="sum">bands summed</option>
               </select>
             </label>
+            <CopyTable part="receivers-table" what="receivers" />
           </div>
           {[...new Set(marks.map((m) => m.param))].map((param) => (
             <div key={param} className="ac-marks" data-param={param}>
@@ -749,6 +752,7 @@ export function AcousticsPane() {
               <span className="ac-sub" data-label="tcr-levels-sub">
                 TCR’s own, read from its receiver files, dB · {b === 'sum' ? 'the bands’ energetic sum (TCR’s Global row, not a band)' : <Band report={report} index={b} />} · not checked by the test bed, which checks TCR’s Eyring time only
               </span>
+              <CopyTable part="tcr-levels-table" what="receiver levels" />
             </div>
             <table className="ac-table" data-part="tcr-levels-table">
               <thead>
@@ -832,6 +836,7 @@ export function AcousticsPane() {
           <div className="ac-card-head">
             <span className="ac-card-title">Sabine / Eyring</span>
             <span className="ac-sub">{report.solver === 'tcr' ? 'TCR’s own results' : 'classical formulas on the run’s own room, beside the simulation'}</span>
+            {cls.length ? <CopyTable part="classical-table" what="Sabine and Eyring" /> : null}
           </div>
           {cls.length ? (
             <table className="ac-table" data-part="classical-table">
@@ -865,6 +870,7 @@ export function AcousticsPane() {
           <div className="ac-card-head">
             <span className="ac-card-title">Absorption by surface group</span>
             <span className="ac-sub">S·α, m²; names from the project as it is open now</span>
+            {abs ? <CopyTable part="absorption-table" what="absorption" /> : null}
           </div>
           {abs ? (
             <table className="ac-table" data-part="absorption-table">
