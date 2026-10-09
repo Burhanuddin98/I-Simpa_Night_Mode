@@ -30,7 +30,7 @@
 // with m12.bedplant.e2e.ts (P4).
 import { strict as assert } from 'node:assert';
 import path from 'node:path';
-import { cellLabelMismatch, MARKS, MQ2_WORDING, notPassed, numberMismatch, PARAM_LABELS, seriesMismatches, strayDigits, stringMismatch } from '../lib/acoustics.ts';
+import { cellLabelMismatch, CUSTOM_HINTS, MARKS, MQ2_WORDING, notPassed, numberMismatch, PARAM_LABELS, seriesMismatches, strayDigits, stringMismatch } from '../lib/acoustics.ts';
 import {
   assertPassRendered,
   bedSweep,
@@ -95,6 +95,7 @@ describe('M12 P2: the Acoustics tab', () => {
         else if (l.kind === 'param') assert.equal(l.text, PARAM_LABELS[l.param ?? ''], `${what}: label of ${l.param}`);
         else if (l.kind === 'standard') assert.equal(l.text, 'DIN 18041', what);
         else if (l.kind === 'mark') assert.ok(MARKS.includes(l.text), `${what}: a mark not known word for word: ${JSON.stringify(l.text)}`);
+        else if (l.kind === 'custom') assert.ok(CUSTOM_HINTS.includes(l.text), `${what}: a chosen-range hint not known word for word: ${JSON.stringify(l.text)}`);
         else assert.equal(l.kind, 'group', `${what}: a label of kind ${l.kind}`);
       }
       // The controls' options hold digits too: each is the JSON's. A band option is its index into

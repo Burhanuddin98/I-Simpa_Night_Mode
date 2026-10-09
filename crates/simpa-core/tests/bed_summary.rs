@@ -116,10 +116,14 @@ fn every_report_parameter_has_a_derived_status_with_hashed_artifacts() {
     let (_, s) = committed();
     let params = s["parameters"].as_object().unwrap();
     let names: Vec<&str> = params.keys().map(String::as_str).collect();
-    let mut want = vec![
-        "spl_db", "edt_s", "t20_s", "t30_s", "c50_db", "c80_db", "d50", "ts_s", "sti", "g_db",
-        "dba",
-    ];
+    // The report's bed entries (`results::bed::BedParameters`): the M8 eleven and those the
+    // M12c parity rows added.
+    let mut want: Vec<&str> = simpa_core::results::bed::report()
+        .parameters
+        .named()
+        .iter()
+        .map(|(n, _)| *n)
+        .collect();
     want.sort();
     let mut got = names.clone();
     got.sort();

@@ -97,6 +97,11 @@ pub enum Quantity {
     Edt,
     T20,
     T30,
+    /// A decay time from −5 dB down `span_db` more (T15 is 15; upstream's TR list,
+    /// `projet_calculation.cpp`, `Compute_TR_Param(5, TR + 5, …)`).
+    Decay {
+        span_db: u32,
+    },
     /// C_te, `te` in seconds.
     Clarity {
         te_s: f64,
@@ -123,6 +128,7 @@ impl fmt::Display for Quantity {
             Quantity::Edt => write!(f, "EDT"),
             Quantity::T20 => write!(f, "T20"),
             Quantity::T30 => write!(f, "T30"),
+            Quantity::Decay { span_db } => write!(f, "T{span_db}"),
             Quantity::Clarity { te_s } => write!(f, "C{}", ms(*te_s)),
             Quantity::Definition { te_s } => write!(f, "D{}", ms(*te_s)),
             Quantity::CentreTime => write!(f, "Ts"),
@@ -806,7 +812,11 @@ impl fmt::Display for ParamError {
                     f,
                     Some(matches!(
                         quantity,
-                        Quantity::Edt | Quantity::T20 | Quantity::T30 | Quantity::Curvature
+                        Quantity::Edt
+                            | Quantity::T20
+                            | Quantity::T30
+                            | Quantity::Decay { .. }
+                            | Quantity::Curvature
                     )),
                 )
             }

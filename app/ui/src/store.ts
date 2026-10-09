@@ -3,6 +3,7 @@
 // read it and write only their own UI state (selection, tool, step).
 import { useSyncExternalStore } from 'react';
 import type {
+  Extra,
   GpuStatus,
   LibraryMaterial,
   LibrarySpectrum,
@@ -192,6 +193,9 @@ export const selectedRunStore = new Store<string | null>(null);
 export const resultsStore = new Store<ReadonlyMap<string, ResultsState>>(new Map());
 /** Each run's report as `run_report` read it (M12 P2: the Acoustics tab), fetched once per run. */
 export const reportStore = new Store<ReadonlyMap<string, ReportView>>(new Map());
+/** Parity R15/R20: the decay ranges and C/D time limits the Acoustics tab asks every report for,
+ * beside the fixed parameters (`report.custom`); session state, not saved in the project. */
+export const customStore = new Store<readonly Extra[]>([]);
 /** The solver the Simulate step runs: session state, not saved in the project. */
 export const solverStore = new Store<SolverName>('spps');
 /** Where the Simulate step runs SPPS: session state, not saved in the project (decision 70). */

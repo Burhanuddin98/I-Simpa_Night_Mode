@@ -650,6 +650,10 @@
           "$ref": "#/$defs/BedParameter",
           "description": "The A-weighted level (`aggregate.dba`)."
         },
+        "decay_custom": {
+          "$ref": "#/$defs/BedParameter",
+          "description": "Decay times over ranges a user chooses (`parameters.custom` of kind `decay`), parity R15."
+        },
         "edt_s": {
           "$ref": "#/$defs/BedParameter"
         },
@@ -663,6 +667,10 @@
         "sti": {
           "$ref": "#/$defs/BedParameter",
           "description": "The speech transmission index (`sti` on an SPPS point receiver)."
+        },
+        "t15_s": {
+          "$ref": "#/$defs/BedParameter",
+          "description": "T15 (`t15_s` on a band), parity R15."
         },
         "t20_s": {
           "$ref": "#/$defs/BedParameter"
@@ -685,7 +693,9 @@
         "ts_s",
         "sti",
         "g_db",
-        "dba"
+        "dba",
+        "t15_s",
+        "decay_custom"
       ],
       "type": "object"
     },
@@ -989,6 +999,28 @@
       "required": [
         "percent",
         "limit_percent"
+      ],
+      "type": "object"
+    },
+    "CustomValue": {
+      "description": "One quantity asked for beyond the fixed ones ([`Parameters::custom`]).",
+      "properties": {
+        "extra": {
+          "$ref": "#/$defs/Extra"
+        },
+        "name": {
+          "description": "`t40_s`, `c30_db`, `d80` (`params::decay::Extra::name`).",
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/$defs/Evaluated",
+          "description": "In the quantity's unit: s, dB, or a fraction."
+        }
+      },
+      "required": [
+        "name",
+        "extra",
+        "value"
       ],
       "type": "object"
     },
@@ -1691,6 +1723,68 @@
         "stats"
       ],
       "type": "object"
+    },
+    "Extra": {
+      "description": "A quantity beyond the fixed ones, read by the same code with another decay range or window\nedge (parity R15, R20): what upstream's \"Calculate acoustic parameters\" dialog asks for, a list\nof decay ranges in dB below −5 dB and of clarity and definition time limits in ms\n(`projet_calculation.cpp:796-830`).",
+      "oneOf": [
+        {
+          "description": "The decay time over −5 dB to `−(5 + span_db)` dB ([`DecayRange::Span`]): T15 is 15.",
+          "properties": {
+            "kind": {
+              "const": "decay",
+              "type": "string"
+            },
+            "span_db": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "span_db"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "C_te, dB, `te` = `te_ms` ms.",
+          "properties": {
+            "kind": {
+              "const": "clarity",
+              "type": "string"
+            },
+            "te_ms": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "te_ms"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "D_te, a fraction, `te` = `te_ms` ms.",
+          "properties": {
+            "kind": {
+              "const": "definition",
+              "type": "string"
+            },
+            "te_ms": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "te_ms"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "FileRefUi": {
       "properties": {
@@ -3619,6 +3713,13 @@
           "$ref": "#/$defs/Evaluated",
           "description": "dB."
         },
+        "custom": {
+          "description": "The quantities the report was asked for beyond the fixed ones (`Report::custom`, parity R15\nand R20), in the order asked: each read by the same code as T20/T30, C50/C80 or D50 with its\nown range or time limit, judged and shown as they are, with the calibration it carries\n(`params::noise::extra_calibration`). Absent when nothing was asked (results version 18).",
+          "items": {
+            "$ref": "#/$defs/CustomValue"
+          },
+          "type": "array"
+        },
         "d50": {
           "$ref": "#/$defs/Evaluated",
           "description": "A fraction, 0 to 1 (shown as a percentage)."
@@ -3646,6 +3747,10 @@
           "$ref": "#/$defs/Evaluated",
           "description": "dB re 20 µPa."
         },
+        "t15_s": {
+          "$ref": "#/$defs/Evaluated",
+          "description": "s. T15, the decay over -5 to -20 dB (upstream's TR15), by T20's and T30's regression over its\nown range (`params::decay::Extra::T15`), with the same refusals. Its Monte-Carlo noise is\njudged with a calibration it carries, not one measured for it\n(`params::noise::extra_calibration`): of EDT's, T20's and T30's, the largest factor, on the\nnarrowest domain (results version 18)."
+        },
         "t20_s": {
           "$ref": "#/$defs/Evaluated",
           "description": "s."
@@ -3664,6 +3769,7 @@
         "edt_s",
         "t20_s",
         "t30_s",
+        "t15_s",
         "c50_db",
         "c80_db",
         "d50",
@@ -4228,6 +4334,25 @@
           },
           "required": [
             "quantity"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A decay time from −5 dB down `span_db` more (T15 is 15; upstream's TR list,\n`projet_calculation.cpp`, `Compute_TR_Param(5, TR + 5, …)`).",
+          "properties": {
+            "quantity": {
+              "const": "decay",
+              "type": "string"
+            },
+            "span_db": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "quantity",
+            "span_db"
           ],
           "type": "object"
         },
@@ -4953,6 +5078,13 @@
         "bed": {
           "$ref": "#/$defs/BedReport",
           "description": "Each parameter's bed status, from `beds/summary.json` as this build carries it."
+        },
+        "custom": {
+          "description": "What the report was asked for beyond the fixed parameters (`simpa results --decay-range`,\n`--clarity-ms`, `--definition-ms`; the Acoustics tab's own ranges and limits), in order;\neach SPPS series' `parameters.custom` holds them in this order. Absent when none was asked\n(results version 18).",
+          "items": {
+            "$ref": "#/$defs/Extra"
+          },
+          "type": "array"
         },
         "results_version": {
           "description": "[`REPORT_VERSION`].",

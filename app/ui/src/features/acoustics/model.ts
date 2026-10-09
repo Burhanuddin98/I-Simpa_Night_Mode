@@ -14,7 +14,7 @@
 //   37 (3)); STI, which has no range yet, carries "noise range not computed" (MQ3); EDT carries
 //   row 37's two marks wherever it appears, and a per-value mark where `edt_validated` is false.
 // - **No screen text says "validated"** (MQ2, decision 39): `MQ2_WORDING` is the tab's words.
-import type { Advice, ApplyConflict, Report, Setting } from '../../bindings/ipc';
+import type { Advice, ApplyConflict, Extra, Report, Setting } from '../../bindings/ipc';
 
 /** The words on the Results screen (MQ2, Burhan 2026-10-03 08:31). */
 export const MQ2_WORDING =
@@ -63,6 +63,7 @@ export const PARAM_SPECS: readonly ParamSpec[] = [
   { name: 'spl_db', label: 'SPL', unit: 'dB', digits: 1, scope: 'band' },
   { name: 'g_db', label: 'G', unit: 'dB', digits: 1, scope: 'band' },
   { name: 'edt_s', label: 'EDT', unit: 's', digits: 2, scope: 'band', rt: true },
+  { name: 't15_s', label: 'T15', unit: 's', digits: 2, scope: 'band', rt: true },
   { name: 't20_s', label: 'T20', unit: 's', digits: 2, scope: 'band', rt: true },
   { name: 't30_s', label: 'T30', unit: 's', digits: 2, scope: 'band', rt: true },
   { name: 'c50_db', label: 'C50', unit: 'dB', digits: 1, scope: 'band' },
@@ -280,6 +281,12 @@ export function cell(report: Report, spec: ParamSpec, r: number, band: BandSel, 
 function cellAt(report: Report, spec: ParamSpec, r: number, band: BandSel, src: SourceSel): Cell | null {
   const path = paramPath(report, spec, r, band, src);
   if (path === null) return null;
+  return cellFrom(report, spec, path, r, band);
+}
+
+/** The cell of the `Evaluated` at `path`, shown as `spec` says: its value with its range and
+ * status, or its refusal; null where the report holds none there. */
+function cellFrom(report: Report, spec: ParamSpec, path: string, r: number, band: BandSel): Cell | null {
   const e = at(report, path);
   if (e === null || typeof e !== 'object') return null;
   const receiver = receivers(report)[r] ?? '';
@@ -370,6 +377,82 @@ function bandSeries(report: Report, r: number, src: SourceSel, pick: (s: ParamSp
         hi: cells.map((c) => (shown(c) ? read(c.hi) : null)),
       };
     });
+}
+
+// ---- parity R15 and R20: decay ranges and C/D time limits a user chooses ------------------------------
+
+/** The bed entry each kind of chosen quantity is shown by (`report.bed.parameters`). */
+export const CUSTOM_BED: Record<Extra['kind'], string> = { decay: 'decay_custom', clarity: 'clarity_custom', definition: 'definition_custom' };
+
+/** The spans a decay range takes, dB below −5 dB, and the time limits C and D take, ms: the core's
+ * (`params::decay::EXTRA_SPAN_DB`, `EXTRA_TE_MS`), which refuses anything else. */
+export const CUSTOM_SPAN_DB = { lo: 10, hi: 60 } as const;
+export const CUSTOM_TE_MS = { lo: 5, hi: 1000 } as const;
+
+/** How a chosen quantity is shown: `T40` from −5 to −45 dB in s, `C30` in dB, `D80` a fraction. */
+export function customSpec(x: Extra): ParamSpec {
+  if (x.kind === 'decay') return { name: `t${x.span_db}_s`, label: `T${x.span_db}`, unit: 's', digits: 2, scope: 'band' };
+  if (x.kind === 'clarity') return { name: `c${x.te_ms}_db`, label: `C${x.te_ms}`, unit: 'dB', digits: 1, scope: 'band' };
+  return { name: `d${x.te_ms}`, label: `D${x.te_ms}`, unit: '', digits: 2, scope: 'band' };
+}
+
+/** What a chosen quantity is, in words, for its column's title. */
+export function customWords(x: Extra): string {
+  if (x.kind === 'decay') return `decay time from −5 to −${5 + x.span_db} dB, by T20's and T30's fit`;
+  if (x.kind === 'clarity') return `clarity at ${x.te_ms} ms, as C50 and C80`;
+  return `definition at ${x.te_ms} ms, as D50`;
+}
+
+/** The words beside each input of the card (the page marks them `[data-label="custom"]`). */
+export const CUSTOM_HINTS: Record<Extra['kind'], string> = {
+  decay: 'Decay ranges: how far below −5 dB each fit ends, dB',
+  clarity: 'Clarity time limits, ms',
+  definition: 'Definition time limits, ms',
+};
+
+export type CustomField = { ok: true; list: Extra[] } | { ok: false; message: string };
+
+/** A comma list of whole numbers typed for one kind, each within its range; empty is none. */
+export function parseCustom(kind: Extra['kind'], text: string): CustomField {
+  const items = text.split(',').map((t) => t.trim()).filter((t) => t !== '');
+  const out: Extra[] = [];
+  const range = kind === 'decay' ? CUSTOM_SPAN_DB : CUSTOM_TE_MS;
+  const unit = kind === 'decay' ? 'dB' : 'ms';
+  for (const t of items) {
+    if (!/^\d+$/.test(t)) return { ok: false, message: `"${t}" is not a whole number of ${unit}` };
+    const n = Number(t);
+    if (n < range.lo || n > range.hi) return { ok: false, message: `${n} ${unit} is outside ${range.lo} to ${range.hi} ${unit}` };
+    const x: Extra = kind === 'decay' ? { kind, span_db: n } : { kind, te_ms: n };
+    if (!out.some((y) => JSON.stringify(y) === JSON.stringify(x))) out.push(x);
+  }
+  return { ok: true, list: out };
+}
+
+/** The chosen quantities the report carries (`report.custom`), each with its index, its bed
+ * status and why it is withheld when that is not PASS (gate (b): only a PASS one shows a number). */
+export function customColumns(report: Report): { k: number; extra: Extra; spec: ParamSpec; shown: boolean; withheld: string | null }[] {
+  const list = (report as unknown as { custom?: Extra[] }).custom ?? [];
+  const bed = report.bed?.parameters as unknown as Record<string, { status?: string; reasons?: string[] } | undefined> | undefined;
+  return list.map((extra, k) => {
+    const b = bed?.[CUSTOM_BED[extra.kind]];
+    const shown = b?.status === 'PASS';
+    return { k, extra, spec: customSpec(extra), shown, withheld: shown ? null : `withheld: its test bed has not passed${b?.reasons?.length ? ` (${b.reasons[0]})` : ''}` };
+  });
+}
+
+/** The cell of chosen quantity `k` for receiver `r` in `band` (or the bands summed), from the
+ * sources summed: `parameters.custom.<k>.value`, as the fixed ones' cells. */
+export function customCell(report: Report, k: number, r: number, band: BandSel): Cell | null {
+  const list = (report as unknown as { custom?: Extra[] }).custom ?? [];
+  const x = list[k];
+  if (!x) return null;
+  const rx = `${solverKey(report)}.point_receivers.${r}`;
+  const base = band === 'sum' ? `${rx}.aggregate` : `${rx}.bands.${band}`;
+  const path = `${base}.parameters.custom.${k}.value`;
+  const c = cellFrom(report, customSpec(x), path, r, band);
+  if (c === null) return null;
+  const advice = adviceAt(report, path);
+  return advice === undefined ? c : { ...c, advice };
 }
 
 export interface DinView {

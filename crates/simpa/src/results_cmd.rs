@@ -1,5 +1,7 @@
-//! `simpa results <run-folder> [--json]` and `simpa results --schema` (milestone M7;
-//! `docs/formats/results-json.md`).
+//! `simpa results <run-folder> [--json] [--decay-range <dB,...>] [--clarity-ms <ms,...>]
+//! [--definition-ms <ms,...>]` and `simpa results --schema` (milestone M7;
+//! `docs/formats/results-json.md`). The three lists ask for decay times over chosen ranges and C
+//! and D at chosen time limits beside the fixed parameters (parity R15, R20: `report.custom`).
 //!
 //! Exit codes (`docs/formats/results-json.md`, "Command and exit codes"): 0 the run's results
 //! were read; 2 a usage error, or a path that is not a folder; 5 the run is FAIL, CRASH or
@@ -13,6 +15,7 @@ use std::fmt::Write as _;
 use std::path::Path;
 use std::process::ExitCode;
 
+use simpa_core::params::decay::Extra;
 use simpa_core::params::noise::RangeStatus;
 use simpa_core::results::report::{self, Evaluated, ReferenceReport, RefusalReport, Report};
 use simpa_core::results::{self, SolverBuild};
@@ -27,21 +30,51 @@ pub fn schemas() -> serde_json::Value {
     })
 }
 
+/// The quantities `--decay-range`, `--clarity-ms` and `--definition-ms` ask for, in order: each a
+/// comma list of whole numbers (dB below -5 dB; ms), each checked (`params::decay::Extra::check`).
+fn custom_of(flag: &str, value: &str, out: &mut Vec<Extra>) -> Result<(), String> {
+    for item in value.split(',') {
+        let n: u32 = item.trim().parse().map_err(|_| {
+            format!("{flag} takes whole numbers, comma separated: '{item}' is not one")
+        })?;
+        let x = match flag {
+            "--decay-range" => Extra::Decay { span_db: n },
+            "--clarity-ms" => Extra::Clarity { te_ms: n },
+            _ => Extra::Definition { te_ms: n },
+        };
+        x.check().map_err(|why| format!("{flag} {n}: {why}"))?;
+        if !out.contains(&x) {
+            out.push(x);
+        }
+    }
+    Ok(())
+}
+
 pub fn results_cmd(args: &[&str]) -> ExitCode {
     let mut json = false;
     let mut schema = false;
     let mut folder = None;
-    for &a in args {
+    let mut custom: Vec<Extra> = Vec::new();
+    let mut it = args.iter().copied();
+    while let Some(a) = it.next() {
         match a {
             "--json" => json = true,
             "--schema" => schema = true,
+            "--decay-range" | "--clarity-ms" | "--definition-ms" => {
+                let Some(v) = it.next() else {
+                    return fail(&format!("{a} needs a value"));
+                };
+                if let Err(why) = custom_of(a, v, &mut custom) {
+                    return fail(&why);
+                }
+            }
             _ if a.starts_with("--") => return fail(&format!("unknown option '{a}'")),
             _ if folder.is_none() => folder = Some(a),
             _ => return fail(&format!("unexpected argument '{a}'")),
         }
     }
     if schema {
-        if folder.is_some() || json {
+        if folder.is_some() || json || !custom.is_empty() {
             return fail("results --schema takes nothing else");
         }
         println!(
@@ -57,7 +90,7 @@ pub fn results_cmd(args: &[&str]) -> ExitCode {
     if !folder.is_dir() {
         return fail(&format!("{} is not a folder", folder.display()));
     }
-    match results::load(folder).and_then(|r| results::checked_report(&r)) {
+    match results::load(folder).and_then(|r| report::checked_report_with(&r, &custom)) {
         Ok(rep) => {
             if json {
                 println!(

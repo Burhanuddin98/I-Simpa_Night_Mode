@@ -743,6 +743,10 @@ pub struct Parameters {
     pub crossings_per_particle: Option<f64>,
     /// What widens each of the eight's shown range, in [`QUANTITY_NAMES`]' order ([`shown_with`]).
     pub widen: [Widen; 8],
+    /// Each extra asked of [`evaluate_with`] ([`decay::Extra`]), in its order: its value with its
+    /// noise, or its refusal, judged as the eight are with the calibration it carries
+    /// ([`extra_calibration`]), and what widens its shown range ([`shown_extra`]).
+    pub extras: Vec<(Result<Estimate, ParamError>, Widen)>,
 }
 
 /// The eight quantities in [`Parameters`]' order, with their limits: `(quantity, limit,
@@ -809,19 +813,35 @@ pub struct Shown {
 
 /// Quantity `i`'s value `value` with standard deviation `sd`, shown with its range.
 pub fn range(i: usize, value: f64, sd: f64) -> Shown {
+    range_of(QUANTITIES[i], value, sd)
+}
+
+/// A quantity as it is judged and shown: what refusals name it, its limit (half its difference
+/// limen; relative for a decay time) and whether it is relative.
+type Spec = (Quantity, f64, bool);
+
+/// The [`Spec`] an extra is judged and shown by: a decay time's (EDT's, T20's and T30's limit and
+/// limen), C's (C50's and C80's) or D's (D50's).
+pub fn extra_spec(x: decay::Extra) -> (Quantity, f64, bool) {
+    match x {
+        decay::Extra::Decay { .. } => (x.quantity(), limits::DECAY_RELATIVE, true),
+        decay::Extra::Clarity { .. } => (x.quantity(), limits::CLARITY_DB, false),
+        decay::Extra::Definition { .. } => (x.quantity(), limits::DEFINITION, false),
+    }
+}
+
+fn range_of(spec: Spec, value: f64, sd: f64) -> Shown {
+    let (_, limit, relative) = spec;
     let half = RANGE_Z * sd;
-    let measure = if relative(i) {
-        half / value.abs()
-    } else {
-        half
-    };
+    let measure = if relative { half / value.abs() } else { half };
+    let jnd = 2.0 * limit;
     Shown {
         value,
         sd,
         lo: value - half,
         hi: value + half,
         // A NaN is wide.
-        status: if measure <= jnd(i) {
+        status: if measure <= jnd {
             RangeStatus::Ok
         } else {
             RangeStatus::Wide
@@ -870,14 +890,28 @@ pub fn shown_with(
     r: Result<Estimate, ParamError>,
     w: &Widen,
 ) -> Result<Shown, ParamError> {
+    shown_of(QUANTITIES[i], r, w)
+}
+
+/// An extra's value or refusal from [`evaluate_with`], as the product shows it: [`shown_with`] by
+/// the extra's own [`Spec`] ([`extra_spec`]).
+pub fn shown_extra(
+    x: decay::Extra,
+    r: Result<Estimate, ParamError>,
+    w: &Widen,
+) -> Result<Shown, ParamError> {
+    shown_of(extra_spec(x), r, w)
+}
+
+fn shown_of(spec: Spec, r: Result<Estimate, ParamError>, w: &Widen) -> Result<Shown, ParamError> {
     let mut s = match r {
-        Ok(e) => range(i, e.value, e.sd),
+        Ok(e) => range_of(spec, e.value, e.sd),
         Err(e) => match (shown_noise(&e), w.stand_in, e.not_evaluable()) {
-            (Some((value, sd)), _, _) => range(i, value, sd),
+            (Some((value, sd)), _, _) => range_of(spec, value, sd),
             (None, Some(st), Some(NotEvaluable::MonteCarloNoise { value, sd, .. }))
                 if value.is_finite() && st.sd.is_finite() =>
             {
-                let r = range(i, *value, st.sd);
+                let r = range_of(spec, *value, st.sd);
                 Shown {
                     // The judged one; with none, the stand-ins'.
                     sd: sd.unwrap_or(st.sd),
@@ -896,9 +930,9 @@ pub fn shown_with(
         s.status = RangeStatus::Wide;
         s.straddle = Some((lo, hi));
     }
-    if cannot_be_negative(i) && s.lo < 0.0 {
+    if nonnegative(spec.0) && s.lo < 0.0 {
         return Err(not_evaluable(
-            QUANTITIES[i].0,
+            spec.0,
             NotEvaluable::RangeBelowZero {
                 value: s.value,
                 lo: s.lo,
@@ -912,11 +946,16 @@ pub fn shown_with(
 /// Whether quantity `i` ([`QUANTITY_NAMES`]) cannot be negative, so that a shown range reaching
 /// below zero is refused (`range_below_zero`): the decay times, D50 and Ts. SPL, C50 and C80 can.
 pub fn cannot_be_negative(i: usize) -> bool {
+    nonnegative(QUANTITIES[i].0)
+}
+
+fn nonnegative(q: Quantity) -> bool {
     matches!(
-        QUANTITIES[i].0,
+        q,
         Quantity::Edt
             | Quantity::T20
             | Quantity::T30
+            | Quantity::Decay { .. }
             | Quantity::Definition { .. }
             | Quantity::CentreTime
     )
@@ -931,30 +970,36 @@ pub fn over_limit(i: usize, value: f64, sd: f64) -> bool {
     m.is_nan() || m > limit
 }
 
-/// The eight values of `decay` on one series, in [`QUANTITIES`]' order. A given arrival that does
+/// The eight values of `decay` on one series, in [`QUANTITIES`]' order, then each of `extras`
+/// ([`decay::Extra`]), all from one analysis ([`decay::evaluate_with`]). A given arrival that does
 /// not fit the onset bin refuses C50, C80, D50 and Ts only (`params_bad_arrival`,
-/// [`decay::evaluate`]).
+/// [`decay::evaluate`]), and every C and D of `extras` with them.
 fn values(
     series: &EnergySeries,
     arrival: Arrival,
-) -> ([Result<f64, ParamError>; 8], Onset, Arrival) {
-    let (v, onset, arrival, _) = values_and_straddles(series, arrival);
+    extras: &[decay::Extra],
+) -> (Vec<Result<f64, ParamError>>, Onset, Arrival) {
+    let (v, onset, arrival, _) = values_and_straddles(series, arrival, extras);
     (v, onset, arrival)
 }
 
 /// [`values_and_straddles`]' result.
 type ValuesAndStraddles = (
-    [Result<f64, ParamError>; 8],
+    Vec<Result<f64, ParamError>>,
     Onset,
     Arrival,
-    [Option<decay::Straddle>; 8],
+    Vec<Option<decay::Straddle>>,
 );
 
 /// [`values`], with C50's, C80's and D50's [`decay::Straddle`] in [`QUANTITIES`]' order (`None`
-/// for the rest).
-fn values_and_straddles(series: &EnergySeries, arrival: Arrival) -> ValuesAndStraddles {
-    let p = decay::evaluate(series, arrival);
-    let straddles = [
+/// for the rest), then each extra's.
+fn values_and_straddles(
+    series: &EnergySeries,
+    arrival: Arrival,
+    extras: &[decay::Extra],
+) -> ValuesAndStraddles {
+    let (p, x) = decay::evaluate_with(series, arrival, extras);
+    let mut straddles = vec![
         None,
         None,
         None,
@@ -964,33 +1009,34 @@ fn values_and_straddles(series: &EnergySeries, arrival: Arrival) -> ValuesAndStr
         p.d50_straddle,
         None,
     ];
-    (
-        [
-            p.spl_db,
-            p.edt.map(|f| f.t_s),
-            p.t20.map(|f| f.t_s),
-            p.t30.map(|f| f.t_s),
-            p.c50_db,
-            p.c80_db,
-            p.d50,
-            p.ts_s,
-        ],
-        p.onset,
-        p.decay_arrival,
-        straddles,
-    )
+    let mut values = vec![
+        p.spl_db,
+        p.edt.map(|f| f.t_s),
+        p.t20.map(|f| f.t_s),
+        p.t30.map(|f| f.t_s),
+        p.c50_db,
+        p.c80_db,
+        p.d50,
+        p.ts_s,
+    ];
+    for (v, st) in x {
+        values.push(v);
+        straddles.push(st);
+    }
+    (values, p.onset, p.decay_arrival, straddles)
 }
 
-/// Resamples of `series` drawn with each bin's mean deposit `deposits`: each one's eight values,
-/// `None` where the resample refuses the quantity. `stand_in`: each with its decay ranges judged
-/// on the series ([`EnergySeries::with_range_judged_on_its_series`]; [module docs](self), "The
-/// stand-ins"); the same draws either way.
+/// Resamples of `series` drawn with each bin's mean deposit `deposits`: each one's eight values
+/// and its `extras`, `None` where the resample refuses the quantity. `stand_in`: each with its
+/// decay ranges judged on the series ([`EnergySeries::with_range_judged_on_its_series`]; [module
+/// docs](self), "The stand-ins"); the same draws either way, and the same with or without extras.
 fn resamples_with(
     series: &EnergySeries,
     arrival: Arrival,
     deposits: &[f64],
     stand_in: bool,
-) -> Vec<[Option<f64>; 8]> {
+    extras: &[decay::Extra],
+) -> Samples {
     let mut rng = Rng::new(SEED);
     let mut samples = Vec::with_capacity(RESAMPLES);
     for _ in 0..RESAMPLES {
@@ -1014,43 +1060,59 @@ fn resamples_with(
             }
         });
         samples.push(match resampled {
-            Ok(s) => values(&s, arrival).0.map(|r| r.ok()),
-            Err(_) => [None; 8],
+            Ok(s) => values(&s, arrival, extras)
+                .0
+                .into_iter()
+                .map(|r| r.ok())
+                .collect(),
+            Err(_) => vec![None; 8 + extras.len()],
         });
     }
     samples
 }
 
-/// Each resample's eight values, `None` where it refuses the quantity.
-type Samples = Vec<[Option<f64>; 8]>;
+/// Each resample's eight values and then its extras, `None` where it refuses the quantity.
+type Samples = Vec<Vec<Option<f64>>>;
 
 /// The model's resamples of one series, drawn once per structure and particle multiple asked for.
+/// A quantity `i` is one of the eight below 8, and extra `i − 8` from there.
 struct Resampler<'a> {
     series: &'a EnergySeries,
     arrival: Arrival,
     model: &'a NoiseModel,
+    extras: &'a [decay::Extra],
     /// Keyed by structure, multiple and whether they are stand-ins.
     drawn: Vec<((Structure, u32, bool), Samples)>,
 }
 
 impl<'a> Resampler<'a> {
     fn new(series: &'a EnergySeries, arrival: Arrival, model: &'a NoiseModel) -> Self {
+        Self::with_extras(series, arrival, model, &[])
+    }
+
+    fn with_extras(
+        series: &'a EnergySeries,
+        arrival: Arrival,
+        model: &'a NoiseModel,
+        extras: &'a [decay::Extra],
+    ) -> Self {
         Resampler {
             series,
             arrival,
             model,
+            extras,
             drawn: Vec::new(),
         }
     }
 
     /// The resamples under structure `st` at `multiple` times the run's particles; empty for an
     /// unknown model.
-    fn get(&mut self, st: Structure, multiple: u32) -> &[[Option<f64>; 8]] {
+    fn get(&mut self, st: Structure, multiple: u32) -> &[Vec<Option<f64>>] {
         self.get_as(st, multiple, false)
     }
 
     /// [`Resampler::get`], as stand-ins when `stand_in` ([`resamples_with`]).
-    fn get_as(&mut self, st: Structure, multiple: u32, stand_in: bool) -> &[[Option<f64>; 8]] {
+    fn get_as(&mut self, st: Structure, multiple: u32, stand_in: bool) -> &[Vec<Option<f64>>] {
         let key = (st, multiple, stand_in);
         let at = match self.drawn.iter().position(|(k, _)| *k == key) {
             Some(i) => i,
@@ -1058,7 +1120,7 @@ impl<'a> Resampler<'a> {
                 let samples = self
                     .model
                     .deposits(self.series, st, multiple)
-                    .map(|d| resamples_with(self.series, self.arrival, &d, stand_in))
+                    .map(|d| resamples_with(self.series, self.arrival, &d, stand_in, self.extras))
                     .unwrap_or_default();
                 self.drawn.push((key, samples));
                 self.drawn.len() - 1
@@ -1086,7 +1148,7 @@ impl<'a> Resampler<'a> {
             .iter()
             .filter_map(|s| s[i])
             .collect();
-        let refused = if got.is_empty() && self.model.structure(i).is_none() {
+        let refused = if got.is_empty() && matches!(self.model, NoiseModel::Unknown { .. }) {
             RESAMPLES
         } else {
             RESAMPLES - got.len()
@@ -1137,6 +1199,18 @@ pub fn evaluate(
     arrival: Arrival,
     model: &NoiseModel,
 ) -> Parameters {
+    evaluate_with(series, arrival, model, &[])
+}
+
+/// [`evaluate`], with each of `extras` ([`decay::Extra`]) read from the same series, on the same
+/// resamples (the same seed and draws: one resample gives the eight and the extras together) and
+/// judged the same way, by the calibration each carries ([`extra_calibration`]).
+pub fn evaluate_with(
+    series: &Result<EnergySeries, ParamError>,
+    arrival: Arrival,
+    model: &NoiseModel,
+    extras: &[decay::Extra],
+) -> Parameters {
     let series = match series {
         Ok(s) => s,
         Err(e) => {
@@ -1155,47 +1229,78 @@ pub fn evaluate(
                 curvature_percent: r(),
                 crossings_per_particle: None,
                 widen: [Widen::default(); 8],
+                extras: extras.iter().map(|_| (r(), Widen::default())).collect(),
             };
         }
     };
-    let (base, onset, decay_arrival, straddles) = values_and_straddles(series, arrival);
-    let mut resampler = Resampler::new(series, arrival, model);
+    let (base, onset, decay_arrival, straddles) = values_and_straddles(series, arrival, extras);
+    let mut resampler = Resampler::with_extras(series, arrival, model, extras);
     let n = model.multi_crossing(series);
-    let mut out: Vec<Result<Estimate, ParamError>> = Vec::with_capacity(8);
+    // Quantity `i`: one of the eight, or extra `i − 8` with the calibration it carries.
+    let judged = |i: usize| -> Option<(calibration::Entry, f64)> {
+        let NoiseModel::Crossings { method, .. } = model else {
+            return None;
+        };
+        if i < 8 {
+            let e = calibration::entry(*method, i, model.walls());
+            Some((e, calibrated_factor(model, i, n).unwrap_or(e.factor)))
+        } else {
+            extra_calibration(model, extras[i - 8], n)
+        }
+    };
+    let spec_of = |i: usize| {
+        if i < 8 {
+            QUANTITIES[i]
+        } else {
+            extra_spec(extras[i - 8])
+        }
+    };
+    let mut out: Vec<Result<Estimate, ParamError>> = Vec::with_capacity(base.len());
     for (i, b) in base.into_iter().enumerate() {
         out.push(b.and_then(|value| {
-            let st = model.structure(i).unwrap_or(Structure::Constant);
+            let j = judged(i);
+            let st = j.map_or(Structure::Constant, |(e, _)| e.structure);
             let (raw, refused) = resampler.spread(st, 1, i);
-            judge_one(model, i, value, raw, refused, n, &mut |at, m| {
-                resampler.spread(at, m, i)
-            })
+            judge_with(
+                model,
+                spec_of(i),
+                j,
+                value,
+                raw,
+                refused,
+                n,
+                &mut |at, m| resampler.spread(at, m, i),
+            )
         }));
     }
     // What widens each shown range ([module docs](self), "The range").
-    let widen: [Widen; 8] = std::array::from_fn(|i| Widen {
-        straddle: straddles[i]
-            .filter(|s| s.beyond_limit)
-            .map(|s| (s.lo, s.hi)),
-        stand_in: match out[i].as_ref().err().and_then(ParamError::not_evaluable) {
-            Some(NotEvaluable::MonteCarloNoise {
-                sd,
-                refused_resamples,
-                ..
-            }) if *refused_resamples > REFUSED_RESAMPLES_ALLOWED => {
-                let st = model.structure(i).unwrap_or(Structure::Constant);
-                let (raw, refused) = resampler.spread_as(st, 1, i, true);
-                let factor = calibrated_factor(model, i, n).unwrap_or(1.0);
-                match raw {
-                    Some(raw) if refused <= REFUSED_RESAMPLES_ALLOWED => Some(StandIn {
-                        sd: sd.map_or(raw * factor, |sd| (raw * factor).max(sd)),
-                        refused_resamples: *refused_resamples,
-                    }),
-                    _ => None,
+    let widen: Vec<Widen> = (0..out.len())
+        .map(|i| Widen {
+            straddle: straddles[i]
+                .filter(|s| s.beyond_limit)
+                .map(|s| (s.lo, s.hi)),
+            stand_in: match out[i].as_ref().err().and_then(ParamError::not_evaluable) {
+                Some(NotEvaluable::MonteCarloNoise {
+                    sd,
+                    refused_resamples,
+                    ..
+                }) if *refused_resamples > REFUSED_RESAMPLES_ALLOWED => {
+                    let j = judged(i);
+                    let st = j.map_or(Structure::Constant, |(e, _)| e.structure);
+                    let (raw, refused) = resampler.spread_as(st, 1, i, true);
+                    let factor = j.map_or(1.0, |(_, f)| f);
+                    match raw {
+                        Some(raw) if refused <= REFUSED_RESAMPLES_ALLOWED => Some(StandIn {
+                            sd: sd.map_or(raw * factor, |sd| (raw * factor).max(sd)),
+                            refused_resamples: *refused_resamples,
+                        }),
+                        _ => None,
+                    }
                 }
-            }
-            _ => None,
-        },
-    });
+                _ => None,
+            },
+        })
+        .collect();
     // The curvature of the reported T20 and T30, with its spread over the resamples giving both
     // (T30's structure's: energetic T20 and T30 share theirs).
     let curvature_percent = match (&out[2], &out[3]) {
@@ -1226,8 +1331,9 @@ pub fn evaluate(
             Ok(Estimate { value, sd })
         }
     };
-    let mut it = out.into_iter();
-    let mut next = || it.next().expect("eight quantities");
+    let base_widen: [Widen; 8] = std::array::from_fn(|i| widen[i]);
+    let mut it = out.into_iter().zip(widen);
+    let mut next = || it.next().expect("eight quantities").0;
     Parameters {
         onset: Some(onset),
         decay_arrival: Some(decay_arrival),
@@ -1241,8 +1347,59 @@ pub fn evaluate(
         ts_s: next(),
         curvature_percent,
         crossings_per_particle: n,
-        widen,
+        widen: base_widen,
+        extras: it.collect(),
     }
+}
+
+/// The candidates an extra carries its calibration from ([`QUANTITY_NAMES`]' indices): a decay
+/// time EDT's, T20's and T30's; C C50's and C80's; D D50's.
+pub fn extra_candidates(x: decay::Extra) -> &'static [usize] {
+    match x {
+        decay::Extra::Decay { .. } => &[1, 2, 3],
+        decay::Extra::Clarity { .. } => &[4, 5],
+        decay::Extra::Definition { .. } => &[6],
+    }
+}
+
+/// The calibration an extra carries, and the factor its bootstrap standard deviation is multiplied
+/// by. **No extra was calibrated against SPPS's seeds**
+/// (`docs/investigations/2026-09-25-noise-calibration/` measured the eight only), so each takes,
+/// of its candidates ([`extra_candidates`]) under the run's method and walls, the entry whose
+/// calibrated factor at this series' `n` is the largest (its structure, kappa and margin with
+/// it), held to the narrowest domain of them all (the most particles any asks for, the fewest
+/// crossings per particle any allows, the largest margin), naming a particle count only where
+/// every candidate does: the most noise any measured neighbour showed, on the domain where all of
+/// them were measured. `None` for an unknown model.
+pub fn extra_calibration(
+    model: &NoiseModel,
+    x: decay::Extra,
+    n: Option<f64>,
+) -> Option<(calibration::Entry, f64)> {
+    let NoiseModel::Crossings { method, .. } = model else {
+        return None;
+    };
+    let entries: Vec<(calibration::Entry, f64)> = extra_candidates(x)
+        .iter()
+        .map(|&i| {
+            let e = calibration::entry(*method, i, model.walls());
+            (e, calibrated_factor(model, i, n).unwrap_or(e.factor))
+        })
+        .collect();
+    let (mut e, f) = entries
+        .iter()
+        .copied()
+        .reduce(|best, c| if c.1 > best.1 { c } else { best })?;
+    for (c, _) in &entries {
+        e.min_particles = e.min_particles.max(c.min_particles);
+        e.max_crossings_per_particle = e
+            .max_crossings_per_particle
+            .min(c.max_crossings_per_particle);
+        e.root_n_confirmed &= c.root_n_confirmed;
+        e.resampled_confirmed &= c.resampled_confirmed;
+        e.margin = e.margin.max(c.margin);
+    }
+    Some((e, f))
 }
 
 /// The factor quantity `i`'s bootstrap standard deviation is multiplied by under `model`, for a
@@ -1276,9 +1433,43 @@ pub fn judge_one(
     n: Option<f64>,
     resampled: &mut dyn FnMut(Structure, u32) -> (Option<f64>, usize),
 ) -> Result<Estimate, ParamError> {
-    let (quantity, limit, relative) = QUANTITIES[i];
-    let (method, particles, run) = match model {
-        NoiseModel::Unknown { detail } => {
+    let entry = match model {
+        NoiseModel::Crossings { method, .. } => {
+            let e = calibration::entry(*method, i, model.walls());
+            Some((e, calibrated_factor(model, i, n).unwrap_or(e.factor)))
+        }
+        NoiseModel::Unknown { .. } => None,
+    };
+    judge_with(
+        model,
+        QUANTITIES[i],
+        entry,
+        value,
+        raw_sd,
+        refused,
+        n,
+        resampled,
+    )
+}
+
+/// [`judge_one`] for a quantity judged by `spec` with calibration `entry` and the factor it gives
+/// at this series (`None` exactly when the model is unknown): the eight's own, or an extra's
+/// carried one ([`extra_calibration`]).
+#[allow(clippy::too_many_arguments)]
+fn judge_with(
+    model: &NoiseModel,
+    spec: Spec,
+    entry: Option<(calibration::Entry, f64)>,
+    value: f64,
+    raw_sd: Option<f64>,
+    refused: usize,
+    n: Option<f64>,
+    resampled: &mut dyn FnMut(Structure, u32) -> (Option<f64>, usize),
+) -> Result<Estimate, ParamError> {
+    let (quantity, limit, relative) = spec;
+    let (particles, run, (e, factor)) = match (model, entry) {
+        (NoiseModel::Crossings { particles, run, .. }, Some(entry)) => (*particles, run, entry),
+        (NoiseModel::Unknown { detail }, _) => {
             return Err(not_evaluable(
                 quantity,
                 NotEvaluable::NoiseUnknown {
@@ -1287,14 +1478,16 @@ pub fn judge_one(
                 },
             ));
         }
-        NoiseModel::Crossings {
-            method,
-            particles,
-            run,
-            ..
-        } => (*method, *particles, run),
+        (NoiseModel::Crossings { .. }, None) => {
+            return Err(not_evaluable(
+                quantity,
+                NotEvaluable::NoiseUnknown {
+                    value,
+                    detail: "no calibration".into(),
+                },
+            ));
+        }
     };
-    let e = calibration::entry(method, i, model.walls());
     // The domain: a run's value outside what its quantity was calibrated on is refused whatever
     // its noise reads (rule R3-5). A run's model always has its `n`.
     if let Some(run) = run {
@@ -1326,7 +1519,7 @@ pub fn judge_one(
         Judged {
             limit,
             relative,
-            factor: calibrated_factor(model, i, n).unwrap_or(e.factor),
+            factor,
             margin: e.root_n_confirmed.then_some(e.margin),
             particles,
             structure: e.structure,
@@ -1336,7 +1529,7 @@ pub fn judge_one(
     )
 }
 
-/// How one quantity is judged: its limit (relative for the decay times), the calibration factor
+// How one quantity is judged: its limit (relative for the decay times), the calibration factor
 /// with its correction, the margin a named particle count takes (`None`: no count is named, its
 /// `1/√N` fall not confirmed), and the run's particles per source when known.
 struct Judged {

@@ -759,12 +759,20 @@ fn runs_root_for(session: &Mutex<Session>, run: &str) -> CmdResult<PathBuf> {
 }
 
 /// The run's results state and, when its results load, the report `simpa results <run> --json`
-/// prints, with each parameter's bed status (`report.bed`).
+/// prints, with each parameter's bed status (`report.bed`); with `custom`, the decay ranges and
+/// C and D time limits the Acoustics tab asks for beside the fixed ones (parity R15, R20), as
+/// `simpa results --decay-range/--clarity-ms/--definition-ms` computes them.
 #[tauri::command(rename_all = "snake_case")]
-pub async fn run_report(state: State<'_, AppState>, run: String) -> CmdResult<ReportView> {
+pub async fn run_report(
+    state: State<'_, AppState>,
+    run: String,
+    custom: Option<Vec<simpa_core::params::decay::Extra>>,
+) -> CmdResult<ReportView> {
     let session = state.session.clone();
     guard::blocking("run_report", move || {
-        let mut view = results_data::report_view(&runs_root_for(&session, &run)?, &run)?;
+        let custom = custom.unwrap_or_default();
+        let mut view =
+            results_data::report_view_with(&runs_root_for(&session, &run)?, &run, &custom)?;
         if view.report.is_some() {
             let s = lock(&session, "project")?;
             view.surface_groups = s

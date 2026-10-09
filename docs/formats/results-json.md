@@ -25,7 +25,7 @@ field this page does not list, and must ignore it.
 ## Command and exit codes
 
 ```
-simpa results <run-folder> [--json]
+simpa results <run-folder> [--json] [--decay-range <dB,...>] [--clarity-ms <ms,...>] [--definition-ms <ms,...>]
 simpa results --schema
 ```
 
@@ -88,7 +88,13 @@ on the same line: `solver build verified: ...` or `solver build UNVERIFIED <code
 
 ```
 {
-  "results_version": 17,              // 17: advice, the run-quality advisor's items
+  "results_version": 18,              // 18: t15_s in every parameters (T15, -5 to
+                                      //    -20 dB, by T20's regression); custom and
+                                      //    parameters.custom when results is asked for
+                                      //    chosen decay ranges and C/D time limits
+                                      //    (--decay-range, --clarity-ms,
+                                      //    --definition-ms; parity R15, R20)
+                                      // 17: advice, the run-quality advisor's items
                                       //    (backlog 80): each refused, wide or
                                       //    lost-particle-warned value's cause and the
                                       //    setting that addresses it;

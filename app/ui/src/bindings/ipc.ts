@@ -262,6 +262,28 @@ export type SurfaceReceiverShape =
  */
 export type BedStatus = 'PASS' | 'FAIL';
 /**
+ * A quantity beyond the fixed ones, read by the same code with another decay range or window
+ * edge (parity R15, R20): what upstream's "Calculate acoustic parameters" dialog asks for, a list
+ * of decay ranges in dB below −5 dB and of clarity and definition time limits in ms
+ * (`projet_calculation.cpp:796-830`).
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "Extra".
+ */
+export type Extra =
+  | {
+      kind: 'decay';
+      span_db: number;
+    }
+  | {
+      kind: 'clarity';
+      te_ms: number;
+    }
+  | {
+      kind: 'definition';
+      te_ms: number;
+    };
+/**
  * The room from the run's own inputs, for either solver (results version 12).
  */
 export type RoomReport =
@@ -470,6 +492,10 @@ export type Quantity =
     }
   | {
       quantity: 't30';
+    }
+  | {
+      quantity: 'decay';
+      span_db: number;
     }
   | {
       quantity: 'clarity';
@@ -1045,9 +1071,73 @@ export type Evaluated4 =
       not_evaluable: Refused;
     };
 /**
- * A fraction, 0 to 1 (shown as a percentage).
+ * In the quantity's unit: s, dB, or a fraction.
  */
 export type Evaluated5 =
+  | {
+      /**
+       * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
+       * `status`.
+       */
+      hi?: number | null;
+      /**
+       * The range's lower end, in the same unit: `value − 2.5·mc_sd`
+       * (`params::noise::RANGE_Z`), or EDT's own (`edt.lo_s`). Present with `status`.
+       */
+      lo?: number | null;
+      /**
+       * Present only on a quantity of an SPPS band's series (the eight parameters, the
+       * curvature, G; dB(A) and STI with the largest share of their bands) whose particles were
+       * lost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to
+       * [`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over
+       * emitted, shown beside the value as a warning that the late decay may hold too little
+       * energy. From 1 % the value is refused `lost_particles`.
+       */
+      lost_share_warning?: number | null;
+      /**
+       * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
+       * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
+       * analytic references.
+       */
+      mc_sd?: number | null;
+      /**
+       * Present only on a value `params::noise::evaluate` refused `monte_carlo_noise` because
+       * more than 10 of its 200 resamples refused it, but which at most 10 refuse when the same
+       * resamples are judged with their decay range on the series (the stand-ins,
+       * `params::noise`, "The stand-ins"): how many refused it as judged. Shown `wide`, `mc_sd`
+       * the judged standard deviation (the stand-ins' when the judged resamples gave none), and
+       * `lo`/`hi` `value ∓ 2.5·sd` with `sd` the larger of the stand-ins' and `mc_sd`.
+       */
+      refused_resamples?: number | null;
+      /**
+       * One of the eight parameters of an SPPS band, aggregate or per-source band
+       * (decision-log rows 37 (3) and 39 (3)): `ok` when its range, `lo` to `hi`, is within
+       * the quantity's difference limen (`params::noise::jnd`: 5 % for the decay times, 1 dB
+       * for SPL, C50 and C80, 0.05 for D50, 10 ms for Ts), `wide` when it is not. A `wide` value
+       * is shown with its range rather than refused; a consumer that shows the value shows the
+       * range beside it. Also `wide`, whatever the range's width, with `refused_resamples` or
+       * `straddle` (results version 9). Absent for every other value.
+       */
+      status?: RangeStatus | null;
+      /**
+       * Present only on a C50, C80 or D50 whose bin straddling te, wholly late or wholly early,
+       * moves it beyond its limit (0.1 dB, 0.005; `params::decay::Straddle`): `[lo, hi]`, the
+       * value with that bin each way. The value is `wide`, and `lo`/`hi` cover the bracket,
+       * widened by `2.5·mc_sd` each way.
+       *
+       * @minItems 2
+       * @maxItems 2
+       */
+      straddle?: [number, number] | null;
+      value: number;
+    }
+  | {
+      not_evaluable: Refused;
+    };
+/**
+ * A fraction, 0 to 1 (shown as a percentage).
+ */
+export type Evaluated6 =
   | {
       /**
        * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
@@ -1116,7 +1206,7 @@ export type Status2 = 'ok' | 'wide' | 'refused';
 /**
  * s.
  */
-export type Evaluated6 =
+export type Evaluated7 =
   | {
       /**
        * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
@@ -1180,70 +1270,6 @@ export type Evaluated6 =
 /**
  * dB re 20 µPa.
  */
-export type Evaluated7 =
-  | {
-      /**
-       * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
-       * `status`.
-       */
-      hi?: number | null;
-      /**
-       * The range's lower end, in the same unit: `value − 2.5·mc_sd`
-       * (`params::noise::RANGE_Z`), or EDT's own (`edt.lo_s`). Present with `status`.
-       */
-      lo?: number | null;
-      /**
-       * Present only on a quantity of an SPPS band's series (the eight parameters, the
-       * curvature, G; dB(A) and STI with the largest share of their bands) whose particles were
-       * lost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to
-       * [`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over
-       * emitted, shown beside the value as a warning that the late decay may hold too little
-       * energy. From 1 % the value is refused `lost_particles`.
-       */
-      lost_share_warning?: number | null;
-      /**
-       * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
-       * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
-       * analytic references.
-       */
-      mc_sd?: number | null;
-      /**
-       * Present only on a value `params::noise::evaluate` refused `monte_carlo_noise` because
-       * more than 10 of its 200 resamples refused it, but which at most 10 refuse when the same
-       * resamples are judged with their decay range on the series (the stand-ins,
-       * `params::noise`, "The stand-ins"): how many refused it as judged. Shown `wide`, `mc_sd`
-       * the judged standard deviation (the stand-ins' when the judged resamples gave none), and
-       * `lo`/`hi` `value ∓ 2.5·sd` with `sd` the larger of the stand-ins' and `mc_sd`.
-       */
-      refused_resamples?: number | null;
-      /**
-       * One of the eight parameters of an SPPS band, aggregate or per-source band
-       * (decision-log rows 37 (3) and 39 (3)): `ok` when its range, `lo` to `hi`, is within
-       * the quantity's difference limen (`params::noise::jnd`: 5 % for the decay times, 1 dB
-       * for SPL, C50 and C80, 0.05 for D50, 10 ms for Ts), `wide` when it is not. A `wide` value
-       * is shown with its range rather than refused; a consumer that shows the value shows the
-       * range beside it. Also `wide`, whatever the range's width, with `refused_resamples` or
-       * `straddle` (results version 9). Absent for every other value.
-       */
-      status?: RangeStatus | null;
-      /**
-       * Present only on a C50, C80 or D50 whose bin straddling te, wholly late or wholly early,
-       * moves it beyond its limit (0.1 dB, 0.005; `params::decay::Straddle`): `[lo, hi]`, the
-       * value with that bin each way. The value is `wide`, and `lo`/`hi` cover the bracket,
-       * widened by `2.5·mc_sd` each way.
-       *
-       * @minItems 2
-       * @maxItems 2
-       */
-      straddle?: [number, number] | null;
-      value: number;
-    }
-  | {
-      not_evaluable: Refused;
-    };
-/**
- * s.
- */
 export type Evaluated8 =
   | {
       /**
@@ -1306,7 +1332,11 @@ export type Evaluated8 =
       not_evaluable: Refused;
     };
 /**
- * s.
+ * s. T15, the decay over -5 to -20 dB (upstream's TR15), by T20's and T30's regression over its
+ * own range (`params::decay::Extra::T15`), with the same refusals. Its Monte-Carlo noise is
+ * judged with a calibration it carries, not one measured for it
+ * (`params::noise::extra_calibration`): of EDT's, T20's and T30's, the largest factor, on the
+ * narrowest domain (results version 18).
  */
 export type Evaluated9 =
   | {
@@ -1434,6 +1464,134 @@ export type Evaluated10 =
       not_evaluable: Refused;
     };
 /**
+ * s.
+ */
+export type Evaluated11 =
+  | {
+      /**
+       * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
+       * `status`.
+       */
+      hi?: number | null;
+      /**
+       * The range's lower end, in the same unit: `value − 2.5·mc_sd`
+       * (`params::noise::RANGE_Z`), or EDT's own (`edt.lo_s`). Present with `status`.
+       */
+      lo?: number | null;
+      /**
+       * Present only on a quantity of an SPPS band's series (the eight parameters, the
+       * curvature, G; dB(A) and STI with the largest share of their bands) whose particles were
+       * lost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to
+       * [`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over
+       * emitted, shown beside the value as a warning that the late decay may hold too little
+       * energy. From 1 % the value is refused `lost_particles`.
+       */
+      lost_share_warning?: number | null;
+      /**
+       * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
+       * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
+       * analytic references.
+       */
+      mc_sd?: number | null;
+      /**
+       * Present only on a value `params::noise::evaluate` refused `monte_carlo_noise` because
+       * more than 10 of its 200 resamples refused it, but which at most 10 refuse when the same
+       * resamples are judged with their decay range on the series (the stand-ins,
+       * `params::noise`, "The stand-ins"): how many refused it as judged. Shown `wide`, `mc_sd`
+       * the judged standard deviation (the stand-ins' when the judged resamples gave none), and
+       * `lo`/`hi` `value ∓ 2.5·sd` with `sd` the larger of the stand-ins' and `mc_sd`.
+       */
+      refused_resamples?: number | null;
+      /**
+       * One of the eight parameters of an SPPS band, aggregate or per-source band
+       * (decision-log rows 37 (3) and 39 (3)): `ok` when its range, `lo` to `hi`, is within
+       * the quantity's difference limen (`params::noise::jnd`: 5 % for the decay times, 1 dB
+       * for SPL, C50 and C80, 0.05 for D50, 10 ms for Ts), `wide` when it is not. A `wide` value
+       * is shown with its range rather than refused; a consumer that shows the value shows the
+       * range beside it. Also `wide`, whatever the range's width, with `refused_resamples` or
+       * `straddle` (results version 9). Absent for every other value.
+       */
+      status?: RangeStatus | null;
+      /**
+       * Present only on a C50, C80 or D50 whose bin straddling te, wholly late or wholly early,
+       * moves it beyond its limit (0.1 dB, 0.005; `params::decay::Straddle`): `[lo, hi]`, the
+       * value with that bin each way. The value is `wide`, and `lo`/`hi` cover the bracket,
+       * widened by `2.5·mc_sd` each way.
+       *
+       * @minItems 2
+       * @maxItems 2
+       */
+      straddle?: [number, number] | null;
+      value: number;
+    }
+  | {
+      not_evaluable: Refused;
+    };
+/**
+ * s.
+ */
+export type Evaluated12 =
+  | {
+      /**
+       * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
+       * `status`.
+       */
+      hi?: number | null;
+      /**
+       * The range's lower end, in the same unit: `value − 2.5·mc_sd`
+       * (`params::noise::RANGE_Z`), or EDT's own (`edt.lo_s`). Present with `status`.
+       */
+      lo?: number | null;
+      /**
+       * Present only on a quantity of an SPPS band's series (the eight parameters, the
+       * curvature, G; dB(A) and STI with the largest share of their bands) whose particles were
+       * lost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to
+       * [`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over
+       * emitted, shown beside the value as a warning that the late decay may hold too little
+       * energy. From 1 % the value is refused `lost_particles`.
+       */
+      lost_share_warning?: number | null;
+      /**
+       * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
+       * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
+       * analytic references.
+       */
+      mc_sd?: number | null;
+      /**
+       * Present only on a value `params::noise::evaluate` refused `monte_carlo_noise` because
+       * more than 10 of its 200 resamples refused it, but which at most 10 refuse when the same
+       * resamples are judged with their decay range on the series (the stand-ins,
+       * `params::noise`, "The stand-ins"): how many refused it as judged. Shown `wide`, `mc_sd`
+       * the judged standard deviation (the stand-ins' when the judged resamples gave none), and
+       * `lo`/`hi` `value ∓ 2.5·sd` with `sd` the larger of the stand-ins' and `mc_sd`.
+       */
+      refused_resamples?: number | null;
+      /**
+       * One of the eight parameters of an SPPS band, aggregate or per-source band
+       * (decision-log rows 37 (3) and 39 (3)): `ok` when its range, `lo` to `hi`, is within
+       * the quantity's difference limen (`params::noise::jnd`: 5 % for the decay times, 1 dB
+       * for SPL, C50 and C80, 0.05 for D50, 10 ms for Ts), `wide` when it is not. A `wide` value
+       * is shown with its range rather than refused; a consumer that shows the value shows the
+       * range beside it. Also `wide`, whatever the range's width, with `refused_resamples` or
+       * `straddle` (results version 9). Absent for every other value.
+       */
+      status?: RangeStatus | null;
+      /**
+       * Present only on a C50, C80 or D50 whose bin straddling te, wholly late or wholly early,
+       * moves it beyond its limit (0.1 dB, 0.005; `params::decay::Straddle`): `[lo, hi]`, the
+       * value with that bin each way. The value is `wide`, and `lo`/`hi` cover the bracket,
+       * widened by `2.5·mc_sd` each way.
+       *
+       * @minItems 2
+       * @maxItems 2
+       */
+      straddle?: [number, number] | null;
+      value: number;
+    }
+  | {
+      not_evaluable: Refused;
+    };
+/**
  * The arrival C50, C80, D50 and Ts are measured from: the direct sound at the receiver's
  * centre, `arrival_s`, spread over `±R/c` (`params::decay::Arrival::Known`), or `detected`.
  */
@@ -1479,7 +1637,7 @@ export type Arrival1 =
  * every source's free field, both summed. SPL's `mc_sd`, `status` and range, shifted by the
  * same constant; refused as SPL is.
  */
-export type Evaluated11 =
+export type Evaluated13 =
   | {
       /**
        * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
@@ -1595,7 +1753,7 @@ export type Arrival2 =
  * As for the receiver's band, against this source's own free field at 10 m: the band's
  * `source_power_rho_c` times this source's share of the sources' power in the band.
  */
-export type Evaluated12 =
+export type Evaluated14 =
   | {
       /**
        * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
@@ -1686,7 +1844,7 @@ export type NoiseModel1 =
 /**
  * Female speech's, refused as male's but needing 250 Hz to 8 kHz only.
  */
-export type Evaluated13 =
+export type Evaluated15 =
   | {
       /**
        * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
@@ -1753,7 +1911,7 @@ export type Evaluated13 =
  * octaves (`not_octave_bands`), several sources (`several_sources`), or a response shorter
  * than 1.6 s or half the reverberation time (`params_series_too_short`).
  */
-export type Evaluated14 =
+export type Evaluated16 =
   | {
       /**
        * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
@@ -1865,7 +2023,7 @@ export type ReferenceReport =
 /**
  * Plain Eyring, `K·V/(4·m·V − S·ln(1 − ᾱ))`, s, with SPPS's `K`: **reported only**.
  */
-export type Evaluated15 =
+export type Evaluated17 =
   | {
       /**
        * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
@@ -1935,7 +2093,7 @@ export type Evaluated15 =
  * refused, and `params_reference_not_applicable` where `lambert_walls` is false: it is
  * computed only where it describes the band.
  */
-export type Evaluated16 =
+export type Evaluated18 =
   | {
       /**
        * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
@@ -1999,7 +2157,7 @@ export type Evaluated16 =
 /**
  * Sabine, `K·V/(4·m·V + Σ S·α)`, s, with SPPS's `K`: **reported only** (results version 12).
  */
-export type Evaluated17 =
+export type Evaluated19 =
   | {
       /**
        * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
@@ -2089,7 +2247,7 @@ export type AnalyticReport =
 /**
  * s, with TCR's constant 0.163.
  */
-export type Evaluated18 =
+export type Evaluated20 =
   | {
       /**
        * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
@@ -2153,7 +2311,7 @@ export type Evaluated18 =
 /**
  * s, with TCR's constant 0.163.
  */
-export type Evaluated19 =
+export type Evaluated21 =
   | {
       /**
        * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
@@ -2217,7 +2375,7 @@ export type Evaluated19 =
 /**
  * Sound strength G, refused as SPL is (`no_time_series`).
  */
-export type Evaluated20 =
+export type Evaluated22 =
   | {
       /**
        * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
@@ -2388,7 +2546,7 @@ export type RunStatusUi = ('OK' | 'FAIL' | 'CRASH' | 'CANCELLED') | 'RUNNING' | 
  * This interface was referenced by `IpcBindings`'s JSON-Schema
  * via the `definition` "Evaluated".
  */
-export type Evaluated21 =
+export type Evaluated23 =
   | {
       /**
        * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
@@ -3916,6 +4074,13 @@ export interface Report {
   bands_hz: number[];
   bed: BedReport;
   /**
+   * What the report was asked for beyond the fixed parameters (`simpa results --decay-range`,
+   * `--clarity-ms`, `--definition-ms`; the Acoustics tab's own ranges and limits), in order;
+   * each SPPS series' `parameters.custom` holds them in this order. Absent when none was asked
+   * (results version 18).
+   */
+  custom?: Extra[];
+  /**
    * [`REPORT_VERSION`].
    */
   results_version: number;
@@ -3970,10 +4135,12 @@ export interface BedParameters {
   c80_db: BedParameter;
   d50: BedParameter;
   dba: BedParameter1;
+  decay_custom: BedParameter2;
   edt_s: BedParameter;
-  g_db: BedParameter2;
+  g_db: BedParameter3;
   spl_db: BedParameter;
-  sti: BedParameter3;
+  sti: BedParameter4;
+  t15_s: BedParameter5;
   t20_s: BedParameter;
   t30_s: BedParameter;
   ts_s: BedParameter;
@@ -4013,6 +4180,24 @@ export interface BedParameter2 {
  * (the marks, the `wide` rules, what was not tested).
  */
 export interface BedParameter3 {
+  notes: string[];
+  reasons: string[];
+  status: BedStatus;
+}
+/**
+ * One parameter's entry: its status, why it failed (empty for a PASS), and the summary's notes
+ * (the marks, the `wide` rules, what was not tested).
+ */
+export interface BedParameter4 {
+  notes: string[];
+  reasons: string[];
+  status: BedStatus;
+}
+/**
+ * One parameter's entry: its status, why it failed (empty for a PASS), and the summary's notes
+ * (the marks, the `wide` rules, what was not tested).
+ */
+export interface BedParameter5 {
   notes: string[];
   reasons: string[];
   status: BedStatus;
@@ -4539,13 +4724,20 @@ export interface DecayCurve {
 export interface Parameters {
   c50_db: Evaluated3;
   c80_db: Evaluated4;
-  d50: Evaluated5;
+  /**
+   * The quantities the report was asked for beyond the fixed ones (`Report::custom`, parity R15
+   * and R20), in the order asked: each read by the same code as T20/T30, C50/C80 or D50 with its
+   * own range or time limit, judged and shown as they are, with the calibration it carries
+   * (`params::noise::extra_calibration`). Absent when nothing was asked (results version 18).
+   */
+  custom?: CustomValue[];
+  d50: Evaluated6;
   /**
    * EDT's status, range and validation (below `edt_s`'s value). Absent where EDT is not
    * computed from a histogram: TCR, and the several-sources refusal.
    */
   edt?: EdtReport | null;
-  edt_s: Evaluated6;
+  edt_s: Evaluated7;
   /**
    * Whether `edt_s` is a tested number: `edt.validated`, and false where there is no `edt`.
    * `edt_s` itself stays a bare value for the consumers that read it, so this is its marker:
@@ -4553,10 +4745,25 @@ export interface Parameters {
    * (decision-log row 20).
    */
   edt_validated: boolean;
-  spl_db: Evaluated7;
-  t20_s: Evaluated8;
-  t30_s: Evaluated9;
-  ts_s: Evaluated10;
+  spl_db: Evaluated8;
+  t15_s: Evaluated9;
+  t20_s: Evaluated10;
+  t30_s: Evaluated11;
+  ts_s: Evaluated12;
+}
+/**
+ * One quantity asked for beyond the fixed ones ([`Parameters::custom`]).
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "CustomValue".
+ */
+export interface CustomValue {
+  extra: Extra;
+  /**
+   * `t40_s`, `c30_db`, `d80` (`params::decay::Extra::name`).
+   */
+  name: string;
+  value: Evaluated5;
 }
 /**
  * EDT as EDT v2.1 ([`edt`]) read it from the band's raw histogram: the value with its
@@ -4682,7 +4889,7 @@ export interface ReceiverBandReport {
    */
   floor_db?: number | null;
   freq_hz: number;
-  g_db: Evaluated11;
+  g_db: Evaluated13;
   /**
    * The share of the band's particles SPPS lost (`partLoop`, `partLost`) over those emitted
    * (`spps::SppsResults::lost_share`); `null` when none was lost. **Reported, not bounded**
@@ -4852,7 +5059,7 @@ export interface SourceBandReport {
    */
   energy_pa2: number[];
   freq_hz: number;
-  g_db: Evaluated12;
+  g_db: Evaluated14;
   noise_model: NoiseModel1;
   onset?: Onset | null;
   parameters: Parameters;
@@ -4882,8 +5089,8 @@ export interface StiReport {
    * speech and noise levels, and each speech's MTI.
    */
   bands: BandSti[];
-  female: Evaluated13;
-  male: Evaluated14;
+  female: Evaluated15;
+  male: Evaluated16;
   /**
    * [`STI_METHOD`].
    */
@@ -4963,9 +5170,9 @@ export interface ReferenceBandReport {
    * absorption off.
    */
   air_m_per_metre?: number | null;
-  eyring_s: Evaluated15;
+  eyring_s: Evaluated17;
   freq_hz: number;
-  kuttruff_s: Evaluated16;
+  kuttruff_s: Evaluated18;
   /**
    * Every face reflects by Lambert's law with scattering 1 in this band: the only walls the
    * transport's `γ²` describes. When false, neither time describes the run's field.
@@ -4975,7 +5182,7 @@ export interface ReferenceBandReport {
    * `ᾱ = Σ Sᵢ·αᵢ / S` over the room's faces.
    */
   mean_absorption: number;
-  sabine_s: Evaluated17;
+  sabine_s: Evaluated19;
   /**
    * Every face has the same absorption in this band.
    */
@@ -5173,9 +5380,9 @@ export interface AnalyticBandReport {
    * The energy attenuation TCR adds as `4·m·V`, 1/m; `null` with air absorption off.
    */
   air_m_per_metre?: number | null;
-  eyring_s: Evaluated18;
+  eyring_s: Evaluated20;
   freq_hz: number;
-  sabine_s: Evaluated19;
+  sabine_s: Evaluated21;
 }
 /**
  * One band row of `Main results.gabe`.
@@ -5284,7 +5491,7 @@ export interface TcrReceiverBandReport {
   decay_curve?: DecayCurve | null;
   direct_db: number;
   freq_hz: number;
-  g_db: Evaluated20;
+  g_db: Evaluated22;
   parameters: Parameters1;
   total_eyring_db: number;
   total_sabine_db: number;
@@ -5310,13 +5517,20 @@ export interface CurvatureReport3 {
 export interface Parameters1 {
   c50_db: Evaluated3;
   c80_db: Evaluated4;
-  d50: Evaluated5;
+  /**
+   * The quantities the report was asked for beyond the fixed ones (`Report::custom`, parity R15
+   * and R20), in the order asked: each read by the same code as T20/T30, C50/C80 or D50 with its
+   * own range or time limit, judged and shown as they are, with the calibration it carries
+   * (`params::noise::extra_calibration`). Absent when nothing was asked (results version 18).
+   */
+  custom?: CustomValue[];
+  d50: Evaluated6;
   /**
    * EDT's status, range and validation (below `edt_s`'s value). Absent where EDT is not
    * computed from a histogram: TCR, and the several-sources refusal.
    */
   edt?: EdtReport | null;
-  edt_s: Evaluated6;
+  edt_s: Evaluated7;
   /**
    * Whether `edt_s` is a tested number: `edt.validated`, and false where there is no `edt`.
    * `edt_s` itself stays a bare value for the consumers that read it, so this is its marker:
@@ -5324,10 +5538,11 @@ export interface Parameters1 {
    * (decision-log row 20).
    */
   edt_validated: boolean;
-  spl_db: Evaluated7;
-  t20_s: Evaluated8;
-  t30_s: Evaluated9;
-  ts_s: Evaluated10;
+  spl_db: Evaluated8;
+  t15_s: Evaluated9;
+  t20_s: Evaluated10;
+  t30_s: Evaluated11;
+  ts_s: Evaluated12;
 }
 /**
  * The `Global` row, **an aggregate**, labelled.
@@ -5963,8 +6178,8 @@ export interface StiReport1 {
    * speech and noise levels, and each speech's MTI.
    */
   bands: BandSti[];
-  female: Evaluated13;
-  male: Evaluated14;
+  female: Evaluated15;
+  male: Evaluated16;
   /**
    * [`STI_METHOD`].
    */

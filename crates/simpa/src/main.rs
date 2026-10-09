@@ -5,6 +5,7 @@ use simpa_core::{config_xml, formats, schema, validate};
 
 mod aural_cmd;
 mod bed_cmd;
+mod extra_bed_cmd;
 mod mesh_run;
 mod results_cmd;
 
@@ -47,7 +48,13 @@ const USAGE: &str = "usage:
       'runs' beside the project (run) or in the current folder (run-folder). Exit 0 OK,
       2 usage or validation, 3 geometry refused, 4 mesh, 5 solver FAIL or CRASH, 130 cancelled.
   simpa results <run-folder> [--json]                        a verified run's results and parameters
-      exit 0; 2 usage; 5 the run is FAIL, CRASH or CANCELLED; 6 its results do not verify
+            [--decay-range <dB,...>] [--clarity-ms <ms,...>] [--definition-ms <ms,...>]
+      exit 0; 2 usage; 5 the run is FAIL, CRASH or CANCELLED; 6 its results do not verify.
+      The lists add decay times from -5 dB down each range (10 to 60 dB) and C and D at each
+      time limit (5 to 1000 ms) to every SPPS series, as parameters.custom
+  simpa bed-extra r15|r20|r27 [--out <file>]                M12c's closed-form beds of the numbers
+      parity added: the cases as JSON on stdout (and in <file>). Exit 0 only when every case holds;
+      8 not passed; 2 usage
   simpa results --schema                                     the JSON Schemas of results --json
   simpa reband <project.simpa> <out.simpa> --kind octave|third_octave --lo <hz> --hi <hz>
       the project moved onto every nominal band of that kind from --lo to --hi, each new band
@@ -106,6 +113,7 @@ fn main() -> ExitCode {
         ["advise", rest @ ..] => advise_cmd(rest),
         ["reband", rest @ ..] => reband_cmd(rest),
         ["bed", rest @ ..] => bed_cmd::bed_cmd(rest),
+        ["bed-extra", rest @ ..] => extra_bed_cmd::extra_bed_cmd(rest),
         ["auralize", rest @ ..] => aural_cmd::auralize_cmd(rest),
         [command, ..] => fail(&format!("unknown command '{command}'\n{USAGE}")),
     }

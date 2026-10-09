@@ -93,8 +93,12 @@ use crate::schema::SolverKind;
 /// advisor, decision 57): `advice`, each refused, `wide` or lost-particle-warned value's cause and
 /// the setting that addresses it, grouped by cause and fix (`crate::advise::after`), with the
 /// value "Apply" sets; it names a setting, never a value the run will produce. No other field
-/// changes.
-pub const REPORT_VERSION: u32 = 17;
+/// changes. 18 (parity R15, R20): `t15_s` in every `parameters`, T15 by T20's and T30's regression
+/// over -5 to -20 dB; and, when asked (`simpa results --decay-range`, `--clarity-ms`,
+/// `--definition-ms`), `custom` beside the report's other fields and `parameters.custom` in every
+/// SPPS series: decay times over chosen ranges and C and D at chosen time limits, each judged and
+/// shown as the fixed ones are, with a calibration it carries. No other field changes.
+pub const REPORT_VERSION: u32 = 18;
 
 /// A quantity's value, or why it has none.
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
@@ -232,6 +236,28 @@ impl Evaluated {
         }
     }
 
+    /// Extra `x` as the product shows it ([`Evaluated::of_parameter_with`] by the extra's own
+    /// limit and limen, `params::noise::shown_extra`).
+    pub fn of_extra(
+        x: decay::Extra,
+        r: Result<noise::Estimate, ParamError>,
+        w: &noise::Widen,
+    ) -> Self {
+        match noise::shown_extra(x, r, w) {
+            Ok(s) => Evaluated::Value {
+                value: s.value,
+                mc_sd: Some(s.sd),
+                status: Some(s.status),
+                lo: Some(s.lo),
+                hi: Some(s.hi),
+                refused_resamples: s.refused_resamples,
+                straddle: s.straddle.map(|(lo, hi)| [lo, hi]),
+                lost_share_warning: None,
+            },
+            Err(e) => Self::refused(e),
+        }
+    }
+
     /// The range's status, for a value that has one.
     pub fn status(&self) -> Option<noise::RangeStatus> {
         match self {
@@ -326,6 +352,12 @@ pub struct Parameters {
     pub t20_s: Evaluated,
     /// s.
     pub t30_s: Evaluated,
+    /// s. T15, the decay over -5 to -20 dB (upstream's TR15), by T20's and T30's regression over its
+    /// own range (`params::decay::Extra::T15`), with the same refusals. Its Monte-Carlo noise is
+    /// judged with a calibration it carries, not one measured for it
+    /// (`params::noise::extra_calibration`): of EDT's, T20's and T30's, the largest factor, on the
+    /// narrowest domain (results version 18).
+    pub t15_s: Evaluated,
     /// dB.
     pub c50_db: Evaluated,
     /// dB.
@@ -343,6 +375,22 @@ pub struct Parameters {
     /// a consumer that prints or exports `edt_s` carries "not yet validated" wherever this is false
     /// (decision-log row 20).
     pub edt_validated: bool,
+    /// The quantities the report was asked for beyond the fixed ones (`Report::custom`, parity R15
+    /// and R20), in the order asked: each read by the same code as T20/T30, C50/C80 or D50 with its
+    /// own range or time limit, judged and shown as they are, with the calibration it carries
+    /// (`params::noise::extra_calibration`). Absent when nothing was asked (results version 18).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub custom: Vec<CustomValue>,
+}
+
+/// One quantity asked for beyond the fixed ones ([`Parameters::custom`]).
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+pub struct CustomValue {
+    /// `t40_s`, `c30_db`, `d80` (`params::decay::Extra::name`).
+    pub name: String,
+    pub extra: decay::Extra,
+    /// In the quantity's unit: s, dB, or a fraction.
+    pub value: Evaluated,
 }
 
 impl Parameters {
@@ -360,6 +408,21 @@ impl Parameters {
         ]
     }
 
+    /// Every value the screen can show, with its path under `parameters`: the eight, T15 and the
+    /// custom quantities (`custom.<k>.value`).
+    pub fn shown_values(&self) -> Vec<(String, &Evaluated)> {
+        let mut out: Vec<(String, &Evaluated)> = self
+            .named()
+            .into_iter()
+            .map(|(n, e)| (n.to_string(), e))
+            .collect();
+        out.push(("t15_s".into(), &self.t15_s));
+        for (k, c) in self.custom.iter().enumerate() {
+            out.push((format!("custom.{k}.value"), &c.value));
+        }
+        out
+    }
+
     /// The seven onset-relative quantities refused as `several_sources`: ISO 3382-1 defines them
     /// per source–receiver pair. SPL, the level of every source together, stays.
     fn several_sources(&mut self, sources: &[&str]) {
@@ -372,6 +435,10 @@ impl Parameters {
         self.edt_validated = false;
         self.t20_s = refuse(Quantity::T20);
         self.t30_s = refuse(Quantity::T30);
+        self.t15_s = refuse(decay::Extra::T15.quantity());
+        for c in &mut self.custom {
+            c.value = refuse(c.extra.quantity());
+        }
         self.c50_db = refuse(Quantity::Clarity { te_s: 0.05 });
         self.c80_db = refuse(Quantity::Clarity { te_s: 0.08 });
         self.d50 = refuse(Quantity::Definition { te_s: 0.05 });
@@ -394,12 +461,14 @@ impl Parameters {
             edt_s: refuse(Quantity::Edt),
             t20_s: refuse(Quantity::T20),
             t30_s: refuse(Quantity::T30),
+            t15_s: refuse(decay::Extra::T15.quantity()),
             c50_db: refuse(Quantity::Clarity { te_s: 0.05 }),
             c80_db: refuse(Quantity::Clarity { te_s: 0.08 }),
             d50: refuse(Quantity::Definition { te_s: 0.05 }),
             ts_s: refuse(Quantity::CentreTime),
             edt: None,
             edt_validated: false,
+            custom: Vec::new(),
         }
     }
 }
@@ -413,7 +482,18 @@ pub fn parameters(
     arrival: Arrival,
     model: &NoiseModel,
 ) -> (Parameters, Option<Onset>) {
-    let e = evaluated(series, arrival, model);
+    parameters_with(series, arrival, model, &[])
+}
+
+/// [`parameters`], with `custom` computed beside them ([`Parameters::custom`]): what every SPPS
+/// series of [`report_with`] goes through, and what the M12c beds read (`results::extra_bed`).
+pub fn parameters_with(
+    series: &Result<EnergySeries, ParamError>,
+    arrival: Arrival,
+    model: &NoiseModel,
+    custom: &[decay::Extra],
+) -> (Parameters, Option<Onset>) {
+    let e = evaluated(series, arrival, model, custom);
     (e.parameters, e.onset)
 }
 
@@ -477,20 +557,41 @@ fn evaluated(
     series: &Result<EnergySeries, ParamError>,
     arrival: Arrival,
     model: &NoiseModel,
+    custom: &[decay::Extra],
 ) -> Evaluation {
-    let p = noise::evaluate(series, arrival, model);
+    // T15 first, then what was asked: one pass over the same resamples (`noise::evaluate_with`).
+    let extras: Vec<decay::Extra> = std::iter::once(decay::Extra::T15)
+        .chain(custom.iter().copied())
+        .collect();
+    let p = noise::evaluate_with(series, arrival, model, &extras);
+    let mut shown = extras
+        .iter()
+        .zip(p.extras.iter().cloned())
+        .map(|(x, (r, w))| Evaluated::of_extra(*x, r, &w));
+    let t15_s = shown.next().expect("T15");
+    let custom = custom
+        .iter()
+        .zip(shown)
+        .map(|(x, value)| CustomValue {
+            name: x.name(),
+            extra: *x,
+            value,
+        })
+        .collect();
     Evaluation {
         parameters: Parameters {
             spl_db: Evaluated::of_parameter_with(0, p.spl_db, &p.widen[0]),
             edt_s: Evaluated::of_parameter_with(1, p.edt_s, &p.widen[1]),
             t20_s: Evaluated::of_parameter_with(2, p.t20_s, &p.widen[2]),
             t30_s: Evaluated::of_parameter_with(3, p.t30_s, &p.widen[3]),
+            t15_s,
             c50_db: Evaluated::of_parameter_with(4, p.c50_db, &p.widen[4]),
             c80_db: Evaluated::of_parameter_with(5, p.c80_db, &p.widen[5]),
             d50: Evaluated::of_parameter_with(6, p.d50, &p.widen[6]),
             ts_s: Evaluated::of_parameter_with(7, p.ts_s, &p.widen[7]),
             edt: None,
             edt_validated: false,
+            custom,
         },
         curvature: CurvatureReport::of(p.curvature_percent),
         crossings_per_particle: p.crossings_per_particle,
@@ -1350,6 +1451,12 @@ pub struct Report {
     pub tcr: Option<TcrReport>,
     /// The room from the run's own inputs, for either solver (results version 12).
     pub room: RoomReport,
+    /// What the report was asked for beyond the fixed parameters (`simpa results --decay-range`,
+    /// `--clarity-ms`, `--definition-ms`; the Acoustics tab's own ranges and limits), in order;
+    /// each SPPS series' `parameters.custom` holds them in this order. Absent when none was asked
+    /// (results version 18).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub custom: Vec<decay::Extra>,
     /// The run-quality advisor's items (results version 17, backlog 80): for the refused,
     /// `wide` and lost-particle-warned values above, each cause once, the setting that addresses
     /// it and the value "Apply" sets, with the dot paths of the values it explains
@@ -1669,6 +1776,7 @@ fn aggregate_model(models: &[&NoiseModel]) -> NoiseModel {
 }
 
 /// The aggregate of `series` (one per band, `bands_hz`), with its noise model from `models`.
+#[allow(clippy::too_many_arguments)]
 fn aggregate_report(
     s: &SppsResults,
     bands_hz: &[i32],
@@ -1677,6 +1785,7 @@ fn aggregate_report(
     arrival: Arrival,
     contributing: &[&str],
     dba: DbaReport,
+    custom: &[decay::Extra],
 ) -> AggregateReport {
     let mut valid = Vec::new();
     let mut summed = Vec::new();
@@ -1696,7 +1805,7 @@ fn aggregate_report(
             e
         }
     });
-    let mut e = evaluated(&aggregate, arrival, &aggregate_model(&used));
+    let mut e = evaluated(&aggregate, arrival, &aggregate_model(&used), custom);
     e.set_edt(edt_report(s, &aggregate, arrival, true));
     // The bands summed: the largest share any of them lost.
     e.lost_particles(
@@ -1973,12 +2082,16 @@ impl Evaluation {
             (&mut p.edt_s, Quantity::Edt),
             (&mut p.t20_s, Quantity::T20),
             (&mut p.t30_s, Quantity::T30),
+            (&mut p.t15_s, decay::Extra::T15.quantity()),
             (&mut p.c50_db, Quantity::Clarity { te_s: 0.05 }),
             (&mut p.c80_db, Quantity::Clarity { te_s: 0.08 }),
             (&mut p.d50, Quantity::Definition { te_s: 0.05 }),
             (&mut p.ts_s, Quantity::CentreTime),
         ] {
             with_lost_tier(e, q, share);
+        }
+        for c in &mut p.custom {
+            with_lost_tier(&mut c.value, c.extra.quantity(), share);
         }
         with_lost_tier(&mut self.curvature.percent, Quantity::Curvature, share);
         if self.curvature.percent.refusal().is_some() {
@@ -2078,6 +2191,7 @@ fn receiver_report(
     s: &SppsResults,
     r: &PointReceiver,
     octave: bool,
+    custom: &[decay::Extra],
 ) -> SppsReceiverReport {
     let arrival_s = s.arrival_s(r);
     let arrival = known_arrival(s, arrival_s);
@@ -2107,7 +2221,7 @@ fn receiver_report(
             known_arrival(s, s.arrival_from(r, &contributing))
         };
         let se = series_of(s, i, b.freq_hz, &b.energy, arrival);
-        let mut e = evaluated(&se, arrival, &model);
+        let mut e = evaluated(&se, arrival, &model, custom);
         e.set_edt(edt_report(s, &se, arrival, false));
         e.lost_particles(s.lost_share(b.freq_hz));
         if contributing.len() > 1 {
@@ -2197,6 +2311,7 @@ fn receiver_report(
         arrival,
         &all_contributing,
         dba,
+        custom,
     );
     let per_source = r
         .echograms
@@ -2223,7 +2338,7 @@ fn receiver_report(
                 .zip(&models)
                 .enumerate()
                 .map(|(i, (((b, energy), se), model))| {
-                    let mut e = evaluated(se, arrival, model);
+                    let mut e = evaluated(se, arrival, model, custom);
                     e.set_edt(edt_report(s, se, arrival, false));
                     // SPPS counts lost particles per band, not per source: a source's echogram
                     // takes the band's share over every source's particles (decision 56).
@@ -2256,7 +2371,9 @@ fn receiver_report(
                 file: e.file.clone(),
                 arrival_s,
                 bands,
-                aggregate: aggregate_report(s, bands_hz, &series, &models, arrival, &name, dba),
+                aggregate: aggregate_report(
+                    s, bands_hz, &series, &models, arrival, &name, dba, custom,
+                ),
             }
         })
         .collect();
@@ -2274,7 +2391,12 @@ fn receiver_report(
 }
 
 /// `octave`: whether the run's bands are octave bands (STI is defined on octaves).
-fn spps_report(bands_hz: &[i32], s: &SppsResults, octave: bool) -> SppsReport {
+fn spps_report(
+    bands_hz: &[i32],
+    s: &SppsResults,
+    octave: bool,
+    custom: &[decay::Extra],
+) -> SppsReport {
     SppsReport {
         time_step_s: s.time_step_s,
         duration_s: s.duration_s,
@@ -2294,7 +2416,7 @@ fn spps_report(bands_hz: &[i32], s: &SppsResults, octave: bool) -> SppsReport {
         point_receivers: s
             .point_receivers
             .iter()
-            .map(|r| receiver_report(bands_hz, s, r, octave))
+            .map(|r| receiver_report(bands_hz, s, r, octave, custom))
             .collect(),
         surfaces: s.surfaces.iter().map(SurfaceSummary::of).collect(),
         particle_files: s.particle_files.clone(),
@@ -2342,6 +2464,13 @@ fn tcr_report(t: &TcrResults) -> TcrReport {
 /// The report of a verified run. [`checked_report`] also refuses one holding a number that is
 /// not finite.
 pub fn report(r: &RunResults) -> Report {
+    report_with(r, &[])
+}
+
+/// [`report`], with `custom` computed for every SPPS series beside the fixed parameters
+/// ([`Parameters::custom`]); each must pass `params::decay::Extra::check` ([`checked_custom`]).
+/// A TCR run writes no series: its parameters carry none.
+pub fn report_with(r: &RunResults, custom: &[decay::Extra]) -> Report {
     let (spps, tcr) = match &r.data {
         SolverResults::Spps(s) => {
             // Octave bands when every `freq_enum` item is an octave nominal, as
@@ -2353,7 +2482,7 @@ pub fn report(r: &RunResults) -> Report {
                         .contains(&f)
                 })
             });
-            (Some(spps_report(&r.bands_hz, s, octave)), None)
+            (Some(spps_report(&r.bands_hz, s, octave, custom)), None)
         }
         SolverResults::Tcr(t) => (None, Some(tcr_report(t))),
     };
@@ -2371,6 +2500,7 @@ pub fn report(r: &RunResults) -> Report {
         spps,
         tcr,
         room: RoomReport::of(&r.room),
+        custom: custom.to_vec(),
         advice: Vec::new(),
     };
     rep.advice = crate::advise::after(&rep, &crate::advise::RunFacts::read(r, &rep));
@@ -2381,7 +2511,23 @@ pub fn report(r: &RunResults) -> Report {
 /// serde_json prints such a number as `null`, which a reader cannot tell from a value that is
 /// absent, so the report is walked before it is printed ([`non_finite`]).
 pub fn checked_report(r: &RunResults) -> Result<Report, Refusal> {
-    let rep = report(r);
+    checked_report_with(r, &[])
+}
+
+/// The quantities asked for, checked (`params::decay::Extra::check`): the first that cannot be
+/// computed, in words.
+pub fn checked_custom(custom: &[decay::Extra]) -> Result<(), String> {
+    for x in custom {
+        x.check()?;
+    }
+    Ok(())
+}
+
+/// [`checked_report`] of [`report_with`]. The request is the caller's to check first
+/// ([`checked_custom`]); an extra outside its range is computed and refused by `params` as it
+/// reads.
+pub fn checked_report_with(r: &RunResults, custom: &[decay::Extra]) -> Result<Report, Refusal> {
+    let rep = report_with(r, custom);
     let bad = non_finite(&rep);
     if bad.is_empty() {
         Ok(rep)
@@ -2724,8 +2870,8 @@ mod tests {
     /// the pair below no longer matches: bump the version, write its history line (here and in
     /// `docs/formats/results-json.md`), and pin the new pair.
     const REQUIRED_FIELDS_PIN: (u32, &str) = (
-        17,
-        "3f9ae1039d7c463a044201d57cac4222c5e98ac386dc92ca4e1eebe016e55071",
+        18,
+        "c921a1ae6f4070efff905da9810b48fb3f47a89f69811117842b43912b290cd9",
     );
 
     /// Every `required` list of `v`, as `<path>: <fields, sorted>`, sorted.
@@ -2866,7 +3012,7 @@ mod tests {
         // Several sources withhold the curve with the curvature.
         let s = EnergySeries::new(0.01, (0..100).map(|k| 0.9f64.powi(k)).collect()).unwrap();
         let model = NoiseModel::crossings(1e-6, noise::Method::Random, None).unwrap();
-        let mut e = evaluated(&Ok(s), Arrival::at(0.0), &model);
+        let mut e = evaluated(&Ok(s), Arrival::at(0.0), &model, &[]);
         assert!(e.decay_curve.is_some());
         e.several_sources(&["A", "B"]);
         assert!(e.decay_curve.is_none());
@@ -2888,8 +3034,10 @@ mod tests {
             c80_db: v(),
             d50: v(),
             ts_s: v(),
+            t15_s: v(),
             edt: None,
             edt_validated: false,
+            custom: Vec::new(),
         };
         p.several_sources(&["A", "B"]);
         assert_eq!(p.spl_db.value(), Some(1.0));
@@ -3068,7 +3216,7 @@ mod tests {
     }
 
     fn band_edt(s: &SppsResults) -> EdtReport {
-        let rep = receiver_report(&[500], s, &s.point_receivers[0], true);
+        let rep = receiver_report(&[500], s, &s.point_receivers[0], true, &[]);
         rep.bands[0].parameters.edt.clone().expect("an EDT report")
     }
 
@@ -3082,7 +3230,7 @@ mod tests {
         assert!((arrival_s - (0.016 + direct_s)).abs() < 1e-6);
         let bins = decay(1500, arrival_s, 0.6);
         let s = edt_run(0, delay_s, bins.clone());
-        let r = receiver_report(&[500], &s, &s.point_receivers[0], true);
+        let r = receiver_report(&[500], &s, &s.point_receivers[0], true, &[]);
         assert_eq!(r.arrival_s, Some(arrival_s));
         let got = r.bands[0].parameters.edt.clone().unwrap();
         assert_eq!(got.arrival_s, Some(arrival_s));
@@ -3108,7 +3256,7 @@ mod tests {
         let arrival_s = emission_s(0.0, DT) + DISTANCE_M / C;
         // A decay the run covers: a value, in `edt_s` and in `edt`.
         let s = edt_run(0, 0.0, decay(1500, arrival_s, 0.6));
-        let rep = receiver_report(&[500], &s, &s.point_receivers[0], true);
+        let rep = receiver_report(&[500], &s, &s.point_receivers[0], true, &[]);
         let p = &rep.bands[0].parameters;
         let e = p.edt.as_ref().unwrap();
         assert_ne!(e.status, edt::Status::Refused, "{e:?}");
@@ -3116,7 +3264,7 @@ mod tests {
         assert!(e.lo_s.unwrap() < e.value_s.unwrap() && e.value_s.unwrap() < e.hi_s.unwrap());
         // A run that ends before the decay does: refused, with the method's reason.
         let s = edt_run(0, 0.0, decay(60, arrival_s, 0.6));
-        let rep = receiver_report(&[500], &s, &s.point_receivers[0], true);
+        let rep = receiver_report(&[500], &s, &s.point_receivers[0], true, &[]);
         let p = &rep.bands[0].parameters;
         let e = p.edt.as_ref().unwrap();
         assert_eq!(e.status, edt::Status::Refused);
@@ -3251,7 +3399,7 @@ mod tests {
         assert_eq!(random.value_s, energetic.value_s);
         assert_eq!((random.lo_s, random.hi_s), (energetic.lo_s, energetic.hi_s));
         let s = edt_run(1, 0.0, bins);
-        let rep = receiver_report(&[500], &s, &s.point_receivers[0], true);
+        let rep = receiver_report(&[500], &s, &s.point_receivers[0], true, &[]);
         assert!(rep.bands[0].parameters.edt_validated);
         let json = serde_json::to_value(&rep).unwrap();
         assert_eq!(json["bands"][0]["parameters"]["edt"]["validated"], true);
@@ -3288,7 +3436,7 @@ mod tests {
                 "mode {method}"
             );
             assert_eq!(e.value_s, o.edt, "mode {method}: the method's value");
-            let rep = receiver_report(&[500], &s, &s.point_receivers[0], true);
+            let rep = receiver_report(&[500], &s, &s.point_receivers[0], true, &[]);
             assert!(!rep.bands[0].parameters.edt_validated, "mode {method}");
             // The aggregate names both of its reasons.
             let agg = rep
@@ -3344,7 +3492,7 @@ mod tests {
         // The marker beside edt_s follows it.
         let mut s = edt_run(0, 0.0, bins.clone());
         s.receiver_radius_m = 1.5;
-        let rep = receiver_report(&[500], &s, &s.point_receivers[0], true);
+        let rep = receiver_report(&[500], &s, &s.point_receivers[0], true, &[]);
         assert!(!rep.bands[0].parameters.edt_validated);
     }
 
@@ -3356,7 +3504,7 @@ mod tests {
         let bins = decay(1500, arrival_s, 0.6);
         for method in [0, 1] {
             let s = edt_run(method, 0.0, bins.clone());
-            let rep = receiver_report(&[500], &s, &s.point_receivers[0], true);
+            let rep = receiver_report(&[500], &s, &s.point_receivers[0], true, &[]);
             let agg = rep
                 .aggregate
                 .parameters
@@ -3388,7 +3536,7 @@ mod tests {
         let bins = decay(1500, DISTANCE_M / C, 0.6);
         let marker = |method: i32, at: &dyn Fn(&Value) -> Value| {
             let s = edt_run(method, 0.0, bins.clone());
-            let rep = receiver_report(&[500], &s, &s.point_receivers[0], true);
+            let rep = receiver_report(&[500], &s, &s.point_receivers[0], true, &[]);
             at(&serde_json::to_value(&rep).unwrap())
         };
         let band = |j: &Value| j["bands"][0]["parameters"]["edt_validated"].clone();
@@ -3443,7 +3591,12 @@ mod tests {
     #[test]
     fn a_band_refused_for_its_noise_shows_its_value_and_range_marked_wide() {
         let (d, value, sd) = noisy_t20();
-        let e = evaluated(&Ok(exponential(100)), Arrival::at(0.0), &random_model(d));
+        let e = evaluated(
+            &Ok(exponential(100)),
+            Arrival::at(0.0),
+            &random_model(d),
+            &[],
+        );
         let half = 2.5 * sd;
         assert_eq!(
             e.parameters.t20_s,
@@ -3469,7 +3622,12 @@ mod tests {
     #[test]
     fn a_quiet_band_shows_every_value_ok_with_its_range() {
         // 200 bins, 92 dB: no unseen tail moves T30.
-        let e = evaluated(&Ok(exponential(200)), Arrival::at(0.0), &random_model(1e-9));
+        let e = evaluated(
+            &Ok(exponential(200)),
+            Arrival::at(0.0),
+            &random_model(1e-9),
+            &[],
+        );
         for (i, (name, q)) in e.parameters.named().into_iter().enumerate() {
             let Evaluated::Value {
                 value,
@@ -3497,7 +3655,12 @@ mod tests {
     fn a_refusal_not_about_noise_stays_a_refusal_however_noisy_the_band() {
         let (d, _, _) = noisy_t20();
         // 30 bins decay 13.7 dB: T20 needs 25.
-        let e = evaluated(&Ok(exponential(30)), Arrival::at(0.0), &random_model(d));
+        let e = evaluated(
+            &Ok(exponential(30)),
+            Arrival::at(0.0),
+            &random_model(d),
+            &[],
+        );
         for q in [&e.parameters.t20_s, &e.parameters.t30_s] {
             let r = q.refusal().unwrap_or_else(|| panic!("{q:?}"));
             assert!(
@@ -3515,6 +3678,7 @@ mod tests {
             &Err(ParamError::NoEnergy),
             Arrival::at(0.0),
             &random_model(d),
+            &[],
         );
         for (name, q) in e.parameters.named() {
             assert!(q.refusal().is_some(), "{name}");
@@ -3523,7 +3687,7 @@ mod tests {
         let unknown = NoiseModel::Unknown {
             detail: "a balloon".into(),
         };
-        let e = evaluated(&Ok(exponential(100)), Arrival::at(0.0), &unknown);
+        let e = evaluated(&Ok(exponential(100)), Arrival::at(0.0), &unknown, &[]);
         assert!(matches!(
             e.parameters.t20_s.refusal().unwrap().error.not_evaluable(),
             Some(NotEvaluable::NoiseUnknown { .. })
@@ -3536,7 +3700,12 @@ mod tests {
     #[test]
     fn the_json_carries_status_and_range_beside_the_value() {
         let (d, value, sd) = noisy_t20();
-        let e = evaluated(&Ok(exponential(100)), Arrival::at(0.0), &random_model(d));
+        let e = evaluated(
+            &Ok(exponential(100)),
+            Arrival::at(0.0),
+            &random_model(d),
+            &[],
+        );
         let j = serde_json::to_value(&e.parameters).unwrap();
         let t20 = &j["t20_s"];
         assert_eq!(t20["status"], "wide");
@@ -3574,7 +3743,7 @@ mod tests {
     fn edt_s_carries_the_methods_status_and_range() {
         let bins = decay(1500, DISTANCE_M / C, 0.6);
         let s = edt_run(0, 0.0, bins);
-        let rep = receiver_report(&[500], &s, &s.point_receivers[0], true);
+        let rep = receiver_report(&[500], &s, &s.point_receivers[0], true, &[]);
         let p = &rep.bands[0].parameters;
         let edt = p.edt.as_ref().unwrap();
         let Evaluated::Value { status, lo, hi, .. } = &p.edt_s else {
@@ -3627,7 +3796,12 @@ mod tests {
         if let Some(sd) = sd {
             assert!(st.sd >= sd, "{st:?} {sd}");
         }
-        let e = evaluated(&Ok(exponential(200)), Arrival::at(0.0), &random_model(d));
+        let e = evaluated(
+            &Ok(exponential(200)),
+            Arrival::at(0.0),
+            &random_model(d),
+            &[],
+        );
         let half = 2.5 * st.sd;
         assert_eq!(
             e.parameters.t30_s,
@@ -3683,7 +3857,7 @@ mod tests {
         let early = energy(0.0, ta + 0.05);
         let truth = 10.0 * (early / (1.0 + direct + refl - early)).log10();
         let s = EnergySeries::complete(dt, bins).unwrap();
-        let e = evaluated(&Ok(s), Arrival::at(ta), &random_model(1e-12));
+        let e = evaluated(&Ok(s), Arrival::at(ta), &random_model(1e-12), &[]);
         let Evaluated::Value {
             value,
             status,
@@ -3902,7 +4076,7 @@ mod tests {
     #[test]
     fn several_sources_g_sums_their_energies_against_their_free_fields_summed() {
         let s = two_source_run();
-        let rep = receiver_report(&[500, 1000], &s, &s.point_receivers[0], true);
+        let rep = receiver_report(&[500, 1000], &s, &s.point_receivers[0], true, &[]);
         let free = |p: f64| level::free_field_pa2(p, 10.0);
         let rho_c = 413.25;
         for (i, b) in rep.bands.iter().enumerate() {
@@ -4022,7 +4196,7 @@ mod tests {
     fn a_receiver_with_the_seven_octaves_carries_sti_male_shown_and_female_beside_it() {
         let octaves = [125, 250, 500, 1000, 2000, 4000, 8000];
         let s = octave_run(&octaves, decay(3000, DISTANCE_M / C, 1.0), 0.0);
-        let rep = receiver_report(&octaves, &s, &s.point_receivers[0], true);
+        let rep = receiver_report(&octaves, &s, &s.point_receivers[0], true, &[]);
         let sti = &rep.sti;
         assert_eq!(sti.shown, sti::Gender::Male);
         assert!(
@@ -4053,11 +4227,11 @@ mod tests {
         );
         // The same with a background noise of 45 dB in every band: lower, and said so.
         let noisy = octave_run(&octaves, decay(3000, DISTANCE_M / C, 1.0), 45.0);
-        let rep = receiver_report(&octaves, &noisy, &noisy.point_receivers[0], true);
+        let rep = receiver_report(&octaves, &noisy, &noisy.point_receivers[0], true, &[]);
         assert_eq!(rep.sti.noise, STI_NOISE_RECEIVER);
         assert!(rep.sti.male.value().unwrap() < male - 0.01);
         // Third-octave bands refuse.
-        let rep = receiver_report(&octaves, &s, &s.point_receivers[0], false);
+        let rep = receiver_report(&octaves, &s, &s.point_receivers[0], false, &[]);
         assert!(matches!(
             rep.sti.male.refusal().unwrap().error.not_evaluable(),
             Some(NotEvaluable::NotOctaveBands { .. })
@@ -4068,7 +4242,7 @@ mod tests {
     fn a_run_without_the_seven_octaves_refuses_sti_naming_the_band() {
         let six = [125, 250, 500, 1000, 2000, 4000];
         let s = octave_run(&six, decay(3000, DISTANCE_M / C, 1.0), 0.0);
-        let rep = receiver_report(&six, &s, &s.point_receivers[0], true);
+        let rep = receiver_report(&six, &s, &s.point_receivers[0], true, &[]);
         for e in [&rep.sti.male, &rep.sti.female] {
             let r = e.refusal().expect("refused");
             assert_eq!(r.code, crate::params::codes::NOT_EVALUABLE);
@@ -4111,7 +4285,7 @@ mod tests {
     fn a_band_with_particles_alive_at_the_end_gives_sti_when_what_they_carry_cannot_move_it() {
         let octaves = [125, 250, 500, 1000, 2000, 4000, 8000];
         let ended = energetic_octave_run(&octaves, 0, 0.0);
-        let want = receiver_report(&octaves, &ended, &ended.point_receivers[0], true)
+        let want = receiver_report(&octaves, &ended, &ended.point_receivers[0], true, &[])
             .sti
             .male
             .value()
@@ -4119,11 +4293,11 @@ mod tests {
         // One particle alive at the end, holding 1e-12 of the emitted energy: the same STI.
         let one = energetic_octave_run(&octaves, 1, 1e-12);
         assert!(!one.band_complete(125));
-        let rep = receiver_report(&octaves, &one, &one.point_receivers[0], true);
+        let rep = receiver_report(&octaves, &one, &one.point_receivers[0], true, &[]);
         assert_eq!(rep.sti.male.value(), Some(want), "{:?}", rep.sti.male);
         // Particles alive at the end holding half of it: refused, saying why.
         let half = energetic_octave_run(&octaves, 1, 0.5);
-        let rep = receiver_report(&octaves, &half, &half.point_receivers[0], true);
+        let rep = receiver_report(&octaves, &half, &half.point_receivers[0], true, &[]);
         let r = rep.sti.male.refusal().expect("refused");
         assert!(
             matches!(
@@ -4145,7 +4319,7 @@ mod tests {
         let octaves = [125, 250, 500, 1000, 2000, 4000, 8000];
         let mut s = octave_run(&octaves, decay(3000, DISTANCE_M / C, 1.0), 0.0);
         s.point_receivers[0].bands[3].background_noise_db = 40.0;
-        let rep = receiver_report(&octaves, &s, &s.point_receivers[0], true);
+        let rep = receiver_report(&octaves, &s, &s.point_receivers[0], true, &[]);
         assert_eq!(rep.sti.noise, STI_NOISE_RECEIVER);
         for b in &rep.sti.bands {
             assert_eq!(
@@ -4173,7 +4347,7 @@ mod tests {
     }
 
     fn lost_band(s: &SppsResults) -> SppsReceiverReport {
-        receiver_report(&[500], s, &s.point_receivers[0], true)
+        receiver_report(&[500], s, &s.point_receivers[0], true, &[])
     }
 
     /// The share a value carries as a warning, or why it has none.
@@ -4473,7 +4647,7 @@ mod tests {
         let octaves = [125, 250, 500, 1000, 2000, 4000, 8000];
         let sti = |lost: u32| {
             let s = lost_octave_run(lost);
-            receiver_report(&octaves, &s, &s.point_receivers[0], true).sti
+            receiver_report(&octaves, &s, &s.point_receivers[0], true, &[]).sti
         };
         let none = sti(0);
         assert!(none.male.value().is_some(), "{:?}", none.male);
@@ -4498,7 +4672,7 @@ mod tests {
     #[test]
     fn several_sources_refuse_sti() {
         let s = two_source_run();
-        let rep = receiver_report(&[500, 1000], &s, &s.point_receivers[0], true);
+        let rep = receiver_report(&[500, 1000], &s, &s.point_receivers[0], true, &[]);
         for e in [&rep.sti.male, &rep.sti.female] {
             assert!(
                 matches!(

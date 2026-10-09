@@ -19,10 +19,19 @@ export const MQ2_WORDING =
 /** Decision-log row 37 (1)-(2)'s two marks, shown with EDT wherever it appears (row 37 (5)). */
 export const EDT_MARKS = ['EDT unchecked for receivers larger than one metre in radius', 'EDT unchecked in energetic mode'] as const;
 
+/** Parity R15/R20: the words beside the inputs of the "Chosen ranges and limits" card
+ * (`[data-label="custom"]`, the UI's `CUSTOM_HINTS`), word for word. */
+export const CUSTOM_HINTS: readonly string[] = [
+  'Decay ranges: how far below −5 dB each fit ends, dB',
+  'Clarity time limits, ms',
+  'Definition time limits, ms',
+];
+
 /** Each parameter's name on screen, by its name in beds/summary.json. */
 export const PARAM_LABELS: Record<string, string> = {
   spl_db: 'SPL',
   edt_s: 'EDT',
+  t15_s: 'T15',
   t20_s: 'T20',
   t30_s: 'T30',
   c50_db: 'C50',

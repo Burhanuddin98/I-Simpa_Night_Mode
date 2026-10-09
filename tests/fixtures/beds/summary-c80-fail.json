@@ -57,6 +57,16 @@
       "status": "PASS",
       "reasons": [],
       "notes": []
+    },
+    "t15_s": {
+      "status": "PASS",
+      "reasons": [],
+      "notes": []
+    },
+    "decay_custom": {
+      "status": "PASS",
+      "reasons": [],
+      "notes": []
     }
   }
 }

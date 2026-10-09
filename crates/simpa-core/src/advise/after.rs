@@ -222,7 +222,7 @@ pub fn after(report: &Report, facts: &RunFacts) -> Vec<Advice> {
 }
 
 fn push_params<'a>(out: &mut Vec<(String, &'a Evaluated)>, base: &str, p: &'a Parameters) {
-    for (name, e) in p.named() {
+    for (name, e) in p.shown_values() {
         out.push((format!("{base}.parameters.{name}"), e));
     }
 }

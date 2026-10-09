@@ -27,6 +27,10 @@ import {
   sourceNote,
   sources,
   shownParams,
+  customCell,
+  customColumns,
+  customSpec,
+  parseCustom,
   STI_NOTE,
   T30_MARK,
 } from './model.ts';
@@ -36,6 +40,7 @@ const refused = (why: string) => ({ not_evaluable: { code: 'params_not_evaluable
 const params = (t30: unknown, edtValidated = true) => ({
   spl_db: value(60.04),
   edt_s: value(0.61, 'wide', 0.05),
+  t15_s: value(0.52),
   t20_s: value(0.555),
   t30_s: t30,
   c50_db: value(1.25),
@@ -101,9 +106,9 @@ test('Acoustics: the words are MQ2s and no mark says validated', () => {
 });
 
 test('Acoustics: only the parameters the report says PASS are shown, read from report.bed', () => {
-  assert.deepEqual(shownParams(report()).map((p) => p.name), ['spl_db', 't20_s', 'c50_db', 'c80_db', 'd50', 'ts_s', 'sti']);
+  assert.deepEqual(shownParams(report()).map((p) => p.name), ['spl_db', 't15_s', 't20_s', 'c50_db', 'c80_db', 'd50', 'ts_s', 'sti']);
   // Says no: the same report with SPL failed and T30 passed shows the other set.
-  assert.deepEqual(shownParams(report(['spl_db'])).map((p) => p.name), ['g_db', 'edt_s', 't20_s', 't30_s', 'c50_db', 'c80_db', 'd50', 'ts_s', 'sti', 'dba']);
+  assert.deepEqual(shownParams(report(['spl_db'])).map((p) => p.name), ['g_db', 'edt_s', 't15_s', 't20_s', 't30_s', 'c50_db', 'c80_db', 'd50', 'ts_s', 'sti', 'dba']);
   // A report with no bed shows nothing; a status other than PASS hides.
   assert.deepEqual(shownParams({ ...report(), bed: undefined } as unknown as Report), []);
   const odd = report();
@@ -111,7 +116,7 @@ test('Acoustics: only the parameters the report says PASS are shown, read from r
   assert.ok(!shownParams(odd).some((p) => p.name === 'spl_db'));
   // Every row of the receivers table has exactly the shown parameters' cells.
   for (const row of receiverRows(report(), 0)) {
-    assert.equal(row.cells.length, 7);
+    assert.equal(row.cells.length, 8);
     assert.ok(row.cells.every((c) => c === null || !['t30_s', 'edt_s', 'g_db', 'dba'].includes(c.param)));
   }
 });
@@ -213,10 +218,11 @@ test('Acoustics: EDT, when shown, carries why it is unchecked where edt_validate
 
 test('Acoustics: the RT series are the shown reverberation times, value for value, refusals as gaps', () => {
   const s = rtSeries(report(['spl_db']), 0);
-  assert.deepEqual(s.map((x) => x.param), ['edt_s', 't20_s', 't30_s']);
-  assert.deepEqual(s[2].values, [0.6, null]);
-  assert.equal(s[2].paths[1], 'spps.point_receivers.0.bands.1.parameters.t30_s.value');
-  assert.deepEqual(rtSeries(report(), 1).map((x) => x.param), ['t20_s']);
+  assert.deepEqual(s.map((x) => x.param), ['edt_s', 't15_s', 't20_s', 't30_s']);
+  assert.deepEqual(s[3].values, [0.6, null]);
+  assert.equal(s[3].paths[1], 'spps.point_receivers.0.bands.1.parameters.t30_s.value');
+  assert.deepEqual(s[1].values, [0.52, 0.52], 'T15 drawn as its cells show it');
+  assert.deepEqual(rtSeries(report(), 1).map((x) => x.param), ['t15_s', 't20_s']);
 });
 
 test('Acoustics: the RT chart goes through the tables filter: only what a cell shows is drawn, with its range', () => {
@@ -242,7 +248,7 @@ test('Acoustics: the RT chart goes through the tables filter: only what a cell s
   assert.equal(by('t30_s').loPaths[0], 'spps.point_receivers.0.bands.0.parameters.t30_s.lo');
   assert.equal(by('t30_s').hiPaths[0], 'spps.point_receivers.0.bands.0.parameters.t30_s.hi');
   // Only PASS parameters are drawn (gate (b)), as before.
-  assert.deepEqual(rtSeries(report(), 0).map((x) => x.param), ['t20_s']);
+  assert.deepEqual(rtSeries(report(), 0).map((x) => x.param), ['t15_s', 't20_s']);
 });
 
 test('Acoustics R9: the spectrum is the receivers table’s SPL, band by band, gaps where a cell shows none', () => {
@@ -534,4 +540,26 @@ test('R36: a TCR receiver shows its direct and total levels per band, and the Gl
   assert.equal(sum[0].sabine?.path, 'tcr.point_receivers.0.global.total_sabine_db');
   assert.equal(sum[0].sabine?.text, '72.7');
   assert.deepEqual(tcrLevels(report([]), 0), [], 'none for an SPPS run');
+});
+
+test('Acoustics R15: chosen decay ranges parse, are shown only by their bed, and read the report at their path', () => {
+  assert.deepEqual(parseCustom('decay', ' 40, 50,40 '), { ok: true, list: [{ kind: 'decay', span_db: 40 }, { kind: 'decay', span_db: 50 }] });
+  assert.deepEqual(parseCustom('decay', ''), { ok: true, list: [] });
+  // Says no: outside the core's 10-60 dB, or not a whole number.
+  assert.equal(parseCustom('decay', '9').ok, false);
+  assert.equal(parseCustom('decay', '61').ok, false);
+  assert.equal(parseCustom('decay', '40.5').ok, false);
+  assert.equal(customSpec({ kind: 'decay', span_db: 40 }).label, 'T40');
+  const r = report() as unknown as Record<string, unknown> & { spps: { point_receivers: { bands: { parameters: Record<string, unknown> }[] }[] } };
+  r.custom = [{ kind: 'decay', span_db: 40 }];
+  for (const rx of r.spps.point_receivers) for (const b of rx.bands) b.parameters.custom = [{ name: 't40_s', extra: { kind: 'decay', span_db: 40 }, value: value(0.73) }];
+  const rep = r as unknown as Report;
+  // The bed fixture has no decay_custom entry: withheld.
+  assert.deepEqual(customColumns(rep).map((c) => [c.spec.name, c.shown]), [['t40_s', false]]);
+  (rep.bed.parameters as unknown as Record<string, unknown>).decay_custom = { status: 'PASS', reasons: [], notes: [] };
+  assert.deepEqual(customColumns(rep).map((c) => [c.spec.name, c.shown]), [['t40_s', true]]);
+  const c = customCell(rep, 0, 1, 0)!;
+  assert.equal(c.status, 'ok');
+  assert.deepEqual(c.value, { path: 'spps.point_receivers.1.bands.0.parameters.custom.0.value.value', digits: 2, text: '0.73' });
+  assert.equal(customCell(rep, 1, 0, 0), null, 'no second chosen quantity');
 });

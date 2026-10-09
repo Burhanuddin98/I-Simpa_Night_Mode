@@ -26,7 +26,7 @@ import {
   type Unit,
   type Up,
 } from './backend';
-import type { AboutInfo, Setting, UiIssue } from './bindings/ipc';
+import type { AboutInfo, Extra, Setting, UiIssue } from './bindings/ipc';
 import type { BandKind, Op, ReflectionLaw } from './bindings/schema';
 import { blockerText, regroupFaces } from './chrome/sceneModel';
 import { withBandLaw } from './features/materials/law';
@@ -74,6 +74,7 @@ import {
   type PromptChoice,
   refusalStore,
   reportStore,
+  customStore,
   resultsStore,
   type RunLog,
   runLinesStore,
@@ -833,13 +834,28 @@ export async function resultsFor(runName: string): Promise<ResultsState> {
 /** `run`'s report, as `simpa results --json` prints it, with its bed statuses and the open
  * project's group names (M12 P2), fetched once per run. */
 export async function reportFor(runName: string): Promise<ReportView> {
+  const custom = customStore.get();
   const cached = reportStore.get().get(runName);
-  if (cached) return cached;
-  const view = await run(`Reading the results of ${runName}`, () => backend.runReport(runName));
+  // Parity R15/R20: a report read for other ranges and limits is read again.
+  if (cached && (!cached.report || sameCustom(cached.report.custom ?? [], custom))) return cached;
+  const view = await run(`Reading the results of ${runName}`, () => backend.runReport(runName, custom));
   const next = new Map(reportStore.get());
   next.set(runName, view);
   reportStore.set(next);
   return view;
+}
+
+/** Whether two lists of asked quantities are the same, in order (a report's `custom` and the tab's). */
+export function sameCustom(a: readonly Extra[], b: readonly Extra[]): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/** Parity R15/R20: the decay ranges and C/D time limits every report is asked for from now on; the
+ * reports read for others are dropped and read again when shown. */
+export function setCustom(list: readonly Extra[]): void {
+  if (sameCustom(list, customStore.get())) return;
+  customStore.set([...list]);
+  reportStore.set(new Map());
 }
 
 /** W9: asks the save dialog where a `kind` export goes (null: cancelled), unless `path` is given. */

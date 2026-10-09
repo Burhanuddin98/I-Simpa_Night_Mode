@@ -11,6 +11,7 @@ const value = (v: number, status = 'ok', d = 0.01) => ({ value: v, mc_sd: d, sta
 const refused = (why: string) => ({ not_evaluable: { code: 'params_not_evaluable', message: 'm', error: { kind: 'not_evaluable', why: { why } } } });
 const params = (t30: unknown) => ({
   spl_db: value(60.04123456789),
+  t15_s: value(0.52),
   t20_s: value(0.555),
   t30_s: t30,
   c80_db: { value: 3.5, mc_sd: 0.1, status: 'ok' },
@@ -41,7 +42,7 @@ test('rows: the shown parameters only, every receiver, band and the bands summed
   const r = report();
   const rows = paramRows(r);
   const params = [...new Set(rows.map((x) => x.parameter))];
-  assert.deepEqual(params, ['spl_db', 't20_s', 't30_s', 'c80_db', 'sti']);
+  assert.deepEqual(params, ['spl_db', 't15_s', 't20_s', 't30_s', 'c80_db', 'sti']);
   // say NO: a FAIL parameter is not exported, whatever the report holds for it.
   assert.ok(!rows.some((x) => x.parameter === 'g_db' || x.parameter === 'dba'));
   // spl: 2 receivers x (2 bands + sum); sti: once a receiver.

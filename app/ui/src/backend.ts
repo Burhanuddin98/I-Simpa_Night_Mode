@@ -13,6 +13,7 @@ import type {
   EchogramView,
   EditOutcome,
   EventsProbeReport,
+  Extra,
   FloatProbe,
   GpuStatus,
   LibraryMaterial,
@@ -205,7 +206,7 @@ export const backend = {
   // M12 (docs/investigations/2026-10-03-m12/PLAN.md, P1 item 3): the Results step's reads. The
   // report is the CLI's (`simpa results --json`); a parameter is shown only when its
   // `report.bed.parameters[name].status` is PASS (gate (b)). The bytes decode in resultsData.ts.
-  runReport: (run: string) => invoke<ReportView>('run_report', { run }),
+  runReport: (run: string, custom: readonly Extra[] = []) => invoke<ReportView>('run_report', { run, custom }),
   runData: (run: string) => invoke<RunDataIndex>('run_data', { run }),
   /**
    * A surface map, `path` as `runData` lists it, as SMAP bytes (`decodeSurfaceMap`). `maxTexels` is the

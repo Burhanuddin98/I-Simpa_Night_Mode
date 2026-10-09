@@ -327,6 +327,10 @@ pub enum DecayRange {
     T20,
     /// −5 dB to −35 dB.
     T30,
+    /// −5 dB to `−(5 + span_db)` dB: T15 is 15 (upstream's TR list, which starts every range at
+    /// −5 dB, `projet_calculation.cpp`, `Compute_TR_Param(5, TR + 5, …)`). Fitted by the same
+    /// regression as T20 and T30 ([`Extra::Decay`]).
+    Span { span_db: u32 },
 }
 
 impl DecayRange {
@@ -334,7 +338,7 @@ impl DecayRange {
     pub fn top_db(self) -> f64 {
         match self {
             DecayRange::Edt => 0.0,
-            DecayRange::T20 | DecayRange::T30 => -5.0,
+            DecayRange::T20 | DecayRange::T30 | DecayRange::Span { .. } => -5.0,
         }
     }
 
@@ -344,6 +348,7 @@ impl DecayRange {
             DecayRange::Edt => -10.0,
             DecayRange::T20 => -25.0,
             DecayRange::T30 => -35.0,
+            DecayRange::Span { span_db } => -5.0 - f64::from(span_db),
         }
     }
 
@@ -352,6 +357,7 @@ impl DecayRange {
             DecayRange::Edt => Quantity::Edt,
             DecayRange::T20 => Quantity::T20,
             DecayRange::T30 => Quantity::T30,
+            DecayRange::Span { span_db } => Quantity::Decay { span_db },
         }
     }
 }
@@ -571,40 +577,150 @@ pub struct Straddle {
 /// it, and EDT, T20 and T30 do not depend on where time starts: they are computed as if no
 /// arrival were given (`BandParameters::decay_arrival`).
 pub fn evaluate(series: &EnergySeries, arrival: Arrival) -> BandParameters {
+    evaluate_with(series, arrival, &[]).0
+}
+
+/// A quantity beyond the fixed ones, read by the same code with another decay range or window
+/// edge (parity R15, R20): what upstream's "Calculate acoustic parameters" dialog asks for, a list
+/// of decay ranges in dB below −5 dB and of clarity and definition time limits in ms
+/// (`projet_calculation.cpp:796-830`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, JsonSchema, serde::Deserialize)]
+#[serde(rename_all = "snake_case", tag = "kind")]
+pub enum Extra {
+    /// The decay time over −5 dB to `−(5 + span_db)` dB ([`DecayRange::Span`]): T15 is 15.
+    Decay { span_db: u32 },
+    /// C_te, dB, `te` = `te_ms` ms.
+    Clarity { te_ms: u32 },
+    /// D_te, a fraction, `te` = `te_ms` ms.
+    Definition { te_ms: u32 },
+}
+
+/// The spans [`Extra::Decay`] takes, dB below −5 dB.
+pub const EXTRA_SPAN_DB: std::ops::RangeInclusive<u32> = 10..=60;
+/// The time limits [`Extra::Clarity`] and [`Extra::Definition`] take, ms.
+pub const EXTRA_TE_MS: std::ops::RangeInclusive<u32> = 5..=1000;
+
+impl Extra {
+    /// T15: the decay over −5 to −20 dB, always computed beside T20 and T30.
+    pub const T15: Extra = Extra::Decay { span_db: 15 };
+
+    /// The quantity, as refusals name it.
+    pub fn quantity(self) -> Quantity {
+        match self {
+            Extra::Decay { span_db } => Quantity::Decay { span_db },
+            Extra::Clarity { te_ms } => Quantity::Clarity {
+                te_s: f64::from(te_ms) / 1000.0,
+            },
+            Extra::Definition { te_ms } => Quantity::Definition {
+                te_s: f64::from(te_ms) / 1000.0,
+            },
+        }
+    }
+
+    /// Its name in the JSON, in the fixed ones' style: `t15_s`, `c30_db`, `d80`.
+    pub fn name(self) -> String {
+        match self {
+            Extra::Decay { span_db } => format!("t{span_db}_s"),
+            Extra::Clarity { te_ms } => format!("c{te_ms}_db"),
+            Extra::Definition { te_ms } => format!("d{te_ms}"),
+        }
+    }
+
+    /// Why it cannot be computed, in words: a span outside [`EXTRA_SPAN_DB`], a time limit
+    /// outside [`EXTRA_TE_MS`].
+    pub fn check(self) -> Result<(), String> {
+        match self {
+            Extra::Decay { span_db } if !EXTRA_SPAN_DB.contains(&span_db) => Err(format!(
+                "a decay range of {span_db} dB below -5 dB: the ranges taken are {} to {} dB",
+                EXTRA_SPAN_DB.start(),
+                EXTRA_SPAN_DB.end()
+            )),
+            Extra::Clarity { te_ms } | Extra::Definition { te_ms }
+                if !EXTRA_TE_MS.contains(&te_ms) =>
+            {
+                Err(format!(
+                    "a time limit of {te_ms} ms: the limits taken are {} to {} ms",
+                    EXTRA_TE_MS.start(),
+                    EXTRA_TE_MS.end()
+                ))
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
+/// One [`Extra`]'s value or refusal, with C's and D's [`Straddle`] (`None` for a decay time and
+/// for a refusal).
+pub type ExtraValue = (Result<f64, ParamError>, Option<Straddle>);
+
+/// [`evaluate`], and each of `extras` from the same analysis: the same onset, arrival, tail,
+/// missing energy and curves, the decay times by the same regression ([`decay_time`]) over their
+/// own range, C and D by the same split of the curve ([`clarity_db`], [`definition`]) at their own
+/// edge. Nothing is computed a second way.
+pub fn evaluate_with(
+    series: &EnergySeries,
+    arrival: Arrival,
+    extras: &[Extra],
+) -> (BandParameters, Vec<ExtraValue>) {
     let a = Analysis::new(series, arrival);
-    let t20 = a.decay_time(DecayRange::T20);
-    let t30 = a.decay_time(DecayRange::T30);
-    let curvature = match (&t20, &t30) {
-        (Ok(a), Ok(b)) => Ok(curvature(a, b)),
-        (Err(e), _) | (_, Err(e)) => Err(match e {
-            ParamError::NotEvaluable { why, .. } => not_evaluable(Quantity::Curvature, why.clone()),
-            other => other.clone(),
-        }),
-    };
-    let split = |r: Result<(f64, Straddle), ParamError>| match r {
-        Ok((v, s)) => (Ok(v), Some(s)),
-        Err(e) => (Err(e), None),
-    };
-    let (c50_db, c50_straddle) = split(a.clarity_db(0.05));
-    let (c80_db, c80_straddle) = split(a.clarity_db(0.08));
-    let (d50, d50_straddle) = split(a.definition(0.05));
-    BandParameters {
-        onset: a.onset,
-        arrival: a.arrival,
-        decay_arrival: a.decay_arrival,
-        tail: a.tail.clone(),
-        spl_db: a.spl_db(),
-        edt: a.decay_time(DecayRange::Edt),
-        t20,
-        t30,
-        c50_db,
-        c80_db,
-        d50,
-        ts_s: a.centre_time_s(),
-        curvature,
-        c50_straddle,
-        c80_straddle,
-        d50_straddle,
+    let extra = extras.iter().map(|x| a.extra(*x)).collect();
+    (a.band_parameters(), extra)
+}
+
+impl Analysis<'_> {
+    fn extra(&self, x: Extra) -> ExtraValue {
+        let split = |r: Result<(f64, Straddle), ParamError>| match r {
+            Ok((v, s)) => (Ok(v), Some(s)),
+            Err(e) => (Err(e), None),
+        };
+        match x {
+            Extra::Decay { span_db } => (
+                self.decay_time(DecayRange::Span { span_db }).map(|f| f.t_s),
+                None,
+            ),
+            Extra::Clarity { te_ms } => split(self.clarity_db(f64::from(te_ms) / 1000.0)),
+            Extra::Definition { te_ms } => split(self.definition(f64::from(te_ms) / 1000.0)),
+        }
+    }
+
+    fn band_parameters(&self) -> BandParameters {
+        let a = self;
+        let t20 = a.decay_time(DecayRange::T20);
+        let t30 = a.decay_time(DecayRange::T30);
+        let curvature = match (&t20, &t30) {
+            (Ok(a), Ok(b)) => Ok(curvature(a, b)),
+            (Err(e), _) | (_, Err(e)) => Err(match e {
+                ParamError::NotEvaluable { why, .. } => {
+                    not_evaluable(Quantity::Curvature, why.clone())
+                }
+                other => other.clone(),
+            }),
+        };
+        let split = |r: Result<(f64, Straddle), ParamError>| match r {
+            Ok((v, s)) => (Ok(v), Some(s)),
+            Err(e) => (Err(e), None),
+        };
+        let (c50_db, c50_straddle) = split(a.clarity_db(0.05));
+        let (c80_db, c80_straddle) = split(a.clarity_db(0.08));
+        let (d50, d50_straddle) = split(a.definition(0.05));
+        BandParameters {
+            onset: a.onset,
+            arrival: a.arrival,
+            decay_arrival: a.decay_arrival,
+            tail: a.tail.clone(),
+            spl_db: a.spl_db(),
+            edt: a.decay_time(DecayRange::Edt),
+            t20,
+            t30,
+            c50_db,
+            c80_db,
+            d50,
+            ts_s: a.centre_time_s(),
+            curvature,
+            c50_straddle,
+            c80_straddle,
+            d50_straddle,
+        }
     }
 }
 
@@ -1202,7 +1318,10 @@ impl<'a> Analysis<'a> {
                 missing: mid(p.span(|e| e.missing)),
             });
         }
-        let relative = matches!(quantity, Quantity::Edt | Quantity::T20 | Quantity::T30);
+        let relative = matches!(
+            quantity,
+            Quantity::Edt | Quantity::T20 | Quantity::T30 | Quantity::Decay { .. }
+        );
         let n = evals.len() as f64;
         let value = evals.iter().map(|e| e.plain).sum::<f64>() / n;
         let with_tail = evals

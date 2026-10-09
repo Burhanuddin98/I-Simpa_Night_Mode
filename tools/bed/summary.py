@@ -52,6 +52,7 @@ EDT_RESULT = "docs/investigations/2026-09-27-edt-heldout/VERDICT-2.md"
 GDBA_RESULT = "docs/investigations/2026-10-02-bed/RESULT-GDBA.md"
 EDT_SENTINEL = "docs/investigations/2026-10-03-m12/SENTINEL-EDT.md"
 M8A_RESULT = "docs/investigations/2026-09-29-m8a/SPEC.md"
+M12C_RESULT = "docs/investigations/2026-10-09-parity-refresh/README.md"
 
 RULE = (
     "Decision 39's product grade, read from the artifacts: PASS when every check on every "
@@ -151,6 +152,11 @@ ARTIFACTS = {
         "B:/data/m8b-bed/C-score-GdBA/summary.json",
         "data",
         f"{GDBA_RESULT}, Numbers (ADDENDUM-6: G and dB(A) end to end on set C)",
+    ),
+    "m12c-r15": (
+        "beds/m12c-r15.json",
+        "repo",
+        f"{M12C_RESULT} section 4, R15: simpa bed-extra r15 (crates/simpa-core/src/results/extra_bed.rs)",
     ),
 }
 
@@ -290,6 +296,11 @@ def sti_checks(key, value):
         check(value, ("score", "all", "wrong_silent"), 0),
         check(value, ("pass_",), True),
     ]
+
+
+def extra_checks(value):
+    """An M12c closed-form bed (`simpa bed-extra`): every case held, controls included."""
+    return [check(value, ("pass",), True), check(value, ("failures",), 0)]
 
 
 def m8a_checks(value, ev):
@@ -481,6 +492,43 @@ PARAMETERS = [
     ),
 ]
 
+M12C_NOISE = (
+    "Its Monte-Carlo noise is judged with a calibration it carries, not one measured for it: of its "
+    "measured neighbours, the largest calibrated factor, on the narrowest domain "
+    "(params::noise::extra_calibration)."
+)
+M12C_CLOSED_FORM = (
+    "The bed is closed-form series through the report's own path (results::report::parameters_with); "
+    "no SPPS-scale bed (M8b sets B and C) scores it."
+)
+PARAMETERS += [
+    (
+        "t15_s",
+        "t15",
+        "M12c R15, closed-form decays through the report's path (simpa bed-extra r15)",
+        ["m12c-r15"],
+        [
+            "T15 is -5 to -20 dB (upstream's TR15), fitted by T20's and T30's regression over its own range.",
+            M12C_NOISE + " For T15: EDT's, T20's and T30's.",
+            M12C_CLOSED_FORM,
+            NO_MEASURED_ROOM,
+        ],
+    ),
+    (
+        "decay_custom",
+        "decay_custom",
+        "M12c R15, closed-form decays through the report's path (simpa bed-extra r15)",
+        ["m12c-r15"],
+        [
+            "Decay ranges a user chooses from -5 dB down 10 to 60 dB (upstream's TR list), fitted by "
+            "T20's and T30's regression; a range the series does not reach is refused.",
+            M12C_NOISE + " For a decay range: EDT's, T20's and T30's.",
+            M12C_CLOSED_FORM,
+            NO_MEASURED_ROOM,
+        ],
+    ),
+]
+
 # ---- the rulings --------------------------------------------------------------------------------
 
 # A ruling from the decision log, per parameter, with the exception it names, exactly. It applies
@@ -628,6 +676,8 @@ def parameter(name, metric, bed, keys, notes, ev):
                 }
             elif key == "edt-h6":
                 checks = edt_h6_checks(value, ev)
+            elif key.startswith("m12c-"):
+                checks = extra_checks(value)
             elif metric == "sti":
                 checks = sti_checks(key, value)
             else:
@@ -641,6 +691,8 @@ def parameter(name, metric, bed, keys, notes, ev):
                     )
         artifacts.append(entry)
     result_doc = {"edt": EDT_RESULT, "g_db": GDBA_RESULT, "dba": GDBA_RESULT}.get(metric, RESULT)
+    if all(k.startswith("m12c-") for k in keys):
+        result_doc = M12C_RESULT
     sections = sorted({ARTIFACTS[k][2] for k in keys})
     out = {
         "status": "FAIL" if reasons else "PASS",

@@ -30,8 +30,8 @@ import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
 import * as actions from '../../actions';
 import { displayName } from '../../chrome/sceneModel';
-import type { ApplyConflict, ReportView } from '../../bindings/ipc';
-import { reportStore, runsStore, sceneStore, selectedRunStore, stepStore, useStore } from '../../store';
+import type { ApplyConflict, Extra, ReportView } from '../../bindings/ipc';
+import { customStore, reportStore, runsStore, sceneStore, selectedRunStore, stepStore, useStore } from '../../store';
 import { registerHook } from '../../testhooks';
 import { runSolverText, runVariantName } from '../simulate/model';
 import {
@@ -45,6 +45,11 @@ import {
   type Cell,
   cell,
   classical,
+  CUSTOM_HINTS,
+  customCell,
+  customColumns,
+  customWords,
+  parseCustom,
   decay,
   din,
   dinGroups,
@@ -150,11 +155,137 @@ function SettingValueView({ n, word, unit }: { n: AdviceCard['from']; word: stri
   return <N n={n} unit={unit || undefined} />;
 }
 
+/** The kinds of chosen quantity the card offers, in its order (parity R15: decay ranges). */
+const CUSTOM_KINDS: readonly Extra['kind'][] = ['decay'];
+
+/**
+ * Parity R15/R20: upstream's "Calculate acoustic parameters" ranges and limits. The inputs set what
+ * every report is asked for (`setCustom`, `report.custom`); the table shows, per receiver in the
+ * card's band, each chosen quantity of the report as the Receivers table shows the fixed ones,
+ * and only where its kind's bed passed (`customColumns`): otherwise "Withheld", the reason in its
+ * title.
+ */
+function CustomCard({ report, names }: { report: NonNullable<ReportView['report']>; names: string[] }) {
+  const asked = useStore(customStore);
+  const textOf = (kind: Extra['kind']) =>
+    asked
+      .filter((x) => x.kind === kind)
+      .map((x) => String(x.kind === 'decay' ? x.span_db : x.te_ms))
+      .join(', ');
+  const [texts, setTexts] = useState<Record<string, string>>(() => Object.fromEntries(CUSTOM_KINDS.map((k) => [k, textOf(k)])));
+  const [error, setError] = useState<string | null>(null);
+  const [band, setBand] = useState<BandSel>(0);
+  const b: BandSel = band === 'sum' || band < report.bands_hz.length ? band : 0;
+  const cols = customColumns(report);
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const list: Extra[] = [];
+    for (const k of CUSTOM_KINDS) {
+      const f = parseCustom(k, texts[k] ?? '');
+      if (!f.ok) {
+        setError(f.message);
+        return;
+      }
+      list.push(...f.list);
+    }
+    setError(null);
+    actions.setCustom(list);
+  };
+  return (
+    <section className="ac-card ac-custom" aria-label="Chosen ranges and limits" data-part="custom-card">
+      <div className="ac-card-head">
+        <span className="ac-card-title">Chosen ranges and limits</span>
+        <label className="ac-control">
+          Band
+          <select data-control="custom-band" value={String(b)} onChange={(e) => setBand(e.target.value === 'sum' ? 'sum' : Number(e.target.value))}>
+            {report.bands_hz.map((hz, i) => (
+              <option key={hz} value={String(i)}>
+                {bandText(hz)}
+              </option>
+            ))}
+            <option value="sum">bands summed</option>
+          </select>
+        </label>
+        {cols.length ? <CopyTable part="custom-table" what="chosen ranges and limits" /> : null}
+      </div>
+      <form className="ac-custom-form" onSubmit={submit}>
+        {CUSTOM_KINDS.map((k) => (
+          <label key={k} className="ac-control">
+            <span data-label="custom">{CUSTOM_HINTS[k]}</span>
+            <input
+              type="text"
+              data-control={`custom-${k}`}
+              value={texts[k] ?? ''}
+              placeholder={k === 'decay' ? 'e.g. 40, 50' : 'e.g. 30, 100'}
+              title={
+                k === 'decay'
+                  ? 'Each range starts at −5 dB, as T20 and T30 do, and ends this many dB lower (10 to 60), comma separated: 40 is T40, −5 to −45 dB'
+                  : 'Each a time limit in ms (5 to 1000), comma separated'
+              }
+              onChange={(e) => setTexts((t) => ({ ...t, [k]: e.target.value }))}
+            />
+          </label>
+        ))}
+        <button type="submit" className="small-button" data-action="custom-apply">
+          Compute
+        </button>
+      </form>
+      {error ? (
+        <div className="ac-note block" data-part="custom-error" data-label="custom-error">
+          {error}
+        </div>
+      ) : null}
+      {cols.length ? (
+        <table className="ac-table" data-part="custom-table">
+          <thead>
+            <tr>
+              <th>Receiver</th>
+              {cols.map((c) => (
+                <th key={c.k} data-custom={c.spec.name} title={customWords(c.extra)}>
+                  <span data-label="custom-param" data-custom={c.spec.name}>
+                    {c.spec.label}
+                  </span>
+                  {c.spec.unit ? <span className="ac-unit"> {c.spec.unit}</span> : null}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {names.map((_, r) => (
+              <tr key={r}>
+                <td>
+                  <S s={{ path: `${report.solver === 'tcr' ? 'tcr' : 'spps'}.point_receivers.${r}.label`, text: names[r] }} />
+                </td>
+                {cols.map((c) => {
+                  if (!c.shown) {
+                    return (
+                      <td key={c.k} className="ac-cell refused" data-custom-withheld={c.spec.name} title={c.withheld ?? undefined}>
+                        Withheld
+                      </td>
+                    );
+                  }
+                  const x = customCell(report, c.k, r, b);
+                  return x ? <CellView key={c.k} c={x} unit={c.spec.unit} /> : <td key={c.k} />;
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <div className="ac-none" data-part="custom-none">
+          {report.solver === 'tcr' ? 'TCR writes no decay to read these from.' : 'None chosen: type them above and Compute.'}
+        </div>
+      )}
+    </section>
+  );
+}
+
 /** The cards' names, each a jump to its card (GUI audit 2026-10-09, A2): the dock shows two or three cards side by
  * side, and the rest were found only by scrolling sideways. "Why values are missing" comes last, after the numbers. */
 const CARDS: readonly { label: string; card: string }[] = [
   { label: 'Reverberation time', card: 'Reverberation time against DIN 18041' },
   { label: 'Receivers', card: 'Receivers' },
+  { label: 'Chosen ranges', card: 'Chosen ranges and limits' },
   { label: 'Spectrum', card: 'Spectrum' },
   { label: 'Decay', card: 'Decay' },
   { label: 'Sabine / Eyring', card: 'Sabine and Eyring' },
@@ -410,7 +541,7 @@ const css = (name: string, fallback: string) => {
 };
 /** The two series colours, validated together on the dark panel (dataviz validate_palette.js:
  * lightness band, chroma, CVD and normal-vision separation, contrast all pass). */
-const SERIES_COLOURS: Record<string, string> = { t30_s: '#e0202e', t20_s: '#3d8fd1', edt_s: '#d6a033' };
+const SERIES_COLOURS: Record<string, string> = { t30_s: '#e0202e', t20_s: '#3d8fd1', t15_s: '#7cc47f', edt_s: '#d6a033' };
 
 function axes(xLabel: string, yLabel: string, xValues?: (u: uPlot, splits: number[]) => string[]): uPlot.Axis[] {
   const ink = css('--text-3', '#85858e');
@@ -595,6 +726,7 @@ export function AcousticsPane() {
   const step = useStore(stepStore);
   const selected = useStore(selectedRunStore);
   const reports = useStore(reportStore);
+  const asked = useStore(customStore);
   const runs = useStore(runsStore);
   const scene = useStore(sceneStore);
   const [band, setBand] = useState<BandSel>(0);
@@ -638,7 +770,7 @@ export function AcousticsPane() {
     return () => {
       live = false;
     };
-  }, [onResults, selected, rowStatus]);
+  }, [onResults, selected, rowStatus, asked]);
 
   const names = receivers(report ?? ({ solver: 'spps', bands_hz: [] } as unknown as NonNullable<ReportView['report']>));
   const r = Math.min(receiver, Math.max(0, names.length - 1));
@@ -910,6 +1042,8 @@ export function AcousticsPane() {
             </tbody>
           </table>
         </section>
+
+        <CustomCard report={report} names={names} />
 
         <section className="ac-card ac-spectrum" aria-label="Spectrum">
           <div className="ac-card-head">

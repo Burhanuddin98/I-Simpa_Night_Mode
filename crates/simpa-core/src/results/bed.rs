@@ -61,11 +61,15 @@ pub struct BedParameters {
     pub g_db: BedParameter,
     /// The A-weighted level (`aggregate.dba`).
     pub dba: BedParameter,
+    /// T15 (`t15_s` on a band), parity R15.
+    pub t15_s: BedParameter,
+    /// Decay times over ranges a user chooses (`parameters.custom` of kind `decay`), parity R15.
+    pub decay_custom: BedParameter,
 }
 
 impl BedParameters {
-    /// The eleven in the report's order, with their JSON names.
-    pub fn named(&self) -> [(&'static str, &BedParameter); 11] {
+    /// Every one in the report's order, with their JSON names.
+    pub fn named(&self) -> [(&'static str, &BedParameter); 13] {
         [
             ("spl_db", &self.spl_db),
             ("edt_s", &self.edt_s),
@@ -78,6 +82,8 @@ impl BedParameters {
             ("sti", &self.sti),
             ("g_db", &self.g_db),
             ("dba", &self.dba),
+            ("t15_s", &self.t15_s),
+            ("decay_custom", &self.decay_custom),
         ]
     }
 
@@ -99,6 +105,8 @@ impl BedParameters {
             sti: p(),
             g_db: p(),
             dba: p(),
+            t15_s: p(),
+            decay_custom: p(),
         }
     }
 }
@@ -176,6 +184,8 @@ pub fn demote(base: &BedParameters, plant: &BedParameters, source: &str) -> BedP
         sti: one(&base.sti, &plant.sti),
         g_db: one(&base.g_db, &plant.g_db),
         dba: one(&base.dba, &plant.dba),
+        t15_s: one(&base.t15_s, &plant.t15_s),
+        decay_custom: one(&base.decay_custom, &plant.decay_custom),
     }
 }
 

@@ -357,7 +357,21 @@ pub(crate) fn loaded(root: &Path, run: &str) -> CmdResult<Arc<RunResults>> {
     }
 }
 
+#[cfg(test)]
 pub fn report_view(root: &Path, run: &str) -> CmdResult<ReportView> {
+    report_view_with(root, run, &[])
+}
+
+/// [`report_view`] with `custom` computed beside the fixed parameters (parity R15, R20): the
+/// report `simpa results <run> --json` prints with the same `--decay-range`, `--clarity-ms` and
+/// `--definition-ms`. A quantity outside the ranges the core takes is `BAD_CUSTOM`, and nothing
+/// is read.
+pub fn report_view_with(
+    root: &Path,
+    run: &str,
+    custom: &[simpa_core::params::decay::Extra],
+) -> CmdResult<ReportView> {
+    results::report::checked_custom(custom).map_err(|why| CmdError::new("BAD_CUSTOM", why))?;
     let (state, r) = open(root, run)?;
     Ok(match r {
         None => ReportView {
@@ -367,7 +381,7 @@ pub fn report_view(root: &Path, run: &str) -> CmdResult<ReportView> {
         },
         // The CLI prints this report (`results_cmd`); one that holds a number that is not
         // finite is refused there and here alike.
-        Some(r) => match results::checked_report(&r) {
+        Some(r) => match results::report::checked_report_with(&r, custom) {
             Ok(report) => ReportView {
                 state,
                 report: Some(report),
@@ -792,7 +806,7 @@ mod tests {
             serde_json::to_value(&want).unwrap(),
             "the CLI's report (results_cmd prints checked_report)"
         );
-        assert_eq!(rep.results_version, 17);
+        assert_eq!(rep.results_version, 18);
         let summary: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(repo("beds/summary.json")).unwrap())
                 .unwrap();
