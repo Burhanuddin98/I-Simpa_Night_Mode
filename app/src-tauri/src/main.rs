@@ -41,6 +41,7 @@ mod export;
 mod guard;
 mod live;
 mod mesh_now;
+mod recycle;
 mod results_data;
 mod run_files;
 mod runs;

@@ -8,7 +8,9 @@
 //! - **R3, delete**: the folder moved to the Recycle Bin, so a delete can be undone there, after
 //!   the Runs tab's confirm. The files exported from the run (`export_write` with the run named)
 //!   are noted beside it, so the confirm says which exported reports cite the run before it goes.
-//!   A drive with no Recycle Bin (a network or removable one) is refused, never deleted outright.
+//!   What Windows cannot recycle (a network or removable drive, a bin turned off, a run larger
+//!   than the bin holds) is refused with the run left in place, never deleted outright
+//!   (`recycle`).
 //!
 //! `notes.json` is the person's, not the run's: `results::load` re-checks `run.json` and `solve/`
 //! only, so a note never changes whether a run's results verify. A run is acted on only when it is
@@ -57,10 +59,26 @@ fn read_notes(dir: &Path) -> Result<Notes, String> {
     }
 }
 
-/// Writes `notes` whole or not at all: a temporary file beside it, then renamed over it.
+/// Held across every read-modify-write of a `notes.json`: two exports noted at once (each
+/// `export_write` runs on its own thread) would otherwise each read the old notes and the later
+/// write would drop the other's note.
+static NOTES_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn notes_lock() -> std::sync::MutexGuard<'static, ()> {
+    // A panic while held leaves no half-written notes (`write_notes` renames whole files).
+    NOTES_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Writes `notes` whole or not at all: a temporary file beside it, named for this write alone
+/// (so no other write, another instance of the app's too, can rename it away), then renamed over
+/// it.
 fn write_notes(dir: &Path, notes: &Notes) -> CmdResult<()> {
+    static WRITES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = WRITES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let path = dir.join(NOTES_FILE);
-    let tmp = dir.join(format!("{NOTES_FILE}.tmp"));
+    let tmp = dir.join(format!("{NOTES_FILE}.{}-{n}.tmp", std::process::id()));
     let text = serde_json::to_string_pretty(notes)
         .map_err(|e| CmdError::new("RUN_NOTES_IO", format!("the notes did not encode: {e}")))?;
     std::fs::write(&tmp, text)
@@ -85,6 +103,18 @@ pub fn annotate(row: &mut RunRow, dir: &Path) {
     }
 }
 
+/// R3: refused unless `run` is one of the open project's runs: `export_write` asks before it
+/// writes the file, so an export never names a run it cannot be noted beside.
+pub fn check_export_run(
+    root: &Path,
+    project: &Path,
+    active: Option<&str>,
+    run: &str,
+) -> CmdResult<()> {
+    let view = runs::list(root, project, active)?;
+    row_of(&view, run, "Note the export").map(drop)
+}
+
 /// R3: notes that `path` (of `kind`) was exported from `run`, one of the open project's runs: the
 /// export a delete's confirm names. A file exported again replaces its older note.
 pub fn record_export(
@@ -95,9 +125,9 @@ pub fn record_export(
     path: &str,
     kind: &str,
 ) -> CmdResult<()> {
-    let view = runs::list(root, project, active)?;
-    row_of(&view, run, "Note the export")?;
+    check_export_run(root, project, active, run)?;
     let dir = root.join(run);
+    let _held = notes_lock();
     let mut notes = read_notes(&dir).map_err(|e| {
         CmdError::new(
             "RUN_NOTES_INVALID",
@@ -123,70 +153,23 @@ pub fn delete(root: &Path, project: &Path, active: Option<&str>, run: &str) -> C
     runs::list(root, project, active)
 }
 
-/// The script that moves the folder in `SIMPA_RECYCLE` to the Recycle Bin, or exits 3 (the drive
-/// has none) or 4 (the folder is still there). The path rides in the environment, never in the
-/// script's text, so no path can be read as PowerShell.
-const RECYCLE_PS: &str = "$ErrorActionPreference = 'Stop'; \
-$p = $env:SIMPA_RECYCLE; \
-$d = [System.IO.DriveInfo]::new([System.IO.Path]::GetPathRoot($p)); \
-if ($d.DriveType -ne 'Fixed') { [Console]::Error.WriteLine(\"the drive is $($d.DriveType), with no Recycle Bin\"); exit 3 }; \
-Add-Type -AssemblyName Microsoft.VisualBasic; \
-[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($p, 'OnlyErrorDialogs', 'SendToRecycleBin'); \
-if (Test-Path -LiteralPath $p) { exit 4 }";
-
-/// Moves the folder `dir` to the Recycle Bin (the shell's own move, through PowerShell, so no
-/// unsafe code and no new dependency); refused on a drive with no Recycle Bin.
+/// Moves the folder `dir` to the Recycle Bin (`recycle`), or refuses with the run left in place:
+/// never a permanent delete, whatever the drive or the size of the run.
 fn recycle(dir: &Path) -> CmdResult<()> {
-    if !cfg!(windows) {
-        return Err(CmdError::new(
-            "RUN_DELETE_UNSUPPORTED",
-            "a run is moved to the Recycle Bin, on Windows only",
-        ));
-    }
-    let mut cmd = std::process::Command::new("powershell.exe");
-    cmd.args([
-        "-NoProfile",
-        "-NonInteractive",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-Command",
-        RECYCLE_PS,
-    ])
-    .env("SIMPA_RECYCLE", dir);
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
-    }
-    let out = cmd.output().map_err(|e| {
-        CmdError::new(
-            "RUN_DELETE_FAILED",
-            format!("PowerShell did not start to move {}: {e}", dir.display()),
-        )
-    })?;
-    let why = String::from_utf8_lossy(&out.stderr).trim().to_string();
-    match out.status.code() {
-        Some(0) => Ok(()),
-        Some(3) => Err(CmdError::new(
+    match crate::recycle::to_recycle_bin(dir) {
+        Ok(()) => Ok(()),
+        Err(crate::recycle::Refusal::NotRecyclable) => Err(CmdError::new(
             "RUN_NO_RECYCLE_BIN",
             format!(
-                "nothing deleted: {} is on a drive with no Recycle Bin ({why}); delete it by hand if it should go",
+                "nothing was deleted: Windows cannot put {} in the Recycle Bin (the run is larger \
+                 than the bin holds, the bin is turned off, or the drive has none), so it is left \
+                 where it is; delete it by hand if it should go",
                 dir.display()
             ),
         )),
-        code => Err(CmdError::new(
+        Err(crate::recycle::Refusal::Failed(why)) => Err(CmdError::new(
             "RUN_DELETE_FAILED",
-            format!(
-                "{} was not moved to the Recycle Bin (exit {}){}",
-                dir.display(),
-                code.map_or_else(|| "none".to_string(), |c| c.to_string()),
-                if why.is_empty() {
-                    String::new()
-                } else {
-                    format!(": {why}")
-                }
-            ),
+            format!("the move to the Recycle Bin was not confirmed: {why}"),
         )),
     }
 }
@@ -250,6 +233,7 @@ pub fn set_label(
     let view = runs::list(root, project, active)?;
     listed(&view, run, "Label")?;
     let dir = root.join(run);
+    let held = notes_lock();
     let mut notes = read_notes(&dir).map_err(|e| {
         CmdError::new(
             "RUN_NOTES_INVALID",
@@ -261,6 +245,7 @@ pub fn set_label(
     }
     notes.label = label;
     write_notes(&dir, &notes)?;
+    drop(held);
     runs::list(root, project, active)
 }
 
@@ -346,7 +331,14 @@ mod tests {
         );
         // The folder keeps its name; the note is a file beside where run.json goes.
         assert!(root.join(run).join(NOTES_FILE).is_file());
-        assert!(!root.join(run).join(format!("{NOTES_FILE}.tmp")).exists());
+        assert!(
+            std::fs::read_dir(root.join(run)).unwrap().all(|e| !e
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .ends_with(".tmp")),
+            "no temporary file left"
+        );
         let view = set_label(&root, &project, None, run, " ").unwrap();
         assert_eq!(view.rows.iter().find(|r| r.run == run).unwrap().label, None);
         std::fs::remove_dir_all(&dir).unwrap();
@@ -445,6 +437,86 @@ mod tests {
                 .unwrap_err()
                 .code,
             "RUN_NOT_FOUND"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn r3_exports_noted_at_once_are_all_kept() {
+        let (dir, project, root) = bed("exports-at-once");
+        let run = "20260101-000001-000-spps";
+        let paths: Vec<String> = (0..16)
+            .map(|i| format!("C:\\out\\at-once-{i}.csv"))
+            .collect();
+        std::thread::scope(|s| {
+            for p in &paths {
+                let (root, project) = (&root, &project);
+                s.spawn(move || record_export(root, project, None, run, p, "csv").unwrap());
+            }
+        });
+        let view = runs::list(&root, &project, None).unwrap();
+        let row = view.rows.iter().find(|r| r.run == run).unwrap();
+        let mut got: Vec<&str> = row.exports.iter().map(|x| x.path.as_str()).collect();
+        got.sort_unstable();
+        let mut want: Vec<&str> = paths.iter().map(String::as_str).collect();
+        want.sort_unstable();
+        assert_eq!(got, want, "no note lost");
+        let stray: Vec<_> = std::fs::read_dir(root.join(run))
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .filter(|n| n.ends_with(".tmp"))
+            .collect();
+        assert!(stray.is_empty(), "{stray:?}");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn r3_an_export_naming_a_run_that_is_not_listed_is_refused_before_it_is_written() {
+        let (dir, project, root) = bed("export-check");
+        assert_eq!(
+            check_export_run(&root, &project, None, "notes")
+                .unwrap_err()
+                .code,
+            "RUN_NOT_FOUND"
+        );
+        check_export_run(&root, &project, None, "20260101-000001-000-spps").unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// R3 on a drive Windows cannot recycle on: the same bed reached through the drive's
+    /// administrative share (`\\localhost\X$`, a network path, no Recycle Bin). Refused, and the
+    /// run left whole.
+    #[cfg(windows)]
+    #[test]
+    fn r3_delete_where_windows_cannot_recycle_is_refused_with_the_run_intact() {
+        let (dir, _, _) = bed("delete-unc");
+        let s = dir.to_str().unwrap();
+        let (drive, rest) = s.split_once(":\\").unwrap();
+        let unc = std::path::PathBuf::from(format!("\\\\localhost\\{drive}$\\{rest}"));
+        assert!(
+            unc.is_dir(),
+            "{} is not reachable, so the refusal cannot be shown here",
+            unc.display()
+        );
+        let project = unc.join("room.simpa");
+        let root = runs::runs_root(&project);
+        let run = "20260101-000001-000-spps";
+        std::fs::write(root.join(run).join("kept.txt"), "kept").unwrap();
+        let err = delete(&root, &project, None, run).unwrap_err();
+        assert_eq!(err.code, "RUN_NO_RECYCLE_BIN", "{}", err.message);
+        assert!(
+            err.message.starts_with("nothing was deleted"),
+            "{}",
+            err.message
+        );
+        assert_eq!(
+            std::fs::read_to_string(
+                dir.join(root.strip_prefix(&unc).unwrap())
+                    .join(run)
+                    .join("kept.txt")
+            )
+            .unwrap(),
+            "kept"
         );
         std::fs::remove_dir_all(&dir).unwrap();
     }

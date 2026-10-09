@@ -975,10 +975,19 @@ pub async fn export_write(
     };
     let (session, slot) = (state.session.clone(), state.run.clone());
     guard::blocking("export_write", move || {
+        // The run is checked before the file is written: an export naming a run that is not
+        // the open project's is refused whole, never written and then left unnoted.
+        let named = match &run {
+            None => None,
+            Some(run) => {
+                let (project, root) = project_and_root(&session, run)?;
+                let active = lock(&slot, "run")?.active_run().map(str::to_string);
+                run_files::check_export_run(&root, &project, active.as_deref(), run)?;
+                Some((project, root, active))
+            }
+        };
         let n = crate::export::write(&kind, &path, &bytes)?;
-        if let Some(run) = run {
-            let (project, root) = project_and_root(&session, &run)?;
-            let active = lock(&slot, "run")?.active_run().map(str::to_string);
+        if let (Some(run), Some((project, root, active))) = (run, named) {
             run_files::record_export(&root, &project, active.as_deref(), &run, &path, &kind)
                 .map_err(|e| {
                     CmdError::new(
