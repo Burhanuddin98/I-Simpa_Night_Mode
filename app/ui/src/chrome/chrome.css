@@ -169,7 +169,7 @@
   justify-content: center;
   border-radius: 4px;
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 11px;
   background: var(--badge);
   color: var(--text-2);
 }
@@ -246,7 +246,7 @@
 
 /* Scene list (design:69-102) */
 .scene {
-  width: 248px;
+  width: var(--panel-w, 248px);
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -413,7 +413,7 @@
   gap: 4px;
   overflow: hidden;
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 11px;
 }
 .issue-tag .state {
   font-weight: 600;
@@ -432,7 +432,7 @@
 
 /* Properties (design:278-471) */
 .props {
-  width: 344px;
+  width: var(--panel-w, 344px);
   flex-shrink: 0;
   overflow-y: auto;
   background: rgba(19, 16, 16, 0.35); /* as .scene */
@@ -512,7 +512,7 @@
 }
 .kbd-hint {
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--text-3);
 }
 .wide-button {
@@ -560,7 +560,7 @@
   width: 32px;
   flex-shrink: 0;
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 600;
 }
 .state.ok {
@@ -1262,4 +1262,90 @@
 }
 .scene-row[aria-pressed='true'] .row-sub {
   color: rgba(255, 255, 255, 0.75);
+}
+
+/* ---- GUI audit 2026-10-09, C2 and C3: click targets of 24 px at least (WCAG 2.5.8), and a source's remove button
+   held apart from its on/off switch (they were 22 and 30 by 22 px, 2 px apart). Last in the file, so these win. */
+.fold {
+  width: 24px;
+  height: 24px;
+}
+.row-remove {
+  width: 24px;
+  height: 24px;
+}
+.switch.compact {
+  min-height: 24px;
+}
+.scene-line:has(.switch) .row-remove {
+  right: 46px;
+}
+.scene-line:has(.switch) .scene-row {
+  padding-right: 74px;
+}
+
+/* GUI audit 2026-10-09 C1: a point's whole position shows, "(-2.80, -4.50, 1.38)" included (its z was cut off):
+   the name column gives up 16 px (names are short, and keep their ellipsis), the position takes 11 px text. */
+.point-name {
+  width: 40px;
+}
+.point-pos {
+  font-size: 11px;
+}
+
+/* GUI audit 2026-10-09 B2: at 1280 px the step bar ran into the variant switch ("Variant" over "Results"). */
+@media (max-width: 1400px) {
+  .step {
+    gap: 7px;
+    padding: 0 9px;
+  }
+  /* The other steps' words go (their lights stay); the current step keeps its own. */
+  .step:not([aria-current='step']) .sub {
+    display: none;
+  }
+}
+
+/* GUI audit 2026-10-09 B1: the side panels' grips (panelWidth.tsx), on the edge that faces the 3D view. */
+.panel-grip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 4;
+  width: 7px;
+  cursor: col-resize;
+  touch-action: none;
+}
+.panel-grip.right {
+  right: 0;
+}
+.panel-grip.left {
+  left: 0;
+}
+.panel-grip::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: transparent;
+  transition: background 120ms;
+}
+.panel-grip.right::after {
+  right: 0;
+}
+.panel-grip.left::after {
+  left: 0;
+}
+.panel-grip:hover::after,
+html[data-resizing] .panel-grip::after {
+  background: var(--red);
+}
+html[data-resizing],
+html[data-resizing] * {
+  cursor: col-resize !important;
+  user-select: none;
+}
+html[data-resizing] .scene,
+html[data-resizing] .props {
+  transition: none !important;
 }

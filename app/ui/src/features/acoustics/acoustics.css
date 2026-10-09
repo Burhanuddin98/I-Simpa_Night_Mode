@@ -185,7 +185,7 @@
 .ac-range {
   display: block;
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--text-3);
 }
 [data-num] {
@@ -197,7 +197,7 @@
 .ac-tag {
   margin-left: 6px;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 11px;
   padding: 0 4px;
   border-radius: 3px;
   background: var(--badge);
@@ -634,7 +634,8 @@
 .aw.rw {
   left: auto;
   right: 24px;
-  top: 72px;
+  /* Below the step bar (52 to 96 px), which it covered at 72 px with the variant switch (GUI audit 2026-10-09 C7). */
+  top: 108px;
   transform: none;
   width: min(560px, calc(100vw - 48px));
   height: auto;

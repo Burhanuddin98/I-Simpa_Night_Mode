@@ -41,7 +41,7 @@
   border: 1px solid var(--edge);
   background: var(--badge);
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 11px;
   line-height: 16px;
   color: var(--warn);
 }
@@ -184,7 +184,7 @@
   border-collapse: separate;
   border-spacing: 0;
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 11px;
 }
 .mg th,
 .mg td {
@@ -262,7 +262,7 @@
   overflow-wrap: anywhere;
 }
 .mg-used {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--text-3);
 }
 .mg-cell {
@@ -346,7 +346,7 @@
 .mg-tools .kbd {
   margin-left: 6px;
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--text-3);
 }
 .mg-note {

@@ -103,8 +103,9 @@ function NumberField(props: {
   op: (s: ProjectSettings, value: number) => Op | null;
   current: readonly UiIssue[];
   onDraft?: (text: string | null) => void;
+  placeholder?: string;
 }) {
-  const { group, field, label, unit, value, read, op, current, onDraft } = props;
+  const { group, field, label, unit, value, read, op, current, onDraft, placeholder } = props;
   const refusals = useStore(refusalStore);
   const [local, setLocal] = useState<UiIssue | null>(null);
   const [hidden, setHidden] = useState(false);
@@ -137,6 +138,7 @@ function NumberField(props: {
               setHidden(true);
             }}
             onDraft={onDraft}
+            placeholder={placeholder}
             className="sim-input mono"
           />
           {unit && <span className="sim-unit">{unit}</span>}
@@ -433,6 +435,7 @@ export function SettingsEditor({ scene, settings, solver }: { scene: SceneState 
           field="map_time_step"
           label="Sound-map time step"
           unit="ms"
+          placeholder="= time step"
           value={spps.map_time_step_s == null ? '' : timeStepInputText(spps.map_time_step_s)}
           // Empty (or 0) is "same as the time step": the project stores nothing and the solver bins by its step.
           read={(text) => (text.trim() === '' ? { ok: true, value: 0 } : secondsFromMs(text))}

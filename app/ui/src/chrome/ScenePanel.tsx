@@ -26,6 +26,7 @@ import { issuesByEntity, projectIssues } from '../issues';
 import { groupRenameStore, refusalStore, sceneStore, selectionStore, useStore } from '../store';
 import { groupPicked, mergePlan, renameProblem, toggleGroup } from './groupsModel';
 import { FoldButton, useFold } from './fold';
+import { usePanelWidth } from './panelWidth';
 import { Search, Trash2 } from './icons';
 import { coord, displayName, effectiveMaterial, matchesFilter, receiverFolder, sentence, uniqueIssues, worstSeverity } from './sceneModel';
 import { onEntityKey, removeEntity, selectGroup, selectPoint } from './sceneUi';
@@ -213,10 +214,12 @@ export function ScenePanel() {
     ...[...refusals].filter(([k]) => k.startsWith('surface_group:') && /:(name|merge|faces)$/.test(k)).map(([, v]) => v),
   );
   const folded = useFold('scene');
+  const sized = usePanelWidth('nm-scene-width', 248, 'right');
 
   return (
-    <aside className="scene" aria-label="Scene" data-folded={folded}>
+    <aside className="scene" aria-label="Scene" data-folded={folded} style={sized.style} onScroll={sized.onScroll}>
       <FoldButton panel="scene" />
+      {!folded && <div {...sized.grip} />}
       <label className="filter">
         <Search size={12} />
         <input

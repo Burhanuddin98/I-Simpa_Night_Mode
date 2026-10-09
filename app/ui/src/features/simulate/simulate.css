@@ -31,7 +31,7 @@
 }
 .run .key {
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 400;
   opacity: 0.8;
 }
@@ -236,7 +236,7 @@
   flex-shrink: 0;
   padding-top: 2px;
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 600;
 }
 .sim-state.ok {
@@ -437,7 +437,7 @@
 }
 .res-label {
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 600;
 }
 .res-verdict.ok .res-label {
@@ -513,4 +513,16 @@
 }
 .sim-field-line[data-part='results-cube'].warn .v {
   color: var(--warn);
+}
+
+/* GUI audit 2026-10-09 C3: the checkboxes drawn at 16 px (the whole label line was always the target). */
+.sim-toggle input[type='checkbox'],
+.sim-check input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+/* GUI audit 2026-10-09 C9: the values you type at 12.5 px (they were 11.5). */
+.sim-input.mono {
+  font-size: 12.5px;
 }

@@ -85,8 +85,10 @@ export function CommitInput(props: {
   className?: string;
   /** Called with the text being typed, or null when the field shows the project's value again. */
   onDraft?: (text: string | null) => void;
+  /** Shown while the field is empty: what an empty value means (GUI audit 2026-10-09 C6). */
+  placeholder?: string;
 }) {
-  const { field, label, value, invalid, commit, onRevert, inputRef, className, onDraft } = props;
+  const { field, label, value, invalid, commit, onRevert, inputRef, className, onDraft, placeholder } = props;
   const [draft, setDraftState] = useState<string | null>(null);
   const setDraft = (text: string | null) => {
     setDraftState(text);
@@ -126,6 +128,7 @@ export function CommitInput(props: {
       aria-label={label}
       aria-invalid={invalid}
       spellCheck={false}
+      placeholder={placeholder}
       value={draft ?? value}
       onChange={(e) => setDraft(e.target.value)}
       onKeyDown={(e) => {

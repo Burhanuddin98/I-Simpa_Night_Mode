@@ -40,7 +40,7 @@ export function installTilt(): void {
   document.addEventListener(
     'pointermove',
     (e) => {
-      if (reduced.matches || e.pointerType === 'touch') return set(null);
+      if (reduced.matches || e.pointerType === 'touch' || document.documentElement.hasAttribute('data-resizing')) return set(null);
       const over = e.target instanceof Element ? e.target.closest<HTMLElement>(PANELS) : null;
       if (over) return set(over);
       if (tilted?.isConnected) {
