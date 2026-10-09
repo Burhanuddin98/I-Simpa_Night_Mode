@@ -1,5 +1,6 @@
 # Assemble a portable build for Zeph into OneDrive (syncs to Zeph): app.exe + solvers\ beside it
-# (ExeSearch candidate 3: <exe dir>\solvers\<name>), the solver manifest, a README. Verifies every
+# (ExeSearch candidate 3: <exe dir>\solvers\<name>), the solver manifest, the user manual (manual\),
+# a README. Verifies every
 # solver's hash, spps-gpu.exe included, against the repo's solvers/manifest.json before packing.
 # -Solvers is a folder holding all five exes at the manifest's hashes (the A5 bed's C:\tmp\nm-solvers-a5
 # is one); -Repo the worktree whose manifest and branch name the package carries.
@@ -25,11 +26,18 @@ foreach ($exe in 'spps.exe','classicalTheory.exe','preprocess.exe','tetgen.exe',
   Copy-Item "$Solvers\$exe" "$dest\solvers\$exe"
 }
 Copy-Item "$Repo\solvers\manifest.json" "$dest\solvers\manifest.json"
+# Parity A21: the user manual, readable without the app.
+New-Item -ItemType Directory -Force -Path "$dest\manual" | Out-Null
+$manualSrc = "$Repo\app\src-tauri\manual"
+$pages = @(Get-ChildItem $manualSrc -Filter *.html)
+if (-not ($pages | Where-Object Name -eq 'manual.html')) { throw "$manualSrc has no manual.html" }
+$pages | ForEach-Object { Copy-Item $_.FullName "$dest\manual\$($_.Name)" }
 
 @"
 I-Simpa Night Mode, portable build $stamp ($Branch branch $Sha)
 
 Run:   app.exe            (double-click, or app.exe --project <file.simpa>)
+Read:  manual\manual.html (the user manual)
 The solvers (spps, spps-gpu, classicalTheory, preprocess, tetgen) are in solvers\ beside app.exe and
 are found there; no environment variable is needed. They are the verified build of
 solvers\manifest.json (upstream 929a5c8 + patches 0001 time bin, 0002 sparse maps; spps-gpu from

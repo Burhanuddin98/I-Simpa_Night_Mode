@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Night Mode manual</title>
+<!-- The user manual (parity A21), shipped with the app: embedded in app.exe and opened from Help ›
+     User manual, and copied beside app.exe by tools/devtools/package-zeph.ps1. Written from what the
+     app does in this version; when the UI changes, this file changes with it. One file, no script,
+     no image and nothing fetched, so it reads the same offline. -->
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0c0a0a;
+    --panel: #131010;
+    --line: #221d1c;
+    --text: #efe9e5;
+    --text-2: #cbc2bd;
+    --text-3: #b0a6a0;
+    --red: #e0202e;
+    --red-hi: #ff6b74;
+    --red-wash: #1a0b0e;
+    --sans: 'Segoe UI', system-ui, sans-serif;
+    --mono: 'Cascadia Mono', Consolas, ui-monospace, monospace;
+  }
+  html { background: var(--bg); }
+  body {
+    margin: 0 auto;
+    max-width: 52rem;
+    padding: 2rem 1.25rem 4rem;
+    color: var(--text);
+    background: var(--bg);
+    font: 15px/1.6 var(--sans);
+  }
+  header { border-bottom: 2px solid var(--red); padding-bottom: 0.75rem; margin-bottom: 1.5rem; }
+  h1 { font-size: 1.6rem; margin: 0; letter-spacing: 0.01em; }
+  .sub { color: var(--text-3); margin: 0.25rem 0 0; }
+  h2 { font-size: 1.15rem; margin: 2.2rem 0 0.6rem; padding-top: 0.6rem; border-top: 1px solid var(--line); }
+  h3 { font-size: 1rem; margin: 1.4rem 0 0.4rem; color: var(--text-2); }
+  p, li { color: var(--text-2); }
+  a { color: var(--red-hi); }
+  b, strong { color: var(--text); }
+  kbd, code, .ui {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 0 0.3em;
+  }
+  .ui { font-family: var(--sans); font-size: 0.92em; }
+  nav ol { columns: 2; padding-left: 1.2rem; }
+  nav li { margin: 0.1rem 0; }
+  table { border-collapse: collapse; width: 100%; margin: 0.5rem 0 1rem; }
+  th, td { text-align: left; padding: 0.3rem 0.6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--text); font-weight: 600; }
+  td { color: var(--text-2); }
+  .note { border-left: 3px solid var(--red); background: var(--red-wash); padding: 0.5rem 0.9rem; margin: 1rem 0; }
+  .note p { margin: 0.3rem 0; }
+  footer { margin-top: 3rem; color: var(--text-3); font-size: 0.9em; border-top: 1px solid var(--line); padding-top: 0.8rem; }
+  @media (max-width: 40rem) { nav ol { columns: 1; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>I-Simpa Night Mode</h1>
+  <p class="sub">User manual for this version. It describes what the app does today and says where it stops.</p>
+</header>
+
+<nav aria-label="Contents">
+  <ol>
+    <li><a href="#what">What Night Mode is</a></li>
+    <li><a href="#start">Starting a project</a></li>
+    <li><a href="#window">The window</a></li>
+    <li><a href="#geometry">1. Geometry</a></li>
+    <li><a href="#materials">2. Materials</a></li>
+    <li><a href="#sources">3. Sources &amp; receivers</a></li>
+    <li><a href="#simulate">4. Simulate</a></li>
+    <li><a href="#results">5. Results</a></li>
+    <li><a href="#variants">Variants</a></li>
+    <li><a href="#files">Files, runs and export</a></li>
+    <li><a href="#keys">Keyboard</a></li>
+    <li><a href="#help">Help</a></li>
+    <li><a href="#limits">Not in this version</a></li>
+  </ol>
+</nav>
+
+<h2 id="what">What Night Mode is</h2>
+<p>Night Mode is a graphical interface for room-acoustics simulation. It runs the solvers of
+<b>I-Simpa</b>, the open-source project of Université Gustave Eiffel: <b>SPPS</b>, which traces sound
+particles through the room, and <b>TCR</b>, the classical theory of reverberation (Sabine and Eyring).
+The solvers are built from upstream I-Simpa's source with this repository's patches; the interface is
+new and is not upstream's. A third solver, <b>SPPS on the GPU</b>, is this repository's own port of SPPS
+to NVIDIA graphics cards.</p>
+<p>You give the app a closed room model, a material for every surface, sources and receivers. It
+meshes the room, runs the solver in the background and shows the results that pass its checks.</p>
+<div class="note">
+  <p><b>Values are shown only when they pass a check.</b> Each run's results are checked when it ends.
+  A value the check does not pass is not shown: its place says <span class="ui">REFUSED</span> and why.
+  The results are a simulation with I-Simpa's solvers; they are not compared with measurements of
+  real rooms.</p>
+</div>
+
+<h2 id="start">Starting a project</h2>
+<p>With no project open, the window shows <span class="ui">Start with a room</span>:</p>
+<ul>
+  <li><b>Examples</b>: rooms that are ready to run (I-Simpa's Elmia hall and industrial hall, and four
+  rooms of the BRAS benchmark). Each opens as your own copy in
+  <code>Documents\Night Mode\Examples</code>; the original inside the app is never changed.</li>
+  <li><span class="ui">New project</span>: an empty project.</li>
+  <li><span class="ui">New box room…</span>: a closed box of the width, length and height you give, with
+  one corner at the origin; its floor, walls and ceiling become three surface groups.</li>
+  <li><span class="ui">Open…</span> (<kbd>Ctrl+O</kbd>): a Night Mode project (<code>.simpa</code>), an
+  upstream I-Simpa project (<code>.proj</code>) or a room model (PLY, OBJ, STL).</li>
+  <li><b>Recent</b>: the last five projects. <span class="ui">Open the last project when Night Mode
+  starts</span> makes the app start on the newest one.</li>
+  <li><b>Unsaved work</b>: if the app did not close properly, the changes it kept (every 30 seconds)
+  are offered here: <span class="ui">Restore</span> or <span class="ui">Discard</span>.</li>
+</ul>
+<p>You can also drop a project or a room model file on the window; it opens as
+<span class="ui">Open…</span> opens it.</p>
+<h3>Importing a room model</h3>
+<p>A PLY, OBJ or STL file asks for its <span class="ui">Length unit</span> (m, cm, mm, ft, in) and its
+<span class="ui">Up axis</span> (z or y). Nothing is guessed from the model. Under
+<span class="ui">If the check refuses it</span>, choose <span class="ui">Leave it</span> or
+<span class="ui">Repair</span>: Repair welds vertices, removes zero-area and repeated faces and turns
+inward faces out, and writes the repaired model as a new file beside the original, never over it.
+An upstream <code>.proj</code> carries its own units and opens as an unsaved project.</p>
+
+<h2 id="window">The window</h2>
+<ul>
+  <li><b>Menu bar</b>: File, Edit, View, Simulate and Help; the project's name, with a dot while it has
+  unsaved changes; the Run button.</li>
+  <li><b>Step bar</b>: the five steps of the work, Geometry, Materials, Sources &amp; receivers, Simulate
+  and Results, each with a light and a line saying where it stands. The variant switch is at its right.</li>
+  <li><b>Scene list</b> (left): surfaces, sources, receivers, volumes, fitting zones, air and display,
+  with a filter box. Each source, receiver, plane and zone has an on/off switch and a remove button.</li>
+  <li><b>3D view</b> (middle): the room. Its tool bar has Select, Orbit, Place receiver, Place source,
+  Frame model, Present and Turntable; <span class="ui">View style</span> chooses how the room is drawn
+  (colour, grey, see-through or wireframe; faces, edges, shading, grids, dimensions). Right-click for
+  the selection menu.</li>
+  <li><b>Properties panel</b> (right): the current step's panel.</li>
+  <li><b>Dock</b> (bottom): <span class="ui">Acoustics</span>, <span class="ui">Console</span> and
+  <span class="ui">Runs</span>. Drag its top edge to resize it; double-click to fill the window.</li>
+  <li><b>Status bar</b>: the app's state, the model (watertight or refused, surfaces, air volume), the
+  active variant and the solvers found.</li>
+</ul>
+<p>Each side panel and the dock fold with their chevron. <kbd>H</kbd> hides every panel (Present);
+<kbd>Esc</kbd> brings them back.</p>
+
+<h2 id="geometry">1. Geometry</h2>
+<p>The <b>Model check</b> runs on every model: <span class="ui">Watertight</span>,
+<span class="ui">Self-intersections</span>, <span class="ui">Flipped normals</span>,
+<span class="ui">Open edges</span> and <span class="ui">Units</span>. Run is refused until the model
+passes. The faces involved are highlighted in the 3D view, and the Console has each reason in full.
+<span class="ui">Repair and check again</span> welds vertices closer than a micrometre and writes
+<code>&lt;name&gt;_repaired.obj</code> beside the original; it never closes holes or separates
+intersecting faces, which must be fixed in the modelling program.</p>
+<ul>
+  <li><b>Project</b>: its name and a description, both kept in the project file.</li>
+  <li><b>Dimensions</b>: length, width, height, air volume, surface, faces, surface groups.</li>
+  <li><span class="ui">Replace model, keep groups…</span>: a new model for the open project. Each face
+  lying within 1 cm of a face of the old model keeps its surface group, and so its material;
+  sources, receivers, materials and settings stay. One undo step.</li>
+  <li><b>Surface groups</b>: <span class="ui">+ Group</span> or Edit › <span class="ui">Add surface
+  group</span>; rename with <kbd>F2</kbd>; Ctrl+click two or more and <span class="ui">Merge
+  groups</span>; <kbd>Del</kbd> deletes an empty group. To regroup faces, pick them in the 3D view
+  (click a face, double-click for its whole flat surface, Ctrl+click to add, Shift+drag a box) and
+  right-click <span class="ui">New group from selection</span> or <span class="ui">Move to group</span>.</li>
+  <li><b>Sound-level planes</b>: <span class="ui">+ Ear-height plane</span> adds a plane over the whole
+  room; set its height, cell size and corners, or tilt it to any angle. SPPS draws a sound map on it.</li>
+  <li><b>Fitting zones</b>: <span class="ui">+ Box zone</span> adds a box of scattering objects
+  (furniture, machinery) with its absorption, mean free path and diffusion law, for all bands or band
+  by band. SPPS on the GPU refuses a project with fitting zones; run it on SPPS.</li>
+</ul>
+
+<h2 id="materials">2. Materials</h2>
+<p>Pick a surface group in the scene list or in the 3D view and choose its <span class="ui">Material</span>.
+A group still on the import's placeholder is marked <span class="ui">UNASSIGNED</span>, and Run stays
+blocked until every group has a material.</p>
+<p><span class="ui">Edit table…</span> opens the library grid: <span class="ui">Absorption</span>,
+<span class="ui">Scattering</span> and <span class="ui">Transmission</span>, one column per band, and the
+reflection <span class="ui">Law</span> (Specular, Uniform, Lambert, W2, W3, W4, Semi-diffuse), for the
+whole material or band by band.</p>
+<ul>
+  <li><span class="ui">+ Material</span>, <span class="ui">+ From library</span> (I-Simpa's reference
+  materials) and <span class="ui">Delete</span>.</li>
+  <li>Type in a cell and press Enter; numbers take a decimal point. <span class="ui">Fill row</span>
+  (<kbd>Ctrl+R</kbd>) copies the focused cell across its row.</li>
+  <li><kbd>Ctrl+C</kbd> copies the selection as tab-separated text, exactly as stored;
+  <kbd>Ctrl+V</kbd> pastes from a spreadsheet, all or nothing. Values on screen may be rounded; what is
+  stored and copied is not.</li>
+  <li>Transmission: a band with no loss typed does not transmit. Type a loss in dB to switch it on.</li>
+  <li>The law shapes the diffuse part of a reflection only: at scattering 0 it has no effect in SPPS.
+  SPPS has no semi-diffuse case, so a run is refused while a material uses it.</li>
+  <li>Each material has a colour for the 3D view; no solver reads it.</li>
+</ul>
+
+<h2 id="sources">3. Sources &amp; receivers</h2>
+<p><span class="ui">+ Source</span> adds a source in the middle of the room, <span class="ui">+ Receiver</span>
+a receiver; <span class="ui">Place in view</span> (or the tools Place source and Place receiver) puts one
+on a point you click, at the distance from the face you set. Pick one to edit its name, group and
+position; a receiver also has an orientation and can be turned to face a source.
+<kbd>Ctrl+C</kbd> and <kbd>Ctrl+V</kbd> copy and paste a source or receiver.</p>
+<h3>Emission</h3>
+<ul>
+  <li><span class="ui">Spectrum</span>: one of I-Simpa's reference spectra (pink noise, white noise…), an
+  entry of the project's own library, or typed per band.</li>
+  <li>The table gives the sound power in dB re 1 pW per band, its A-weighted value, an attenuation and
+  the resulting Lw, with a <span class="ui">Global</span> row. Typing a dB(A) value sets the band's dB.</li>
+  <li><span class="ui">Save to library</span> keeps a spectrum in the project; every source linked to
+  it follows when it changes. <span class="ui">Unlink</span> keeps the values and drops the link.</li>
+  <li><span class="ui">Directivity</span>: omni, unidirectional (with its direction) or one of three
+  planes. A measured balloon from an upstream project is shown but cannot be chosen here.</li>
+</ul>
+<p>Surface maps: the scene list's <span class="ui">+ Surface map</span> puts a sound map on surfaces you
+pick; the Geometry step's sound-level planes are the other kind.</p>
+
+<h2 id="simulate">4. Simulate</h2>
+<p>Choose the <span class="ui">Solver</span>: <span class="ui">SPPS</span> (particle tracing),
+<span class="ui">TCR</span> (classical theory) or <span class="ui">SPPS on the GPU</span>. The GPU entry
+names the graphics card the app found, or says why it is not available.</p>
+<h3>Settings</h3>
+<ul>
+  <li><span class="ui">Bands</span>: tick the bands to compute, or pick a band preset;
+  <span class="ui">Select all</span> and <span class="ui">Unselect all</span>. The memory line says what a
+  run's results will take.</li>
+  <li>SPPS: particles per source and band, particles saved for playback, duration, time step, sound-map
+  time step, receiver radius, particle extinction, the method (<span class="ui">Energetic</span> or
+  <span class="ui">Random</span>), sound maps per band and what they show (intensity or sound level),
+  echograms per source, transmission through walls.</li>
+  <li>Air: temperature, relative humidity, pressure and air absorption.</li>
+  <li>Meshing: preserve walls, scene correction before meshing, and the face size on surface receivers.
+  <span class="ui">Mesh now</span> meshes the room on its own, to see what TetGen says before a run.</li>
+  <li><span class="ui">Run time, forecast</span> estimates how long the run takes.</li>
+</ul>
+<h3>Running</h3>
+<p><span class="ui">Before running</span> lists what Run needs, each <span class="ui">Ready</span> or
+<span class="ui">Blocked</span>: a material on every surface, a watertight model with no
+self-intersection, sources and receivers inside the room, the air set, results that fit in memory, and
+the verified build of the solvers. <span class="ui">Run quality</span> warns of settings known to make
+values noisy or refused, with a fix you can apply.</p>
+<p>Run (<kbd>F5</kbd>, the Run button or Simulate › Run) runs the solver on the <b>saved</b> project, in
+the background: the app stays usable, and the Console shows the solver's output line by line.
+<span class="ui">Cancel run</span> stops it and records the run as Cancelled. The
+<span class="ui">Job list</span> runs saved projects one after another, each with the solver chosen when
+it was added.</p>
+
+<h2 id="results">5. Results</h2>
+<p>Pick a run in the <span class="ui">Runs</span> tab, or finish one. The Results panel gives the
+verdict: <span class="ui">Results verified</span>, <span class="ui">Results unverified</span> (the
+solvers are not the verified build), <span class="ui">Results refused</span> (no value is shown, and the
+panel says why) or <span class="ui">The results could not be checked</span>.</p>
+<h3>The Acoustics tab</h3>
+<p>The parameters, per receiver and band: SPL, G, EDT, T20, T30, C50, C80, D50, Ts, STI and dB(A),
+computed to ISO 3382-1 and IEC 60268-16. Each value comes with its range; a value that cannot be given
+says <span class="ui">REFUSED</span> with its reason, and <span class="ui">Why values are missing</span>
+lists each cause once, with a re-run that would fix it when there is one. Cards:</p>
+<ul>
+  <li><b>Reverberation time</b>, against a room use of DIN 18041.</li>
+  <li><b>Receivers</b>: the table of parameters by receiver, for one band or all bands summed.</li>
+  <li><b>Spectrum</b>, <b>Decay</b>, <b>Sabine / Eyring</b> and <b>Absorption by surface group</b>.</li>
+  <li>TCR runs add <b>Receiver levels</b>: direct, total by Sabine, total by Eyring.</li>
+  <li><span class="ui">Source</span> shows one source's share, or all sources summed.</li>
+</ul>
+<p>Charts zoom with a drag and go back with a double-click; <span class="ui">Axes</span> sets the axes by
+hand; <span class="ui">Image…</span> saves the chart as a PNG. <span class="ui">Copy</span> copies a
+table as tab-separated text, for a spreadsheet.</p>
+<h3>Response and Listen (SPPS)</h3>
+<p><span class="ui">Open response</span> shows the energy response per band at a receiver, as a map or a
+table, with time bins, span and zoom. <span class="ui">Listen</span> synthesises an impulse response from
+the echogram (not a measured or wave-based one), plays it, convolves a dry clip or your own WAV with it,
+and saves either as WAV.</p>
+<h3>Maps (SPPS)</h3>
+<p>The <span class="ui">Map</span> card over the 3D view draws the sound map of a surface receiver or a
+sound-level plane, for one band or all bands together. Options: <span class="ui">Difference from
+baseline</span> (this run minus an earlier run of the project, in dB: blue is quieter, red louder),
+<span class="ui">Cumulative</span>, a time <span class="ui">Window</span>, <span class="ui">Smooth
+colour</span>, <span class="ui">Contours</span>, a <span class="ui">Fixed colour range</span> and the
+<span class="ui">Opacity</span>. Hover a face to read its value. When particles were saved, the same
+card plays them back step by step, with trails.</p>
+<p>The difference map's baseline is the newest other run of the project that started before this one;
+it cannot be chosen by hand in this version.</p>
+<h3>The Runs tab</h3>
+<p>Every run of the project, with its variant, solver, status and check. Select one to see its particle
+loss per band, its solver and mesh, its warnings and its folder. Give it a
+<span class="ui">Label</span>, <span class="ui">Open folder</span> in Explorer, or
+<span class="ui">Delete…</span> it to the Recycle Bin (it can be restored from there).</p>
+
+<h2 id="variants">Variants</h2>
+<p>A variant puts other materials on some surface groups, without copying the project. The variant
+switch at the right of the step bar has <span class="ui">Baseline</span> and your variants:
+<span class="ui">+</span> adds one and makes it active, a double-click renames it. While a variant is
+active, a material chosen for a group goes into the variant. Each run records its variant.</p>
+
+<h2 id="files">Files, runs and export</h2>
+<ul>
+  <li><span class="ui">Save</span> (<kbd>Ctrl+S</kbd>), <span class="ui">Save as…</span>
+  (<kbd>Ctrl+Shift+S</kbd>) and <span class="ui">Save a copy…</span>, which writes the project to
+  another file and leaves this window on its own. New, Open and closing the window ask first when
+  there are unsaved changes.</li>
+  <li>Runs are written under <code>&lt;project folder&gt;\runs\</code>, one folder per run, with the
+  solver's input and output, its console text and the check's record.</li>
+  <li>File › <span class="ui">Export view as PNG…</span> (the 3D view with the map's legend),
+  <span class="ui">Export parameters as CSV…</span> and <span class="ui">as JSON…</span> (the Acoustics
+  tab's parameters with their ranges or refusals).</li>
+  <li><span class="ui">Undo</span> (<kbd>Ctrl+Z</kbd>) and <span class="ui">Redo</span>
+  (<kbd>Ctrl+Y</kbd>) step through the edits of the project.</li>
+</ul>
+
+<h2 id="keys">Keyboard</h2>
+<table>
+  <tr><th>Keys</th><th>Does</th></tr>
+  <tr><td><kbd>Ctrl+N</kbd> / <kbd>Ctrl+O</kbd></td><td>New project / Open…</td></tr>
+  <tr><td><kbd>Ctrl+S</kbd> / <kbd>Ctrl+Shift+S</kbd></td><td>Save / Save as…</td></tr>
+  <tr><td><kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd>, <kbd>Ctrl+Shift+Z</kbd></td><td>Undo / Redo</td></tr>
+  <tr><td><kbd>Ctrl+C</kbd> / <kbd>Ctrl+V</kbd></td><td>Copy / paste a source or receiver; in the materials grid, cells</td></tr>
+  <tr><td><kbd>Del</kbd></td><td>Remove the picked source or receiver; delete an empty picked group</td></tr>
+  <tr><td><kbd>F2</kbd></td><td>Rename the picked group, source or receiver</td></tr>
+  <tr><td><kbd>F5</kbd></td><td>Run</td></tr>
+  <tr><td><kbd>Home</kbd> / <kbd>F</kbd></td><td>Frame the model / focus on the selection</td></tr>
+  <tr><td><kbd>R</kbd> / <kbd>I</kbd></td><td>Roof off / isolate the selection</td></tr>
+  <tr><td><kbd>H</kbd>, <kbd>Esc</kbd>, <kbd>O</kbd></td><td>Present (panels hidden), back, turntable while presenting</td></tr>
+  <tr><td><kbd>Ctrl+R</kbd></td><td>Fill row, in the materials grid</td></tr>
+</table>
+<p>Keys are ignored while you type in a field.</p>
+
+<h2 id="help">Help</h2>
+<p>The Help menu opens, in your browser: upstream I-Simpa's online user guide (written for upstream's own interface; its chapters on SPPS and TCR describe
+the solvers this app runs), upstream I-Simpa's website, and this app's source code.</p>
+
+<h2 id="limits">Not in this version</h2>
+<ul>
+  <li>The Model and Results menus, the command palette (<kbd>Ctrl K</kbd>), the section view, the
+  section plane and the measure tool: shown, disabled.</li>
+  <li>Choosing a difference map's baseline by hand; pausing a run.</li>
+  <li>Naming a volume or making it a fitting zone from the scene list; choosing a measured directivity
+  balloon.</li>
+  <li>Upstream's embedded Python console and scripts, preferences, languages other than English and an
+  update check.</li>
+</ul>
+
+<footer>
+  I-Simpa Night Mode is free software under the GNU General Public License, version 3. The solvers are
+  upstream I-Simpa's, under the GPL version 3, and TetGen's, under the GNU Affero General Public License
+  version 3.
+</footer>
+</body>
+</html>
