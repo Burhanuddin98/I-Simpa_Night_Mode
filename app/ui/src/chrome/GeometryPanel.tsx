@@ -12,11 +12,14 @@
 // - The volume is the air's (backlog 85), labelled so: the inside of a closed obstacle is not in
 //   it. When the faces enclose more, the row's title says how much more and why.
 // - Import model… waits while a run is active (PQ4), saying why.
-import { useState } from 'react';
+// - A31: the project's name and description head the panel, editable (one undo step each).
+import { useEffect, useState } from 'react';
 import * as actions from '../actions';
-import { repairStore, runStore, sceneStore, useStore } from '../store';
+import type { UiIssue } from '../bindings/ipc';
+import { refusalStore, repairStore, runStore, sceneStore, useStore } from '../store';
 import { RUN_ACTIVE_TITLE } from './MenuBar';
-import { checkRows, fact, fileLabel, repairSummary, unitsText, unrepairable } from './sceneModel';
+import { checkRows, descriptionEdit, fact, fileLabel, projectNameEdit, repairSummary, unitsText, unrepairable } from './sceneModel';
+import { CommitInput, Issues } from './SourcesPanel';
 
 /** Decimals of every dimension (the design's "10.00 m"). */
 const DIMENSION_DECIMALS = 2;
@@ -81,6 +84,98 @@ function RepairBlock({ ok }: { ok: boolean }) {
   );
 }
 
+const NAME_KEY = 'project:name';
+const DESCRIPTION_KEY = 'project:description';
+
+/** A refusal made here, before anything is sent: shown under the field as the core's are. */
+function localIssue(field: string, message: string): UiIssue {
+  return { code: 'PROJECT_NAME_EMPTY', rule: '', severity: 'error', path: `project:${field}`, entity: null, field, message };
+}
+
+/** A31: the description, committed when the field loses focus (or on Ctrl+Enter); Esc restores it. */
+function DescriptionField({ value }: { value: string }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  useEffect(() => setDraft(null), [value]);
+  const commit = () => {
+    if (draft === null) return;
+    const op = descriptionEdit(value, draft);
+    if (!op) {
+      setDraft(null);
+      return;
+    }
+    actions.fire(
+      actions.apply(op, DESCRIPTION_KEY).then((out) => {
+        if (out.applied) setDraft(null);
+      }),
+    );
+  };
+  return (
+    <textarea
+      data-field="project-description"
+      aria-label="Project description"
+      spellCheck={false}
+      placeholder="What this project is for, the room, the variants: kept in the project file"
+      value={draft ?? value}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setDraft(null);
+        } else if (e.key === 'Enter' && e.ctrlKey) {
+          e.preventDefault();
+          commit();
+        }
+      }}
+    />
+  );
+}
+
+/**
+ * A31: the project's name and description (upstream's project properties), each edit one undo
+ * step through the checked apply. The name is what the project tab shows and what Save and the
+ * exports suggest as a file name; neither reaches a solver.
+ */
+function ProjectBlock() {
+  const scene = useStore(sceneStore);
+  const refusals = useStore(refusalStore);
+  const [local, setLocal] = useState<UiIssue | null>(null);
+  if (!scene) return null;
+  const { name, description } = scene.view;
+  const commitName = async (text: string) => {
+    const r = projectNameEdit(name, text);
+    if ('refused' in r) {
+      setLocal(localIssue('name', r.refused));
+      return false;
+    }
+    setLocal(null);
+    if (!r.op) return true;
+    return (await actions.apply(r.op, NAME_KEY)).applied;
+  };
+  return (
+    <div className="props-section" data-part="project-block">
+      <div className="label section-label">Project</div>
+      <label className="project-field">
+        <span className="k">Name</span>
+        <CommitInput
+          field="project-name"
+          label="Project name"
+          value={name}
+          invalid={local !== null || (refusals.get(NAME_KEY) ?? []).length > 0}
+          commit={commitName}
+          onRevert={() => setLocal(null)}
+        />
+      </label>
+      <Issues refused={refusals.get(NAME_KEY) ?? []} current={local ? [local] : []} />
+      <label className="project-field">
+        <span className="k">Description</span>
+        <DescriptionField value={description} />
+      </label>
+      <Issues refused={refusals.get(DESCRIPTION_KEY) ?? []} current={[]} />
+    </div>
+  );
+}
+
 function ImportBlock() {
   const running = useStore(runStore) !== null;
   return (
@@ -109,6 +204,7 @@ export function GeometryPanel() {
           <div className="title">Room model</div>
           <div className="sub">{scene ? 'No model in this project' : 'No project open'}</div>
         </div>
+        <ProjectBlock />
         <div className="props-section empty">
           Import a room model, or open a project, to see its model check here.
         </div>
@@ -132,6 +228,8 @@ export function GeometryPanel() {
           {ok ? 'checked' : 'refused'}
         </div>
       </div>
+
+      <ProjectBlock />
 
       <div className="props-section">
         <div className="section-head">

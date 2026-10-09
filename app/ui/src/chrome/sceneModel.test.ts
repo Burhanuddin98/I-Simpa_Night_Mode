@@ -399,3 +399,30 @@ test('G8: a repair in words names each fix, the new file and the untouched origi
   assert.deepEqual(unrepairable(check), ['Faces intersect']);
   assert.deepEqual(unrepairable(null), []);
 });
+
+// A31: the project's name and description.
+import { descriptionEdit, projectNameEdit } from './sceneModel.ts';
+import { opText as opTextA31 } from '../ops.ts';
+
+test('projectNameEdit: the same name is no op, a new one is sent as typed, a blank one is refused', () => {
+  assert.deepEqual(projectNameEdit('Room', 'Room'), { op: null });
+  const r = projectNameEdit('Room', 'Concert hall, stage left');
+  assert.ok('op' in r && r.op);
+  assert.equal(opTextA31(r.op), '{"op":"set_project_name","name":"Concert hall, stage left"}');
+  for (const blank of ['', ' ', '\t']) {
+    const b = projectNameEdit('Room', blank);
+    assert.ok('refused' in b && /needs a name/.test(b.refused), JSON.stringify(blank));
+  }
+  // Spaces around a real name are the user's: sent as typed, not trimmed.
+  const spaced = projectNameEdit('Room', ' Hall ');
+  assert.ok('op' in spaced && spaced.op && opTextA31(spaced.op).includes('" Hall "'));
+});
+
+test('descriptionEdit: unchanged is no op; any other text, empty included, is sent exactly', () => {
+  assert.equal(descriptionEdit('', ''), null);
+  assert.equal(descriptionEdit('a\nb', 'a\nb'), null);
+  const op = descriptionEdit('', 'Measured 2026-10-09.\nSeats empty.');
+  assert.ok(op);
+  assert.equal(opTextA31(op), '{"op":"set_description","description":"Measured 2026-10-09.\\nSeats empty."}');
+  assert.equal(opTextA31(descriptionEdit('x', '')!), '{"op":"set_description","description":""}');
+});

@@ -12,7 +12,8 @@ import type {
   SpectrumShape,
   UiIssue,
 } from '../bindings/ipc.ts';
-import { nextName } from '../ops.ts';
+import type { Op } from '../bindings/schema.ts';
+import { nextName, setDescription, setProjectName } from '../ops.ts';
 
 /** A number as the schema stores it: finite values as numbers, non-finite ones as strings. */
 export type F64 = number | string;
@@ -141,6 +142,21 @@ export function checkRows(check: CheckSummary, units: string): CheckRow[] {
  */
 export function unitsText(info: Pick<ProjectInfo, 'path'>): string {
   return info.path ? 'm (project file)' : 'm (chosen at import)';
+}
+
+/**
+ * A31: what a typed project name sends: no op when it is the name already, the name exactly as
+ * typed otherwise; refused, with the reason in words, when it is empty or only spaces (the tab and
+ * Save's suggested file name would have nothing to show).
+ */
+export function projectNameEdit(stored: string, typed: string): { op: Op | null } | { refused: string } {
+  if (typed.trim() === '') return { refused: 'A project needs a name: write one, or press Esc to keep the one it has' };
+  return { op: typed === stored ? null : setProjectName(typed) };
+}
+
+/** A31: what an edited description sends: no op when unchanged; any text, empty included, otherwise. */
+export function descriptionEdit(stored: string, typed: string): Op | null {
+  return typed === stored ? null : setDescription(typed);
 }
 
 /** The file a project came from: the saved path's last part, else the project's name. */

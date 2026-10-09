@@ -162,6 +162,12 @@ export const setBandComputed = (solver: SolverKind, band: number, computed: bool
   computed,
 });
 
+/** A31: the project's name (the project tab, Save's suggested file name, export file names). */
+export const setProjectName = (name: string): Op => ({ op: 'set_project_name', name });
+
+/** A31: the project's description, free text kept in the project file. */
+export const setDescription = (description: string): Op => ({ op: 'set_description', description });
+
 /** The whole environment, as the editor sends the air's temperature, humidity and pressure (C27). */
 export const setEnvironment = (environment: Environment): Op => ({ op: 'set_environment', environment });
 

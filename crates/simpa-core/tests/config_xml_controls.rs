@@ -407,3 +407,31 @@ fn the_scene_correction_turned_back_leaves_tetgen_input_byte_identical() {
         );
     }
 }
+
+// A31: the project's name and description are the project's own; neither reaches a solver.
+#[test]
+fn the_project_name_and_description_never_reach_the_solver_input() {
+    for (name, original) in fixtures() {
+        let configs = both_configs(&original);
+        let mesh = mesh_input(&original);
+        let mut p = original.clone();
+        for text in [
+            r#"{"op":"set_project_name","name":"Renamed hall, stage left"}"#,
+            r#"{"op":"set_description","description":"Seats empty; curtains open."}"#,
+        ] {
+            Op::from_json(text).unwrap().apply(&mut p).unwrap();
+        }
+        assert_eq!(p.name, "Renamed hall, stage left");
+        assert_eq!(p.description, "Seats empty; curtains open.");
+        assert_eq!(
+            both_configs(&p),
+            configs,
+            "{name}: config.xml is byte-identical"
+        );
+        assert_eq!(
+            mesh_input(&p),
+            mesh,
+            "{name}: TetGen's input is byte-identical"
+        );
+    }
+}
