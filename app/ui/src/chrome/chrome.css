@@ -250,7 +250,7 @@
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  background: var(--glass);
+  background: rgba(19, 16, 16, 0.35); /* the side panels: less fill than --glass (Burhan 2026-10-09) */
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
   backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
   border: 1px solid var(--glass-edge);
@@ -435,7 +435,7 @@
   width: 344px;
   flex-shrink: 0;
   overflow-y: auto;
-  background: var(--glass);
+  background: rgba(19, 16, 16, 0.35); /* as .scene */
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
   backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
   border: 1px solid var(--glass-edge);

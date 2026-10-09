@@ -1,0 +1,60 @@
+/* Hover tilt (UI study handoff §7b D, values from study/mockups/snapshot/depth.css; Burhan 2026-10-06 19:35 "NOT BAD").
+   chrome/tilt.ts sets data-tilt on the panel under the pointer; at rest there is no transform at all.
+
+   perspective() sits inside each panel's own transform, never on an ancestor: an ancestor's perspective makes it the
+   containing block for position: fixed and moves the full-window canvas. At rest the transform is none, so a panel is
+   not a containing block either; nothing fixed is mounted inside these panels (the dialogs mount at the app root, the
+   response and listen windows in the dock). The plan inset and menus do not tilt (tilt.ts says why). */
+
+.scene,
+.props {
+  /* motion.css's fold transitions, kept: a transition list is replaced, never merged. */
+  transition:
+    width 240ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    height 240ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.stepbar,
+.statusbar,
+.viewport .float-panel:not(button):not([role='menu']) {
+  transition: transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.scene {
+  transform-origin: left center;
+}
+.props {
+  transform-origin: right center;
+}
+.stepbar {
+  transform-origin: center top;
+}
+.statusbar {
+  transform-origin: center bottom;
+}
+
+.scene[data-tilt] {
+  transform: perspective(1400px) rotateY(7deg) translateZ(18px);
+}
+.props[data-tilt] {
+  transform: perspective(1400px) rotateY(-7deg) translateZ(18px);
+}
+.stepbar[data-tilt] {
+  transform: perspective(1400px) rotateX(-5deg) translateZ(10px);
+}
+.statusbar[data-tilt] {
+  transform: perspective(1400px) rotateX(6deg) translateZ(8px);
+}
+.viewport .float-panel[data-tilt] {
+  transform: perspective(1400px) translateZ(14px) translateY(-2px);
+}
+
+/* Belt and braces: tilt.ts never sets data-tilt in either case. */
+@media (prefers-reduced-motion: reduce) {
+  [data-tilt] {
+    transform: none !important;
+  }
+}
+html[data-no-motion] [data-tilt] {
+  transform: none !important;
+}
