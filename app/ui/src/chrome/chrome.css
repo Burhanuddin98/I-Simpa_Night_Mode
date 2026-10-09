@@ -1193,6 +1193,57 @@
   font-size: 12px;
   color: var(--text-3);
 }
+/* A34: unsaved work a Night Mode that did not close left, first on the card. */
+.landing-recovery {
+  margin: 0 0 20px;
+  padding: 12px 14px;
+  border-radius: 7px;
+  border: 1px solid var(--red);
+  background: rgba(224, 32, 46, 0.08);
+}
+.landing-recovery-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.landing-recovery-row + .landing-recovery-row {
+  margin-top: 10px;
+}
+.landing-recovery-row .what {
+  flex-grow: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.landing-recovery-row .name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.landing-recovery-row .line {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+.landing-recovery-row button {
+  flex-shrink: 0;
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 6px;
+  border: 1px solid var(--edge);
+  background: var(--raised);
+}
+.landing-recovery-row button.primary {
+  border-color: var(--red);
+  background: var(--red);
+  color: #fff;
+  font-weight: 600;
+}
+.landing-recovery-row button:disabled {
+  opacity: 0.55;
+}
 /* A7: the recent projects, one line each, above the examples. */
 .landing-recent {
   display: flex;

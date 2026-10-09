@@ -11,13 +11,14 @@ import { boxRoomRequestStore, runStore, sceneStore, useStore } from '../store';
 import { EXAMPLES, EXAMPLES_HEAD, EXAMPLES_NOTE, exampleLine, LANDING_LEAD, LANDING_TITLE, landingShown } from './landingModel';
 import { RUN_ACTIVE_TITLE } from './MenuBar';
 import { forgetRecent, recentStore, reopenLastStore, reopenProblemStore, setReopenLast } from './recent';
-import { recentLabel } from './recentModel';
+import { keptAt, recentLabel } from './recentModel';
 
 export function Landing() {
   const scene = useStore(sceneStore);
   const recent = useStore(recentStore);
   const reopen = useStore(reopenLastStore);
   const reopenProblem = useStore(reopenProblemStore);
+  const recovering = useStore(actions.recoveryStore);
   const running = useStore(runStore) !== null;
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +44,29 @@ export function Landing() {
           {LANDING_TITLE}
         </h1>
         <p className="landing-lead">{LANDING_LEAD}</p>
+
+        {recovering.length > 0 && (
+          <section className="landing-recovery" data-part="recovery" aria-label="Unsaved work to restore">
+            <h2 className="landing-head">Unsaved work</h2>
+            {recovering.map((r) => (
+              <div key={r.key} className="landing-recovery-row" data-recovery={r.key}>
+                <div className="what">
+                  <span className="name">{r.name}</span>
+                  <span className="line">
+                    Kept at {keptAt(r.saved_at)}, when Night Mode did not close.{' '}
+                    {r.path ? `Restore opens it as unsaved changes to ${r.path}; Save writes them there.` : 'It was never saved: Restore opens it, Save as gives it a file.'}
+                  </span>
+                </div>
+                <button className="primary" data-action="recovery-restore" disabled={blocked} title={title} onClick={() => go(`restore:${r.key}`, () => actions.restoreRecovery(r.key))}>
+                  Restore
+                </button>
+                <button data-action="recovery-discard" disabled={blocked} title="Let these changes go; the project's own file stays as it is" onClick={() => go(`discard:${r.key}`, () => actions.discardRecovery(r.key))}>
+                  Discard
+                </button>
+              </div>
+            ))}
+          </section>
+        )}
 
         {recent.length > 0 && (
           <>

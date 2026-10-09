@@ -61,6 +61,10 @@ fn main() {
         "app_events",
         "app_quit",
         "export_write",
+        "recovery_save",
+        "recovery_list",
+        "recovery_restore",
+        "recovery_discard",
     ];
     let attributes = tauri_build::Attributes::new()
         .app_manifest(tauri_build::AppManifest::new().commands(commands));

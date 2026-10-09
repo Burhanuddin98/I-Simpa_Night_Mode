@@ -41,6 +41,7 @@ mod export;
 mod guard;
 mod live;
 mod mesh_now;
+mod recovery;
 mod recycle;
 mod results_data;
 mod run_files;
@@ -240,7 +241,10 @@ fn run(args: GuiArgs) -> ExitCode {
         solvers: Arc::new(Mutex::new(runs::SolversCache::default())),
         gpu: Arc::new(Mutex::new(runs::GpuCache::default())),
         close: Arc::new(Mutex::new(CloseState::default())),
+        // A34: off until `setup` knows the app's data folder.
+        recovery: Arc::new(Mutex::new(recovery::Recovery::new(None).0)),
     };
+    let e2e = args.e2e;
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(state)
@@ -304,6 +308,10 @@ fn run(args: GuiArgs) -> ExitCode {
             commands::app_events,
             commands::app_quit,
             commands::export_write,
+            commands::recovery_save,
+            commands::recovery_list,
+            commands::recovery_restore,
+            commands::recovery_discard,
         ])
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::CloseRequested { api, .. } => {
@@ -328,6 +336,22 @@ fn run(args: GuiArgs) -> ExitCode {
                 .build()?;
             if let Some(st) = &selftest {
                 st.start_watchdog(selftest::TIMEOUT);
+            }
+            // A34: crash recovery in the app's local data folder (none for the self-test).
+            if selftest.is_none() {
+                let dir = recovery::folder(
+                    std::env::var_os("SIMPA_RECOVERY_DIR"),
+                    e2e,
+                    app.path().app_local_data_dir().ok(),
+                );
+                let (r, why) = recovery::Recovery::new(dir);
+                let state = app.state::<AppState>();
+                if let Ok(mut slot) = state.recovery.lock() {
+                    *slot = r;
+                }
+                if let (Some(why), Ok(mut s)) = (why, state.session.lock()) {
+                    s.log(events::LineClass::Warn, why);
+                }
             }
             Ok(())
         })

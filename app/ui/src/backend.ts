@@ -31,6 +31,8 @@ import type {
   StartupInfo,
   MeshNowReport,
   RepairReport,
+  AutosaveStatus,
+  RecoveryEntry,
 } from './bindings/ipc';
 import type { BandKind, Op } from './bindings/schema';
 import { opText } from './ops';
@@ -56,6 +58,7 @@ export type {
   ProjectInfo,
   MeshNowReport,
   RepairReport,
+  RecoveryEntry,
   ResultsState,
   RunEventBatch,
   RunStarted,
@@ -142,6 +145,14 @@ export const backend = {
   meshNow: () => invoke<MeshNowReport>('mesh_now'),
   /** `null` saves to the project's own path; a path is Save As. */
   projectSave: (path: string | null) => invoke<SceneState>('project_save', { path }),
+  /** A34: keeps the open project's unsaved changes for crash recovery (only when they moved), or removes the copy. */
+  recoverySave: () => invoke<AutosaveStatus>('recovery_save'),
+  /** A34: the copies left by instances that ended without closing, newest first. */
+  recoveryList: () => invoke<RecoveryEntry[]>('recovery_list'),
+  /** A34: opens a copy as unsaved changes to its project's own file, and removes the copy. */
+  recoveryRestore: (key: string) => invoke<SceneState>('recovery_restore', { key }),
+  /** A34: removes a copy the person let go; answers the copies still offered. */
+  recoveryDiscard: (key: string) => invoke<RecoveryEntry[]>('recovery_discard', { key }),
   /** A6: the project as it is now written to `path`; the open project stays on its own file, unsaved changes kept. */
   projectSaveCopy: (path: string) => invoke<SceneState>('project_save_copy', { path }),
   /** The checked apply. The op goes as `opText`, never `JSON.stringify` (-0, NaN). */

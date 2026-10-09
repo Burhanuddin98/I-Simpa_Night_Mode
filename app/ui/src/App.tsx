@@ -36,6 +36,9 @@ import { installTestHooks } from './testhooks';
 
 let booted = false;
 
+/** A34: how often the open project's unsaved changes are kept for crash recovery. */
+const AUTOSAVE_MS = 30_000;
+
 async function boot(): Promise<void> {
   if (booted) return;
   booted = true;
@@ -58,12 +61,17 @@ async function boot(): Promise<void> {
     // M11: the close request comes through this channel; the solvers and the library are read
     // once (the solvers again before each run), and a --project's runs are listed.
     await actions.listenAppEvents();
+    // A34: unsaved work a Night Mode that did not close left, offered on the landing page; from
+    // here on the open project's unsaved changes are kept every 30 s.
+    const waiting = await actions.refreshRecovery().catch(() => []);
+    window.setInterval(() => actions.fire(actions.autosave()), AUTOSAVE_MS);
     // A33: the last project, when the person chose to start on it and nothing else was opened.
     const last = projectAtStart({
       reopen: reopenLastStore.get(),
       opened: sceneStore.get() !== null || !!info.project_error,
       selftest: !!info.selftest,
       recent: recentStore.get(),
+      recovering: waiting.length > 0,
     });
     if (last) {
       log('INFO', `Opening the last project, as chosen: ${last}`);

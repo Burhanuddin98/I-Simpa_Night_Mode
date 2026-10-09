@@ -65,6 +65,10 @@
     "allow-spps-gpu-status",
     "allow-app-events",
     "allow-app-quit",
-    "allow-export-write"
+    "allow-export-write",
+    "allow-recovery-save",
+    "allow-recovery-list",
+    "allow-recovery-restore",
+    "allow-recovery-discard"
   ]
 }

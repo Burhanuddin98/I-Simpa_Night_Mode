@@ -93,6 +93,11 @@ function foundationHooks(): Record<string, Hook> {
       await actions.saveAs(path);
       return idle();
     },
+    // A34: the 30-second crash-recovery ask, now.
+    autosave: async () => {
+      await actions.autosave();
+      return idle();
+    },
     // A38: what the window's drop event hands the UI (AppEvent::FilesDropped), past the OS drag.
     dropFiles: async (paths: string[]) => {
       await actions.openDropped(paths);

@@ -275,6 +275,31 @@
         }
       ]
     },
+    "AutosaveStatus": {
+      "description": "What one ask did.",
+      "oneOf": [
+        {
+          "const": "off",
+          "description": "No recovery folder (a test session): nothing kept.",
+          "type": "string"
+        },
+        {
+          "const": "clean",
+          "description": "Nothing unsaved: no copy (one there was removed).",
+          "type": "string"
+        },
+        {
+          "const": "kept",
+          "description": "Unsaved changes, already kept as they are.",
+          "type": "string"
+        },
+        {
+          "const": "written",
+          "description": "Unsaved changes, written now.",
+          "type": "string"
+        }
+      ]
+    },
     "BandEnergy": {
       "description": "One band's series of a whole-room table (`<cumul_filename>`).",
       "properties": {
@@ -3954,6 +3979,10 @@
           "minimum": 0,
           "type": "integer"
         },
+        "restored": {
+          "description": "Parity A34: opened by crash recovery, so it holds the person's work even with nothing to\nundo and no file (a project never saved): the save prompt asks, and recovery keeps it.",
+          "type": "boolean"
+        },
         "sources": {
           "format": "uint",
           "minimum": 0,
@@ -4005,7 +4034,8 @@
         "dirty",
         "geometry_rev",
         "groups_assigned",
-        "imported_ungrouped"
+        "imported_ungrouped",
+        "restored"
       ],
       "type": "object"
     },
@@ -4536,6 +4566,35 @@
         "parameters",
         "g_db",
         "curvature"
+      ],
+      "type": "object"
+    },
+    "RecoveryEntry": {
+      "description": "A copy left by an instance that did not close, as the landing page offers it.",
+      "properties": {
+        "key": {
+          "description": "The copy's key (its file names); `recovery_restore` and `recovery_discard` take it.",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "description": "The project's own file, or none for a project never saved.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "saved_at": {
+          "description": "When it was last written, RFC 3339 in local time.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "name",
+        "saved_at"
       ],
       "type": "object"
     },
@@ -7606,6 +7665,9 @@
     "app_event": {
       "$ref": "#/$defs/AppEvent"
     },
+    "autosave_status": {
+      "$ref": "#/$defs/AutosaveStatus"
+    },
     "cmd_error": {
       "$ref": "#/$defs/CmdError"
     },
@@ -7638,6 +7700,9 @@
     },
     "project_info": {
       "$ref": "#/$defs/ProjectInfo"
+    },
+    "recovery_entry": {
+      "$ref": "#/$defs/RecoveryEntry"
     },
     "repair_report": {
       "$ref": "#/$defs/RepairReport"
@@ -7675,6 +7740,7 @@
   },
   "required": [
     "app_event",
+    "autosave_status",
     "cmd_error",
     "echogram_view",
     "edit_outcome",
@@ -7686,6 +7752,7 @@
     "mesh_now_report",
     "prepared",
     "project_info",
+    "recovery_entry",
     "repair_report",
     "report_view",
     "results_state",

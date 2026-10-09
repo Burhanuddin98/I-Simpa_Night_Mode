@@ -54,6 +54,9 @@ test('the save prompt asks only when the user changed something not on disk', ()
   const info = (dirty: boolean, path: string | null, undo_depth: number) => ({ dirty, path, undo_depth });
   assert.equal(needsSavePrompt(null), false);
   assert.equal(needsSavePrompt(info(false, 'a.simpa', 0)), false, 'clean');
+  // A34: restored by crash recovery, never saved, nothing to undo: the user's work all the same.
+  assert.equal(needsSavePrompt({ ...info(true, null, 0), restored: true }), true, 'restored work');
+  assert.equal(needsSavePrompt({ ...info(true, null, 0), restored: false }), false, 'a new empty project');
   assert.equal(needsSavePrompt(info(true, 'a.simpa', 1)), true, 'an edit to a saved project');
   assert.equal(needsSavePrompt(info(true, 'a.simpa', 0)), true, 'undone past the save');
   assert.equal(needsSavePrompt(info(true, null, 0)), false, 'a new or imported project, untouched');

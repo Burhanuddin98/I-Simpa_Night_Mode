@@ -14,6 +14,7 @@ import {
   type EditOutcome,
   type LibraryMaterial,
   type MeshNowReport,
+  type RecoveryEntry,
   type ReportView,
   type ResultsState,
   type RepairReport,
@@ -1175,6 +1176,61 @@ export async function openDropped(paths: readonly string[]): Promise<void> {
   }
   log('INFO', `Dropped ${choice.path}${choice.ignored > 0 ? `; ${choice.ignored} more ${choice.ignored === 1 ? 'file' : 'files'} not opened (one at a time)` : ''}`);
   await openPath(choice.path);
+}
+
+// ---- Parity A34: crash recovery (src-tauri recovery.rs) ------------------------------------------
+
+/** The unsaved work left by a Night Mode that did not close, newest first: the landing page offers it. */
+export const recoveryStore = new Store<RecoveryEntry[]>([]);
+
+/** Lists the unsaved work waiting to be restored (at boot, and after a restore or a discard). */
+export async function refreshRecovery(): Promise<RecoveryEntry[]> {
+  const list = await run('Listing the unsaved work to recover', () => backend.recoveryList());
+  recoveryStore.set(list);
+  return list;
+}
+
+let autosaveFailing = false;
+
+/**
+ * The 30-second ask (App.tsx): the core keeps the project's unsaved changes beside the app when they
+ * moved, or removes its copy when there are none. A failure is said once, not every 30 s, and again
+ * only after it has worked in between.
+ */
+export async function autosave(): Promise<void> {
+  try {
+    await backend.recoverySave();
+    autosaveFailing = false;
+  } catch (e) {
+    if (autosaveFailing) return;
+    autosaveFailing = true;
+    const err = asCmdError(e);
+    log('FAIL', `Crash recovery could not keep the unsaved changes: ${err.message} (${err.code})`);
+  }
+}
+
+/**
+ * Restore on the landing page: the kept copy `key` opens as unsaved changes to its project's own file
+ * (Save writes them there), after the save prompt for what is open; the copy is then removed. `null`
+ * when the user cancelled or a run is active.
+ */
+export async function restoreRecovery(key: string): Promise<SceneState | null> {
+  if (refuseDuringRun('Restore')) return null;
+  if (!(await confirmDiscard())) return null;
+  refusalStore.set(new Map());
+  const state = await run('Could not restore the unsaved work', async () => accept(await backend.recoveryRestore(key)));
+  noteRecent(state.info.path);
+  forgetRuns();
+  fire(refreshRuns());
+  fire(refreshRecovery());
+  return state;
+}
+
+/** Discard on the landing page: the kept copy `key` is removed; its project's own file is untouched. */
+export async function discardRecovery(key: string): Promise<void> {
+  const name = recoveryStore.get().find((e) => e.key === key)?.name ?? key;
+  recoveryStore.set(await run('Could not discard the unsaved work', () => backend.recoveryDiscard(key)));
+  log('INFO', `Discarded the unsaved changes kept for ${name}`);
 }
 
 /** At boot: the channel the backend sends the close request on. */

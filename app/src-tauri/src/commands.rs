@@ -24,6 +24,7 @@ use crate::events::{
 use crate::examples;
 use crate::guard::{self, CmdError, CmdResult, lock};
 use crate::mesh_now::{self, MeshNowReport};
+use crate::recovery::{AutosaveStatus, Recovery, RecoveryEntry};
 use crate::results_data::{self, EchogramView, ReportView, RunDataIndex};
 use crate::run_files;
 use crate::runs::{
@@ -54,6 +55,8 @@ pub struct AppState {
     pub gpu: Arc<Mutex<GpuCache>>,
     /// The first close request the UI has not answered yet.
     pub close: Arc<Mutex<CloseState>>,
+    /// Parity A34: this instance's crash-recovery copy (`recovery`), set up once the window is.
+    pub recovery: Arc<Mutex<Recovery>>,
 }
 
 /// The oldest close request the UI was told of and has not acknowledged, and when. Requests
@@ -920,14 +923,76 @@ pub async fn app_events(state: State<'_, AppState>, on_event: Channel<AppEvent>)
 #[tauri::command(rename_all = "snake_case")]
 pub async fn app_quit(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
     let (slot, close) = (state.run.clone(), state.close.clone());
+    let recovery = state.recovery.clone();
     guard::blocking("app_quit", move || {
         runs::cancel_and_wait(&slot, runs::QUIT_WAIT);
         lock(&close, "close")?.requested = None;
+        // A34: the person answered the save prompt (saved, or let the changes go): nothing to recover.
+        lock(&recovery, "recovery")?.clear_own();
         Ok(())
     })
     .await?;
     app.exit(0);
     Ok(())
+}
+
+// ---- Parity A34: crash recovery (`recovery`) ------------------------------------------------------
+
+/// The UI's ask, every 30 s: keeps the open project's unsaved changes beside
+/// the app (only when they moved), or removes the copy when there are none.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn recovery_save(state: State<'_, AppState>) -> CmdResult<AutosaveStatus> {
+    let (session, recovery) = (state.session.clone(), state.recovery.clone());
+    guard::blocking("recovery_save", move || {
+        let s = lock(&session, "project")?;
+        lock(&recovery, "recovery")?.autosave(&s)
+    })
+    .await
+}
+
+/// The copies left by instances that ended without closing, newest first: the landing page offers
+/// them.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn recovery_list(state: State<'_, AppState>) -> CmdResult<Vec<RecoveryEntry>> {
+    let recovery = state.recovery.clone();
+    guard::blocking("recovery_list", move || {
+        Ok(lock(&recovery, "recovery")?.list())
+    })
+    .await
+}
+
+/// Opens the copy `key` as unsaved changes to its project's own file (the open project replaced,
+/// after the UI's save prompt), and removes the copy. Refused while a run is active.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn recovery_restore(state: State<'_, AppState>, key: String) -> CmdResult<SceneState> {
+    let (session, slot, recovery) = (
+        state.session.clone(),
+        state.run.clone(),
+        state.recovery.clone(),
+    );
+    guard::blocking("recovery_restore", move || {
+        let mut s = lock(&session, "project")?;
+        runs::refuse_while_running(&slot, "Restore")?;
+        lock(&recovery, "recovery")?.restore(&key, &mut s)?;
+        s.scene_state()
+            .ok_or_else(|| CmdError::new("NO_PROJECT", "the restored project did not open"))
+    })
+    .await
+}
+
+/// Removes the copy `key` (the person let it go); answers the copies still offered.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn recovery_discard(
+    state: State<'_, AppState>,
+    key: String,
+) -> CmdResult<Vec<RecoveryEntry>> {
+    let recovery = state.recovery.clone();
+    guard::blocking("recovery_discard", move || {
+        let mut r = lock(&recovery, "recovery")?;
+        r.discard(&key)?;
+        Ok(r.list())
+    })
+    .await
 }
 
 /// The UI's self-test result as JSON text. Written to the `--selftest` path, then the app exits

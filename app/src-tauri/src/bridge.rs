@@ -62,6 +62,9 @@ pub struct ProjectInfo {
     /// Imported in this session from a mesh file that declares no groups (C1): every face is in
     /// one surface group named after the file, for the user to carve.
     pub imported_ungrouped: bool,
+    /// Parity A34: opened by crash recovery, so it holds the person's work even with nothing to
+    /// undo and no file (a project never saved): the save prompt asks, and recovery keeps it.
+    pub restored: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, JsonSchema)]
@@ -104,6 +107,9 @@ pub struct Session {
     /// The open project was imported, just now, from a mesh file that declares no groups
     /// (`ImportReport::ungrouped`, C1): the Geometry step says so. Cleared by any other load.
     imported_ungrouped: bool,
+    /// Parity A34: the open project was restored by crash recovery ([`ProjectInfo::restored`]).
+    /// Cleared by any other load.
+    restored: bool,
     /// The mesh file the open project was imported from this session (parity G8: Repair writes
     /// its repaired copy beside it). Cleared by any other load.
     import_source: Option<PathBuf>,
@@ -286,6 +292,7 @@ impl Session {
         self.geometry_rev += 1;
         self.model_name = model_name;
         self.imported_ungrouped = false;
+        self.restored = false;
         self.import_source = None;
         self.check = None;
         self.refresh();
@@ -342,6 +349,7 @@ impl Session {
             geometry_rev: self.geometry_rev,
             groups_assigned: scene::groups_assigned(p),
             imported_ungrouped: self.imported_ungrouped,
+            restored: self.restored,
         })
     }
 
@@ -353,6 +361,36 @@ impl Session {
     /// The project file this session was opened from or last saved to.
     pub fn path(&self) -> Option<&Path> {
         self.path.as_deref()
+    }
+
+    /// A number that moves with every edit, undo, redo and load (A34: whether the unsaved changes
+    /// moved since they were last kept).
+    pub fn state_serial(&self) -> u64 {
+        self.top_serial()
+    }
+
+    /// Parity A34: a project kept by crash recovery, opened as unsaved changes to its own file
+    /// `path` (or as a project never saved): dirty whatever its content, so Save writes it there
+    /// and the save prompt asks first. The history starts here, as after Open.
+    pub fn restore_recovered(&mut self, project: Project, path: Option<PathBuf>, saved_at: &str) {
+        let name = path
+            .as_deref()
+            .map(file_name)
+            .unwrap_or_else(|| project.name.clone());
+        let to = match &path {
+            Some(p) => format!("Save writes them to {}", p.display()),
+            None => "the project was never saved: Save as gives it a file".to_string(),
+        };
+        self.replace(project, path, name);
+        // Never equal to a serial the session hands out (they start at 1): unsaved until saved.
+        self.saved_serial = 0;
+        self.restored = true;
+        self.lines.push(LogLine::new(
+            LineClass::Ok,
+            format!(
+                "Restored the unsaved changes kept at {saved_at}, when Night Mode did not close; {to}"
+            ),
+        ));
     }
 
     /// A Console line, sent with the next scene state.

@@ -150,6 +150,17 @@ fn dumps() -> Vec<Dump> {
                     "EchogramView",
                     schema_for!(EchogramView).to_value(),
                 ),
+                // Parity A34: crash recovery.
+                (
+                    "recovery_entry",
+                    "RecoveryEntry",
+                    schema_for!(crate::recovery::RecoveryEntry).to_value(),
+                ),
+                (
+                    "autosave_status",
+                    "AutosaveStatus",
+                    schema_for!(crate::recovery::AutosaveStatus).to_value(),
+                ),
             ],
         },
     ]

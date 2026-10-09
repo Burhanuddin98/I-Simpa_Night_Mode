@@ -17,6 +17,13 @@ export type AppEvent =
       paths: string[];
     };
 /**
+ * What one ask did.
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "AutosaveStatus".
+ */
+export type AutosaveStatus = 'off' | 'clean' | 'kept' | 'written';
+/**
  * A named entity of the project. In JSON: `{"kind": "material", "id": "<uuid>"}`; any other
  * key is refused.
  *
@@ -2722,6 +2729,7 @@ export type Variable1 = 'crossings_per_particle' | 'crossings_times_lifetime_spr
  */
 export interface IpcBindings {
   app_event: AppEvent;
+  autosave_status: AutosaveStatus;
   cmd_error: CmdError;
   echogram_view: EchogramView;
   edit_outcome: EditOutcome;
@@ -2733,6 +2741,7 @@ export interface IpcBindings {
   mesh_now_report: MeshNowReport;
   prepared: Prepared;
   project_info: ProjectInfo;
+  recovery_entry: RecoveryEntry;
   repair_report: RepairReport;
   report_view: ReportView;
   results_state: ResultsState;
@@ -3118,6 +3127,11 @@ export interface ProjectInfo {
    * Entries on the redo stack.
    */
   redo_depth: number;
+  /**
+   * Parity A34: opened by crash recovery, so it holds the person's work even with nothing to
+   * undo and no file (a project never saved): the save prompt asks, and recovery keeps it.
+   */
+  restored: boolean;
   sources: number;
   surface_groups: number;
   surface_receivers: number;
@@ -3654,6 +3668,27 @@ export interface Prepared {
   checksum: number;
   prepare_ms: number;
   token: number;
+}
+/**
+ * A copy left by an instance that did not close, as the landing page offers it.
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "RecoveryEntry".
+ */
+export interface RecoveryEntry {
+  /**
+   * The copy's key (its file names); `recovery_restore` and `recovery_discard` take it.
+   */
+  key: string;
+  name: string;
+  /**
+   * The project's own file, or none for a project never saved.
+   */
+  path?: string | null;
+  /**
+   * When it was last written, RFC 3339 in local time.
+   */
+  saved_at: string;
 }
 /**
  * What Repair (parity G8, `model_repair`) did: the core's safe fixes counted, the new file it

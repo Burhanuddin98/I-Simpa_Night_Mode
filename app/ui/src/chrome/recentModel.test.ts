@@ -1,7 +1,7 @@
 // A7: the recent projects list's rules (recentModel.ts).
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { projectAtStart, RECENT_MAX, readRecent, recentLabel, withoutRecent, withRecent } from './recentModel.ts';
+import { keptAt, projectAtStart, RECENT_MAX, readRecent, recentLabel, withoutRecent, withRecent } from './recentModel.ts';
 
 test('projectAtStart (A33): the newest recent project, only when chosen, nothing else opened, not the self-test', () => {
   const recent = ['C:\\a.simpa', 'C:\\b.simpa'];
@@ -11,6 +11,12 @@ test('projectAtStart (A33): the newest recent project, only when chosen, nothing
   assert.equal(projectAtStart({ ...on, opened: true }), null, '--project wins');
   assert.equal(projectAtStart({ ...on, selftest: true }), null);
   assert.equal(projectAtStart({ ...on, recent: [] }), null);
+  assert.equal(projectAtStart({ ...on, recovering: true }), null, 'A34: unsaved work to restore first');
+});
+
+test('keptAt (A34): the date and minute of an RFC 3339 local time', () => {
+  assert.equal(keptAt('2026-10-09T14:30:12.123+02:00'), '2026-10-09 14:30');
+  assert.equal(keptAt('not a time'), 'not a time');
 });
 
 test('withRecent: the newest first, once whatever its case or slashes, at most five', () => {

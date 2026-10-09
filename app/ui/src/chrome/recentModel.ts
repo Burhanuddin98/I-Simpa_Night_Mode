@@ -31,9 +31,22 @@ export function readRecent(value: unknown): string[] {
  * session starts on the landing page), nothing was opened from the command line, it is not the
  * self-test, and there is a recent project.
  */
-export function projectAtStart(opts: { reopen: boolean; opened: boolean; selftest: boolean; recent: readonly string[] }): string | null {
-  if (!opts.reopen || opts.opened || opts.selftest) return null;
+export function projectAtStart(opts: {
+  reopen: boolean;
+  opened: boolean;
+  selftest: boolean;
+  recent: readonly string[];
+  /** A34: unsaved work waits to be restored: the landing page, where it is offered, comes first. */
+  recovering?: boolean;
+}): string | null {
+  if (!opts.reopen || opts.opened || opts.selftest || opts.recovering) return null;
   return opts.recent[0] ?? null;
+}
+
+/** A34: when a copy was kept, `2026-10-09 14:30`, from its RFC 3339 local time; the text itself if it is not one. */
+export function keptAt(rfc3339: string): string {
+  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/.exec(rfc3339);
+  return m ? `${m[1]} ${m[2]}` : rfc3339;
 }
 
 /** A recent entry as a menu shows it: the file's name without `.simpa`, and its folder. */

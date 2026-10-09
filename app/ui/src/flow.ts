@@ -48,9 +48,10 @@ export function joinBlockers(
  * model just imported, whose source file is untouched) holds no work of the user's, and does not
  * ask (product question PQ7 of M11's foundation, default "does not ask").
  */
-export function needsSavePrompt(info: Pick<ProjectInfo, 'dirty' | 'path' | 'undo_depth'> | null): boolean {
+export function needsSavePrompt(info: (Pick<ProjectInfo, 'dirty' | 'path' | 'undo_depth'> & { restored?: boolean }) | null): boolean {
   if (!info || !info.dirty) return false;
-  return info.path !== null || info.undo_depth > 0;
+  // A34: work restored by crash recovery is the user's even with nothing to undo and no file.
+  return info.path !== null || info.undo_depth > 0 || info.restored === true;
 }
 
 export function emptyCounts(): ClassCounts {
