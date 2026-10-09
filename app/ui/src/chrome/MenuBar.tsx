@@ -1,4 +1,4 @@
-// The menu bar (design:28-44): File, Edit, View and Simulate work; Model, Results and Help stay
+// The menu bar (design:28-44): File, Edit, View, Simulate and Help work; Model and Results stay
 // disabled until their milestones. Then the project as a tab with the unsaved-changes dot, the
 // command palette (disabled until it is built) and Run (RunButton). Every item calls the same
 // action the keys and the e2e hooks call (actions.ts); View drives the 3D view through the
@@ -25,6 +25,7 @@ import { joinBlockers } from '../flow';
 import { boxRoomRequestStore, groupRenameStore, reportStore, runStore, sceneStore, selectedRunStore, selectionStore, solversStatusStore, solverStore, stepStore, useStore, viewportStore } from '../store';
 import { ADD_GROUP_LABEL, DELETE_GROUP_LABEL, MERGE_LABEL, mergePlan, RENAME_GROUP_LABEL, renameTarget } from './groupsModel';
 import { clipboardStore, copySelected, deleteGroup, pasteCopied } from './sceneUi';
+import { HELP_LINKS } from './helpModel';
 import { Search } from './icons';
 import { recentStore, reopenLastStore, setReopenLast } from './recent';
 import { recentMenuLabel } from './recentModel';
@@ -249,6 +250,13 @@ export function MenuBar() {
         title: hidden.isolate ? 'Show the faces Isolate hid' : (isolateWhyNot() ?? 'Show only the picked faces or surface groups'),
       },
     ],
+    // A20: the Help menu, its pages opened by the core in the default browser (help.rs).
+    Help: HELP_LINKS.map((l) => ({
+      id: l.id,
+      label: l.label,
+      title: l.title,
+      run: () => actions.fire(actions.openHelp(l.topic, l.what)),
+    })),
     Simulate: [
       {
         id: 'run',

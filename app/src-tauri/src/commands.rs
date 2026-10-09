@@ -23,6 +23,7 @@ use crate::events::{
 };
 use crate::examples;
 use crate::guard::{self, CmdError, CmdResult, lock};
+use crate::help;
 use crate::mesh_now::{self, MeshNowReport};
 use crate::recovery::{AutosaveStatus, Recovery, RecoveryEntry};
 use crate::results_data::{self, EchogramView, ReportView, RunDataIndex};
@@ -697,6 +698,14 @@ pub async fn run_open_folder(state: State<'_, AppState>, run: String) -> CmdResu
         Ok(dir.display().to_string())
     })
     .await
+}
+
+/// Parity A20: opens a Help topic (`help::LINKS`): the default browser on its address, started
+/// from here as R4's folder is, so the webview has no shell permission and holds no address.
+/// Answers what was opened.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn help_open(topic: String) -> CmdResult<String> {
+    guard::blocking("help_open", move || help::open(&topic)).await
 }
 
 /// Parity R3: moves `run`, one of the open project's runs and not the active one, to the Recycle

@@ -186,6 +186,8 @@ export const backend = {
   runLabel: (run: string, label: string) => invoke<RunsView>('run_label', { run, label }),
   /** R4: Explorer on a listed run's folder, started by the core; answers the folder opened. */
   runOpenFolder: (run: string) => invoke<string>('run_open_folder', { run }),
+  /** A20: a Help topic (help.rs) opened by the core in the default browser; answers what it opened. */
+  helpOpen: (topic: string) => invoke<string>('help_open', { topic }),
   runResults: (run: string) => invoke<ResultsState>('run_results', { run }),
   projImport: (path: string) => invoke<SceneState>('proj_import', { path }),
   materialLibrary: () => invoke<LibraryMaterial[]>('material_library'),

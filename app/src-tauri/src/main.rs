@@ -39,6 +39,7 @@ mod events;
 mod examples;
 mod export;
 mod guard;
+mod help;
 mod live;
 mod mesh_now;
 mod recovery;
@@ -292,6 +293,7 @@ fn run(args: GuiArgs) -> ExitCode {
             commands::runs_list,
             commands::run_label,
             commands::run_open_folder,
+            commands::help_open,
             commands::run_delete,
             commands::run_results,
             commands::run_report,

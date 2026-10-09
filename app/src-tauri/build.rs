@@ -45,6 +45,7 @@ fn main() {
         "runs_list",
         "run_label",
         "run_open_folder",
+        "help_open",
         "run_delete",
         "run_results",
         "run_report",

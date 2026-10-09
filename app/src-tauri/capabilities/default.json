@@ -50,6 +50,7 @@
     "allow-runs-list",
     "allow-run-label",
     "allow-run-open-folder",
+    "allow-help-open",
     "allow-run-delete",
     "allow-run-results",
     "allow-run-report",

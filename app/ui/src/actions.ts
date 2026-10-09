@@ -737,6 +737,14 @@ export async function openRunFolder(runName: string): Promise<string> {
   return dir;
 }
 
+/** A20: opens a Help topic in the default browser (the core starts it, help.rs); the Console
+ * says what was opened. `what` is the menu's own words for it (helpModel.ts). */
+export async function openHelp(topic: string, what: string): Promise<string> {
+  const opened = await run(`Could not open ${what}`, () => backend.helpOpen(topic));
+  log('INFO', `Opened ${what} in your browser`);
+  return opened;
+}
+
 /**
  * A run the backend is running that this page has no record of: the page was reloaded mid-run
  * (WebView2's reload, the devtools), which loses everything in its memory, `runStore` included,
