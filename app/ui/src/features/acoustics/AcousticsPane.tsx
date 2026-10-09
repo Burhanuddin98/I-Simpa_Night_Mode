@@ -231,16 +231,56 @@ function AdviceCardView({ cards, solver, conflicts }: { cards: AdviceCard[]; sol
   );
 }
 
-/** A uPlot chart over `data`, redrawn when `data` changes; sized to its box. */
 /**
  * R62: every chart zooms under the hand: drag across it to zoom to that span (sideways the bands
  * or times, up and down the values, both for a box), double-click to go back to the whole chart.
  * No crosshair and no readout: a value is read from the table beside the chart, never from the
  * cursor. `hidden` are the series (uPlot indices) the legend has switched off; switching one keeps
  * the zoom.
+ *
+ * The zoom is the chart's own, not uPlot's `setScale` drag: the charts give their scales fixed
+ * ranges (the bands' half-step margins, the RT chart's room above the target, a range set by hand),
+ * and uPlot's drag zoom cannot move a fixed range. Each scale's range is wrapped: the zoom while
+ * there is one, else the chart's own.
  */
-const ZOOM_CURSOR: uPlot.Cursor = { x: false, y: false, points: { show: false }, drag: { x: true, y: true, uni: 24, setScale: true } };
+const ZOOM_CURSOR: uPlot.Cursor = { x: false, y: false, points: { show: false }, drag: { x: true, y: true, uni: 24, setScale: false } };
 const ZOOM_HINT = 'Drag to zoom (sideways, up and down, or a box); double-click for the whole chart';
+
+type Zoom = { x?: [number, number]; y?: [number, number] };
+
+/** A scale's own range as uPlot would make it: a fixed pair, the chart's function, or uPlot's
+ * default (the data's extent sideways, padded with a soft zero up and down). */
+function ownRange(key: 'x' | 'y', range: uPlot.Scale['range'], u: uPlot, min: number, max: number): uPlot.Range.MinMax {
+  if (typeof range === 'function') return range(u, min, max, key);
+  if (Array.isArray(range) && typeof range[0] !== 'object') return range as uPlot.Range.MinMax;
+  return key === 'x' ? [min, max] : uPlot.rangeNum(min, max, 0.1, true);
+}
+
+/** `opts` with each scale's range taking the zoom in `zoom` first, and the drag that sets it. */
+function withZoom(opts: Omit<uPlot.Options, 'width' | 'height'>, zoom: { current: Zoom }): Omit<uPlot.Options, 'width' | 'height'> {
+  const scales = { ...opts.scales };
+  for (const key of ['x', 'y'] as const) {
+    const sc = scales[key] ?? {};
+    const own = sc.range;
+    scales[key] = { ...sc, range: (u: uPlot, min: number, max: number) => zoom.current[key] ?? ownRange(key, own, u, min, max) };
+  }
+  // A drag's span: sideways (the full height selected), up and down (the full width), or a box.
+  const select = (u: uPlot) => {
+    const s = u.select;
+    if (s.width < 4 && s.height < 4) return;
+    const fullH = s.height >= u.over.clientHeight - 1;
+    const fullW = s.width >= u.over.clientWidth - 1;
+    const z: Zoom = { ...zoom.current };
+    if (!fullW && s.width >= 4) z.x = [u.posToVal(s.left, 'x'), u.posToVal(s.left + s.width, 'x')];
+    if (!fullH && s.height >= 4) z.y = [u.posToVal(s.top + s.height, 'y'), u.posToVal(s.top, 'y')];
+    zoom.current = z;
+    u.setSelect({ left: 0, top: 0, width: 0, height: 0 }, false);
+    // Re-ranges every scale through its wrapped range, so the zoom takes.
+    u.setData(u.data, true);
+  };
+  const hooks = { ...opts.hooks, setSelect: [...(opts.hooks?.setSelect ?? []), select] };
+  return { ...opts, scales, hooks };
+}
 
 /** R72: `opts` on the axes set by hand: a typed range replaces the chart's own, a typed spacing
  * puts the value axis's ticks at its multiples. The values drawn are the same. */
@@ -257,7 +297,9 @@ function withHand(opts: Omit<uPlot.Options, 'width' | 'height'>, hand: HandAxes 
 
 /** A uPlot chart over `data`, redrawn when `data` changes; sized to its box. */
 function Chart({ opts: own, data, part, hidden = [], hand }: { opts: Omit<uPlot.Options, 'width' | 'height'>; data: uPlot.AlignedData; part: string; hidden?: readonly number[]; hand?: HandAxes }) {
-  const opts = useMemo(() => withHand(own, hand), [own, hand]);
+  // R62: the zoom, dropped whenever the chart is made again (other data, other axes by hand).
+  const zoom = useRef<Zoom>({});
+  const opts = useMemo(() => withZoom(withHand(own, hand), zoom), [own, hand]);
   const box = useRef<HTMLDivElement>(null);
   const plot = useRef<uPlot | null>(null);
   const hiddenNow = useRef(hidden);
@@ -273,11 +315,20 @@ function Chart({ opts: own, data, part, hidden = [], hand }: { opts: Omit<uPlot.
     const el = box.current;
     if (!el) return;
     const size = () => ({ width: Math.max(160, el.clientWidth), height: Math.max(100, el.clientHeight) });
-    plot.current = new uPlot({ cursor: ZOOM_CURSOR, ...opts, ...size() }, data, el);
-    show(plot.current, hiddenNow.current);
+    zoom.current = {};
+    const u = new uPlot({ cursor: ZOOM_CURSOR, ...opts, ...size() }, data, el);
+    plot.current = u;
+    show(u, hiddenNow.current);
+    // Double-click: the whole chart again (the chart's own ranges, or the axes set by hand).
+    const whole = () => {
+      zoom.current = {};
+      u.setData(u.data, true);
+    };
+    u.over.addEventListener('dblclick', whole);
     const ro = new ResizeObserver(() => plot.current?.setSize(size()));
     ro.observe(el);
     return () => {
+      u.over.removeEventListener('dblclick', whole);
       ro.disconnect();
       plot.current?.destroy();
       plot.current = null;
