@@ -175,7 +175,7 @@ function RunTime({ scene, s, solver, particles }: { scene: SceneState; s: Projec
   const dev = solver === 'spps' ? device : 'cpu';
   const from = measuredRun(runs, solver, dev);
   const f = forecastRunTime(from, solver, solver === 'spps' ? workNow(scene, s, particles) : null);
-  const t = runTimeText(f, solver, dev, now, from !== null);
+  const t = runTimeText(f, solver, dev, now, from);
   return (
     <div className="sim-runtime" data-part="run-time" data-measured={from ? from.run : ''}>
       <div className="sim-field-line">

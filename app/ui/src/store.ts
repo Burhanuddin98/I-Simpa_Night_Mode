@@ -15,6 +15,7 @@ import type {
   SolversStatus,
   UiIssue,
 } from './bindings/ipc';
+import type { ProgressPoint } from './features/simulate/runTime';
 import type { SceneMesh } from './mesh';
 import type { StepKey } from './steps';
 
@@ -137,6 +138,9 @@ export interface ActiveRun {
   solveAt?: number;
   /** When the last PROGRESS line arrived, on this page's clock. */
   progressAt?: number;
+  /** The highest share a PROGRESS line has given and when it arrived: the live finish's projection (runTime.ts
+   * `keepPeak`, `liveFinishMs`). The bar shows `progress`, the share as last printed. */
+  progressPeak?: ProgressPoint;
   status: 'starting' | 'running' | 'cancelling';
 }
 export const runStore = new Store<ActiveRun | null>(null);

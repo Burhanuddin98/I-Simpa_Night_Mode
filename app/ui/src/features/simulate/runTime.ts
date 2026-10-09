@@ -10,8 +10,14 @@
 // there is no forecast, only that there is no measurement yet. Linear is the forecast's one assumption: SPPS
 // traces every particle of every source in every band step by step until it is absorbed or the duration ends, so
 // its work grows with each factor; in an absorbing room most particles die before the duration ends, so a longer
-// duration costs less than in proportion and the forecast reads long. The solver's time only: the meshing before
-// it is not counted. TCR has no particles: its time is its last run's, unscaled.
+// duration costs less than in proportion and the forecast reads long. It reads long too when bands run in
+// parallel: SPPS on the CPU runs one thread per band (sppsNantes.cpp:373-386), so on a CPU with cores to spare a
+// run with twice the bands takes far less than twice the time. And it reads long when a short run's fixed start-up
+// (reading the mesh, writing the results) is scaled up with its particles: a 0:05 GPU run of 300,000 particles
+// forecast about 50 s for 3,000,000, which took 44.6 s; a CPU run of 150,000 particles on the box took 3.4 s and
+// forecast 68 s for 3,000,000, which took 56.6 s. So an SPPS run shorter than `MIN_MEASURED_S` is not scaled
+// from at all: it is too short to time the next run by. The solver's time only: the meshing before it is not
+// counted. TCR has no particles: its time is its last run's, unscaled.
 //
 // Numbers. No acoustic number is shown before a run (M10 rule 6, the self-test's no_acoustic_numbers), and no
 // number next to s, ms or % (m10-h's ACOUSTIC_NUMBER): a duration is said in minutes, a measured time as m:ss (as
@@ -37,6 +43,8 @@ export interface Measurement {
   seconds: number;
   /** Its work; null for TCR, which has none to scale by. */
   work: RunWork | null;
+  /** An SPPS run under `MIN_MEASURED_S`: named, never scaled from. */
+  tooShort: boolean;
 }
 
 export interface RunTimeForecast {
@@ -44,6 +52,10 @@ export interface RunTimeForecast {
   seconds: number;
   from: Measurement;
 }
+
+/** The shortest SPPS run a forecast is scaled from, s. Below it the solver's fixed start-up is most of the run,
+ * and scaling that by the particles reads long. `elapsed_s` is rounded to 0.1 s, so the rounded time is compared. */
+export const MIN_MEASURED_S = 2;
 
 /** `RunWork`'s product, the units a run's time is scaled by. */
 export function workUnits(w: RunWork): number {
@@ -57,9 +69,12 @@ function checked(w: RunWork): RunWork | null {
 }
 
 /** The newest run of this project a forecast for `solver` on `device` may be measured on: finished OK, the same
- * solver on the same device (a GPU run carries `gpu_device`), its solver time read, and for SPPS its work. */
+ * solver on the same device (a GPU run carries `gpu_device`), its solver time read, and for SPPS its work and at
+ * least `MIN_MEASURED_S`. With only shorter SPPS runs, the newest of them, `tooShort`, so the line can say why
+ * there is no forecast. */
 export function measuredRun(runs: RunsView | null, solver: SolverName, device: SppsDevice): Measurement | null {
   let best: { row: RunRow; m: Measurement } | null = null;
+  let short: { row: RunRow; m: Measurement } | null = null;
   for (const r of runs?.rows ?? []) {
     if (r.status !== 'OK' || r.solver !== solver) continue;
     if (solver === 'spps' && (device === 'gpu') !== !!r.gpu_device) continue;
@@ -72,9 +87,13 @@ export function measuredRun(runs: RunsView | null, solver: SolverName, device: S
       work = checked({ particlesPerSource: w.particles_per_source, sources: w.sources, bands: w.bands, durationS: w.duration_s });
       if (!work || !(seconds > 0)) continue;
     }
-    if (!best || r.number > best.row.number) best = { row: r, m: { run: r.run, number: r.number, seconds, work } };
+    const tooShort = solver === 'spps' && seconds < MIN_MEASURED_S;
+    const m = { run: r.run, number: r.number, seconds, work, tooShort };
+    if (tooShort) {
+      if (!short || r.number > short.row.number) short = { row: r, m };
+    } else if (!best || r.number > best.row.number) best = { row: r, m };
   }
-  return best?.m ?? null;
+  return best?.m ?? short?.m ?? null;
 }
 
 /** The work of an SPPS run on `scene` as set now, `particles` overriding the stored count (the field as typed);
@@ -96,11 +115,11 @@ export function workNow(
 }
 
 /** The forecast: the measured run's time, for SPPS scaled by `now`'s work over its own; null with no measurement,
- * or (SPPS) no work now. */
+ * a measurement `tooShort`, or (SPPS) no work now. */
 export function forecastRunTime(from: Measurement | null, solver: SolverName, now: RunWork | null): RunTimeForecast | null {
   if (!from) return null;
   if (solver === 'tcr') return { seconds: from.seconds, from };
-  if (!from.work || !now) return null;
+  if (!from.work || !now || from.tooShort) return null;
   return { seconds: (from.seconds * workUnits(now)) / workUnits(from.work), from };
 }
 
@@ -140,15 +159,18 @@ export interface RunTimeText {
   basis: string;
 }
 
-export function runTimeText(f: RunTimeForecast | null, solver: SolverName, device: SppsDevice, nowMs: number, hasMeasurement: boolean): RunTimeText {
+/** `from` is `measuredRun`'s answer, which says why there is no forecast when `f` is null. */
+export function runTimeText(f: RunTimeForecast | null, solver: SolverName, device: SppsDevice, nowMs: number, from: Measurement | null): RunTimeText {
   const name = solverWords(solver, device);
   if (!f) {
     return {
       forecast: null,
       finish: null,
-      basis: hasMeasurement
-        ? 'No forecast until the settings read.'
-        : `No measurement yet: this project has no finished ${name} run to time the next one by. Its first run is the measurement.`,
+      basis: from?.tooShort
+        ? `Run ${from.number} took ${elapsedText(from.seconds * 1000)} (m:ss), too short to time the next run by: its start-up is most of it, and scaling that by the particles would read long. A longer run is the measurement.`
+        : from
+          ? 'No forecast until the settings read.'
+          : `No measurement yet: this project has no finished ${name} run to time the next one by. Its first run is the measurement.`,
     };
   }
   const m = f.from;
@@ -160,13 +182,37 @@ export function runTimeText(f: RunTimeForecast | null, solver: SolverName, devic
   return { forecast: durationWords(f.seconds), finish: `done about ${clockText(nowMs + f.seconds * 1000, nowMs)} if it starts now`, basis };
 }
 
-/** While SPPS solves: when it will be done, from its progress so far (the time from the solve's start to the last
- * progress line, over the share done). Null before the solve, before a progress line, or below 1 % done. */
-export function liveFinishMs(run: Pick<ActiveRun, 'stage' | 'progress' | 'solveAt' | 'progressAt'>): number | null {
-  const p = run.progress;
-  if (run.stage !== 'solve' || typeof p !== 'number' || !Number.isFinite(p) || p < 1 || p > 100) return null;
-  if (run.solveAt === undefined || run.progressAt === undefined || !(run.progressAt >= run.solveAt)) return null;
-  return run.solveAt + ((run.progressAt - run.solveAt) * 100) / p;
+/** A PROGRESS line as the live finish reads it: its share, %, and when it arrived, ms on this page's clock. */
+export interface ProgressPoint {
+  progress: number;
+  at: number;
+}
+
+/**
+ * The peak the live finish projects from, after a PROGRESS line of `progress` arriving at `at`: that line when its
+ * share is above every one before it, else the peak already kept. A share that falls (a solver printing per band,
+ * or starting over) would otherwise throw the finish out by the whole run: from 100 to 5 % it would read hours late.
+ *
+ * What upstream prints (I-Simpa-upstream, src/spps/sppsNantes.cpp:202, 363-380, and
+ * src/lib_interface/input_output/progressionInfo.h): one progress tree for the whole run. Its root counts the bands
+ * computed, each band (one thread per band on the CPU, all started at once) its sources, each source its particles;
+ * every thread pushes its particle into the same tree under one mutex, and `#<share>` is the whole run's share,
+ * printed only when it has risen by 0.01 since the last line (`OutputCurrentProgression`) and never at 100. So the
+ * CPU solver's line neither resets nor goes per band, and with bands in parallel it is the mean of their shares.
+ * The guard costs nothing there; it holds against anything else that prints PROGRESS lines.
+ */
+export function keepPeak(peak: ProgressPoint | undefined, progress: number | null | undefined, at: number): ProgressPoint | undefined {
+  if (typeof progress !== 'number' || !Number.isFinite(progress)) return peak;
+  return peak === undefined || progress > peak.progress ? { progress, at } : peak;
+}
+
+/** While SPPS solves: when it will be done, from its progress so far (the time from the solve's start to the
+ * highest share yet, over that share, `keepPeak`). Null before the solve, before a progress line, or below 1 % done. */
+export function liveFinishMs(run: Pick<ActiveRun, 'stage' | 'solveAt' | 'progressPeak'>): number | null {
+  const pk = run.progressPeak;
+  if (run.stage !== 'solve' || pk === undefined || !(pk.progress >= 1 && pk.progress <= 100)) return null;
+  if (run.solveAt === undefined || !(pk.at >= run.solveAt)) return null;
+  return run.solveAt + ((pk.at - run.solveAt) * 100) / pk.progress;
 }
 
 /** The sentence under the solver choice: which solver will run and what it is for. */

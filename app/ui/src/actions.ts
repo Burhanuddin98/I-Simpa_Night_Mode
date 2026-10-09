@@ -27,6 +27,7 @@ import type { Setting, UiIssue } from './bindings/ipc';
 import type { BandKind, Op, ReflectionLaw } from './bindings/schema';
 import { regroupFaces } from './chrome/sceneModel';
 import { emptyLog, endLine, foldEvent, needsSavePrompt, progressText } from './flow';
+import { keepPeak } from './features/simulate/runTime';
 import { decodeMesh } from './mesh';
 import { earPlane, PLANE_RESOLUTION_M, roomBox } from './chrome/planes';
 import {
@@ -712,7 +713,8 @@ function runEvents(id: number): (batch: RunStreamBatch) => void {
           break;
         case 'line':
           if (current && e.class === 'PROGRESS' && e.source === 'solver') {
-            current = { ...current, progress: e.progress ?? null, progressText: progressText(e.text), progressAt: Date.now() };
+            const at = Date.now();
+            current = { ...current, progress: e.progress ?? null, progressText: progressText(e.text), progressAt: at, progressPeak: keepPeak(current.progressPeak, e.progress, at) };
           }
           break;
         case 'ended':

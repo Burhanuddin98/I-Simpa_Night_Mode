@@ -5211,7 +5211,7 @@
         "work": {
           "anyOf": [
             {
-              "$ref": "#/$defs/RunWorkUi"
+              "$ref": "#/$defs/SppsWork"
             },
             {
               "type": "null"
@@ -5501,40 +5501,6 @@
           "type": "object"
         }
       ]
-    },
-    "RunWorkUi": {
-      "description": "An SPPS run's work as its `config.xml` gave it (`simpa_core::run::expect::SppsWork`).",
-      "properties": {
-        "bands": {
-          "description": "Bands computed.",
-          "format": "uint32",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "duration_s": {
-          "description": "`duree_simulation` as SPPS reads it, s.",
-          "format": "double",
-          "type": "number"
-        },
-        "particles_per_source": {
-          "description": "`nbparticules`: particles per source and band.",
-          "format": "uint32",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "sources": {
-          "format": "uint32",
-          "minimum": 0,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "particles_per_source",
-        "sources",
-        "bands",
-        "duration_s"
-      ],
-      "type": "object"
     },
     "RunsView": {
       "description": "The Runs tab: every run of the open project under its runs root.",
@@ -6446,6 +6412,41 @@
         "surfaces",
         "particle_files",
         "reference"
+      ],
+      "type": "object"
+    },
+    "SppsWork": {
+      "description": "The work an SPPS run's `config.xml` gave the solver, as the solver reads it: what the run's\nwall time is scaled by when the Simulate step forecasts the next run from it (Burhan's 10-05 UI\nlist, item 5, \"run cost by the particle slider measured not guessed\"). The Runs tab carries it\nas is (`RunRow::work`).",
+      "properties": {
+        "bands": {
+          "description": "The bands the solver computes (`docalc` exactly `\"1\"`).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "duration_s": {
+          "description": "`duree_simulation` as SPPS reads it (`f32`), s.",
+          "format": "double",
+          "type": "number"
+        },
+        "particles_per_source": {
+          "description": "`nbparticules`, at least 1: particles per source and band.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sources": {
+          "description": "The `sources` items, as [`Expectation::sources`] counts them.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "particles_per_source",
+        "sources",
+        "bands",
+        "duration_s"
       ],
       "type": "object"
     },

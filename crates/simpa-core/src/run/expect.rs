@@ -26,6 +26,7 @@ use std::fmt;
 use std::path::Path;
 
 use roxmltree::{Document, Node};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::config_xml::names;
@@ -228,6 +229,11 @@ impl Expectation {
     /// Parses a `config.xml`. Surface-receiver faces are unknown until [`Expectation::with_scene`].
     pub fn from_config(xml: &str, solver: SolverKind) -> Result<Expectation, ExpectError> {
         let doc = Document::parse(xml).map_err(|e| ExpectError::NotXml(e.to_string()))?;
+        Expectation::from_document(&doc, solver)
+    }
+
+    /// [`Expectation::from_config`] of a `config.xml` already parsed.
+    fn from_document(doc: &Document, solver: SolverKind) -> Result<Expectation, ExpectError> {
         let root = doc.root_element();
         if root.tag_name().name() != "configuration" {
             return Err(ExpectError::NotAConfiguration(
@@ -508,15 +514,16 @@ fn dedup(v: Vec<String>) -> Vec<String> {
 
 /// The work an SPPS run's `config.xml` gave the solver, as the solver reads it: what the run's
 /// wall time is scaled by when the Simulate step forecasts the next run from it (Burhan's 10-05 UI
-/// list, item 5, "run cost by the particle slider measured not guessed").
-#[derive(Clone, Debug, PartialEq)]
+/// list, item 5, "run cost by the particle slider measured not guessed"). The Runs tab carries it
+/// as is (`RunRow::work`).
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct SppsWork {
     /// `nbparticules`, at least 1: particles per source and band.
     pub particles_per_source: u32,
     /// The `sources` items, as [`Expectation::sources`] counts them.
-    pub sources: usize,
+    pub sources: u32,
     /// The bands the solver computes (`docalc` exactly `"1"`).
-    pub bands: usize,
+    pub bands: u32,
     /// `duree_simulation` as SPPS reads it (`f32`), s.
     pub duration_s: f64,
 }
@@ -524,8 +531,8 @@ pub struct SppsWork {
 /// [`SppsWork`] from a `config.xml`'s text; `None` when it does not parse or has no finite,
 /// positive `duree_simulation`.
 pub fn spps_work(xml: &str) -> Option<SppsWork> {
-    let exp = Expectation::from_config(xml, SolverKind::Spps).ok()?;
     let doc = Document::parse(xml).ok()?;
+    let exp = Expectation::from_document(&doc, SolverKind::Spps).ok()?;
     let duration = child(doc.root_element(), "simulation")?
         .attribute("duree_simulation")
         .and_then(super::locate::to_float)
@@ -533,8 +540,8 @@ pub fn spps_work(xml: &str) -> Option<SppsWork> {
         .filter(|d| d.is_finite() && *d > 0.0)?;
     Some(SppsWork {
         particles_per_source: exp.spps.as_ref()?.nbparticules,
-        sources: exp.sources.len(),
-        bands: exp.bands.iter().filter(|b| b.computed).count(),
+        sources: u32::try_from(exp.sources.len()).ok()?,
+        bands: u32::try_from(exp.bands.iter().filter(|b| b.computed).count()).ok()?,
         duration_s: duration,
     })
 }

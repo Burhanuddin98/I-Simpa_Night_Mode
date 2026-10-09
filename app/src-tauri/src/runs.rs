@@ -25,6 +25,7 @@ use simpa_core::bed::pe::{ManifestSource, SolverCheck, SolverManifest, check_sol
 use simpa_core::geometry::import::{REFERENCE_MATERIALS, REFERENCE_SPECTRA, library_material};
 use simpa_core::mesh;
 use simpa_core::process::{self, CancelToken};
+use simpa_core::run::expect::{SppsWork, read_spps_work};
 use simpa_core::run::gpu::{self, SPPS_GPU_EXE_NAME, SppsDevice};
 use simpa_core::run::manager::{PREPROCESS_EXE_NAME, SOLVE_DIR, TETGEN_EXE_NAME, solver_exe_name};
 use simpa_core::run::{
@@ -252,34 +253,10 @@ pub struct RunRow {
     /// What an SPPS run gave the solver to do, read from its own `config.xml`: what the Simulate
     /// step scales this run's [`RunRow::elapsed_s`] by to forecast the next run. `None` for TCR,
     /// and for a run whose `config.xml` does not read.
-    pub work: Option<RunWorkUi>,
+    pub work: Option<SppsWork>,
     pub exit_code: Option<u32>,
     /// `run.json` is there but does not read.
     pub manifest_error: Option<String>,
-}
-
-/// An SPPS run's work as its `config.xml` gave it (`simpa_core::run::expect::SppsWork`).
-#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
-pub struct RunWorkUi {
-    /// `nbparticules`: particles per source and band.
-    pub particles_per_source: u32,
-    pub sources: u32,
-    /// Bands computed.
-    pub bands: u32,
-    /// `duree_simulation` as SPPS reads it, s.
-    pub duration_s: f64,
-}
-
-/// The work of the SPPS run in `folder` (its `solve` folder's `config.xml`); `None` when it does
-/// not read.
-pub fn run_work(folder: &Path) -> Option<RunWorkUi> {
-    let w = simpa_core::run::expect::read_spps_work(&folder.join(SOLVE_DIR))?;
-    Some(RunWorkUi {
-        particles_per_source: w.particles_per_source,
-        sources: u32::try_from(w.sources).ok()?,
-        bands: u32::try_from(w.bands).ok()?,
-        duration_s: w.duration_s,
-    })
 }
 
 /// A run's solver build, verified or not, with the reason's core and UI codes (backlog 38).
@@ -722,7 +699,7 @@ pub fn list(root: &Path, project: &Path, active: Option<&str>) -> CmdResult<Runs
                 Ok(m) if belongs(&m, project) => {
                     let mut row = row_from_manifest(&name, 0, &m);
                     if m.solver == SolverKind::Spps {
-                        row.work = run_work(&root.join(&name));
+                        row.work = read_spps_work(&root.join(&name).join(SOLVE_DIR));
                     }
                     row
                 }

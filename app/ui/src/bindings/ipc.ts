@@ -5280,7 +5280,7 @@ export interface RunRow {
    * step scales this run's [`RunRow::elapsed_s`] by to forecast the next run. `None` for TCR,
    * and for a run whose `config.xml` does not read.
    */
-  work?: RunWorkUi | null;
+  work?: SppsWork | null;
 }
 /**
  * This interface was referenced by `IpcBindings`'s JSON-Schema
@@ -5359,24 +5359,30 @@ export interface SolverCheck {
   raw_sha256?: string | null;
 }
 /**
- * An SPPS run's work as its `config.xml` gave it (`simpa_core::run::expect::SppsWork`).
+ * The work an SPPS run's `config.xml` gave the solver, as the solver reads it: what the run's
+ * wall time is scaled by when the Simulate step forecasts the next run from it (Burhan's 10-05 UI
+ * list, item 5, "run cost by the particle slider measured not guessed"). The Runs tab carries it
+ * as is (`RunRow::work`).
  *
  * This interface was referenced by `IpcBindings`'s JSON-Schema
- * via the `definition` "RunWorkUi".
+ * via the `definition` "SppsWork".
  */
-export interface RunWorkUi {
+export interface SppsWork {
   /**
-   * Bands computed.
+   * The bands the solver computes (`docalc` exactly `"1"`).
    */
   bands: number;
   /**
-   * `duree_simulation` as SPPS reads it, s.
+   * `duree_simulation` as SPPS reads it (`f32`), s.
    */
   duration_s: number;
   /**
-   * `nbparticules`: particles per source and band.
+   * `nbparticules`, at least 1: particles per source and band.
    */
   particles_per_source: number;
+  /**
+   * The `sources` items, as [`Expectation::sources`] counts them.
+   */
   sources: number;
 }
 /**
