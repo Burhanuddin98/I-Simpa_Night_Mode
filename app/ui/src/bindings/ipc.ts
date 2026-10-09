@@ -5661,6 +5661,12 @@ export interface RunData {
    */
   solver: string;
   /**
+   * What SPPS's maps hold: `spl` (the sound level, energy density) or `intensity` (the energy
+   * crossing each face, `surf_receiv_method`); `None` for TCR. Two maps of different quantities
+   * are never subtracted (R52), and parameters are read from `spl` maps only (R42).
+   */
+  sound_map?: string | null;
+  /**
    * SPPS's step count; `None` for TCR.
    */
   steps?: number | null;

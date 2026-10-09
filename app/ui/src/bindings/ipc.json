@@ -5367,6 +5367,13 @@
           "description": "`spps` or `tcr`.",
           "type": "string"
         },
+        "sound_map": {
+          "description": "What SPPS's maps hold: `spl` (the sound level, energy density) or `intensity` (the energy\ncrossing each face, `surf_receiv_method`); `None` for TCR. Two maps of different quantities\nare never subtracted (R52), and parameters are read from `spl` maps only (R42).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "steps": {
           "description": "SPPS's step count; `None` for TCR.",
           "format": "uint",

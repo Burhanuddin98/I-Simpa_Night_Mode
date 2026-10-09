@@ -43,7 +43,7 @@ const LOOK_TITLES: Record<ParticleLook, string> = {
   rays: "Each particle's whole path so far, glowing, with a spark where it turns at a wall",
 };
 const LOOK_HINT = 'How the saved particles are drawn. Glow and rays are light: brighter where louder, against a dimmed room while they play.';
-import { bandLabel, bandName, MAP_OPACITIES, resultsView, resultsViewStore, shownMaps, startResultsView } from './resultsView';
+import { bandLabel, bandName, baselineChoices, MAP_OPACITIES, resultsView, resultsViewStore, shownMaps, startResultsView } from './resultsView';
 import { WINDOW_CHOICES_MS, windowChoice, WINDOW_CUMULATIVE_REFUSAL, WINDOW_HINT } from './window';
 
 const PlayIcon = () => (
@@ -411,6 +411,25 @@ export function ResultsOverlay() {
             <span className="knob" />
           </span>
         </button>
+        {v.diff && (
+          <label className="vp-row" data-part="map-baseline">
+            <span className="vp-row-label">Minus</span>
+            <select
+              className="vp-select"
+              data-control="map-baseline"
+              value={v.baseline ?? ''}
+              title="The run whose map is subtracted from this one's, face by face: it must be the same surface, grid and time step"
+              onChange={(e) => resultsView.setBaseline(e.target.value)}
+            >
+              {v.baseline === null ? <option value="">no other run</option> : null}
+              {baselineChoices(v.run).map((c) => (
+                <option key={c.run} value={c.run}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {v.diff && (
           <div className="vp-diff-note" data-part="map-diff-note">
             {v.baselineReason ?? (v.baselineLabel ? `This run minus ${v.baselineLabel}, in dB. Blue is quieter, red louder.` : '')}

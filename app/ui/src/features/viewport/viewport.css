@@ -342,6 +342,17 @@
   flex-wrap: wrap;
   gap: 4px;
 }
+/* R52: the run a difference map subtracts. */
+.vp-select {
+  min-width: 0;
+  max-width: 220px;
+  font-size: 12px;
+  background: var(--raised);
+  color: var(--text);
+  border: 1px solid var(--edge);
+  border-radius: 4px;
+  padding: 2px 4px;
+}
 .vp-row-label,
 .vp-map-title {
   font-size: 12px;

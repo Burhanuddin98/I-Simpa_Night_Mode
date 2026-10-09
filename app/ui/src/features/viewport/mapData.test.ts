@@ -111,6 +111,26 @@ test('a baseline must be the same surface: nodes, faces and steps', () => {
   assert.match(surfaceMismatch(a, map([[[0, 1]]])) ?? '', /faces/);
   assert.match(surfaceMismatch(a, map([[[0, 1]], [[0, 1]]], 6)) ?? '', /steps/);
   assert.match(surfaceMismatch(a, map([[[0, 1]], [[0, 1]]], 5, [0, 0, 0, 1, 0, 0, 0, 2, 0])) ?? '', /nodes/);
+  // R52: the same grid in time and the same kind of record, or no difference.
+  assert.match(surfaceMismatch(a, { ...map([[[0, 1]], [[0, 1]]]), timeStepS: Math.fround(0.02) }) ?? '', /steps are 20 ms/);
+  assert.match(surfaceMismatch(a, { ...map([[[0, 1]], [[0, 1]]]), recordType: 1 }) ?? '', /record type/);
+});
+
+test("R52: the difference shown is this run's level minus the baseline's, cell by cell, as the probe reads it", () => {
+  // Two maps of the same surface; the probe (mapView.probeOf) and the shader take levelDb(a) - levelDb(b).
+  const a = map([[[0, 1e-6], [2, 4e-7]], [[1, 2e-8]]]);
+  const b = map([[[0, 5e-7], [2, 4e-7]], [[1, 2e-9]]]);
+  assert.equal(surfaceMismatch(a, b), null);
+  const cells: [number, number, number][] = [[0, 0, 10 * Math.log10(2)], [0, 2, 0], [1, 1, 10]];
+  for (const [f, st, want] of cells) {
+    const rec = (m: SurfaceMap) => {
+      for (let k = m.offsets[f]; k < m.offsets[f + 1]; k++) if (m.steps[k] === st) return m.values[k];
+      return 0;
+    };
+    const d = (levelDb(rec(a)) as number) - (levelDb(rec(b)) as number);
+    assert.ok(Math.abs(d - want) < 1e-5, `face ${f} step ${st}: ${d} against ${want}`);
+  }
+  assert.deepEqual(diffRange(a, b), { lo: -10, hi: 10 });
 });
 
 test('the ramps are the design’s: black through red to yellow, and its cool ramp for quieter', () => {

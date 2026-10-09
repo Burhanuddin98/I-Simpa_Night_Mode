@@ -3170,6 +3170,7 @@ mod tests {
             particles_per_source: 100_000,
             trans_epsilon: 5.0,
             echogram_per_source: false,
+            surf_receiv_method: 1,
             sources: vec![SourcePoint {
                 name: "S".into(),
                 position_m: Some([0.0, 0.0, 0.0]),

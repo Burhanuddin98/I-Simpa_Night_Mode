@@ -125,6 +125,10 @@ pub struct RunData {
     pub time_step_s: Option<f64>,
     /// SPPS's step count; `None` for TCR.
     pub steps: Option<usize>,
+    /// What SPPS's maps hold: `spl` (the sound level, energy density) or `intensity` (the energy
+    /// crossing each face, `surf_receiv_method`); `None` for TCR. Two maps of different quantities
+    /// are never subtracted (R52), and parameters are read from `spl` maps only (R42).
+    pub sound_map: Option<String>,
     /// Every `.csbin`: surface receivers and cutting planes, per band and `Global`.
     pub surfaces: Vec<SurfaceMapInfo>,
     /// The saved particle files, one per band; empty when the run saved none
@@ -456,6 +460,17 @@ pub fn data_index(root: &Path, run: &str) -> CmdResult<RunDataIndex> {
         surfaces: surfaces(&r).iter().map(surface_info).collect(),
         particle_files,
         echograms,
+        sound_map: match &r.data {
+            SolverResults::Spps(s) => Some(
+                if s.surf_receiv_method == 1 {
+                    "spl"
+                } else {
+                    "intensity"
+                }
+                .to_string(),
+            ),
+            SolverResults::Tcr(_) => None,
+        },
     };
     Ok(RunDataIndex {
         state,

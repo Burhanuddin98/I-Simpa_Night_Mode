@@ -174,12 +174,22 @@ const fresh = (g: number) => g === gen;
 
 function runLabel(run: string): string {
   const row = runsStore.get()?.rows.find((r) => r.run === run);
-  return row ? `Run ${row.number}` : run;
+  return row ? `Run ${row.number}${row.label ? ` · ${row.label}` : ''}` : run;
+}
+
+/** R52: the runs the difference can be taken from, newest first: every other run of the project
+ * that ended OK, as `Run n · label`. Whether its map can be subtracted is judged when it is picked
+ * (`loadMap`: verified, the same map, the same geometry, grid and quantity). */
+export function baselineChoices(run: string | null): { run: string; label: string }[] {
+  return (runsStore.get()?.rows ?? [])
+    .filter((r) => r.run !== run && r.status === 'OK')
+    .sort((a, b) => b.number - a.number)
+    .map((r) => ({ run: r.run, label: `Run ${r.number}${r.label ? ` · ${r.label}` : ''}` }));
 }
 
 /** The default baseline: the newest other run of this project started before this one, else the newest other. */
 function defaultBaseline(run: string): string | null {
-  const rows = (runsStore.get()?.rows ?? []).filter((r) => r.run !== run && r.status !== 'RUNNING');
+  const rows = (runsStore.get()?.rows ?? []).filter((r) => r.run !== run && r.status === 'OK');
   const me = runsStore.get()?.rows.find((r) => r.run === run);
   const earlier = rows.filter((r) => me && r.number < me.number).sort((a, b) => b.number - a.number);
   const any = [...rows].sort((a, b) => b.number - a.number);
@@ -256,6 +266,8 @@ async function loadMap(g: number): Promise<void> {
         const bi = await actions.runData(v.baseline);
         if (!fresh(g)) return;
         if (!bi.data || !bi.state.verified) reason = `${runLabel(v.baseline)}: results not verified.`;
+        else if ((bi.data.sound_map ?? null) !== (d.sound_map ?? null))
+          reason = `${runLabel(v.baseline)} cannot be subtracted: its map holds ${bi.data.sound_map ?? 'another quantity'}, this run's ${d.sound_map ?? 'another'}.`;
         else if (!bi.data.surfaces.some((s) => s.path === info.path)) reason = `${runLabel(v.baseline)} has no ${groupLabel(info).toLowerCase()} map at ${bandName(v.bandHz)}.`;
         else {
           const b = await mapBytes(v.baseline, info.path);

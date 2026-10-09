@@ -115,10 +115,14 @@ export function diffRange(a: SurfaceMap, base: SurfaceMap): Range {
   return { lo: -d, hi: d };
 }
 
-/** Why `base` cannot be subtracted from `a` cell by cell, or null when it can. */
+/** Why `base` cannot be subtracted from `a` cell by cell, or null when it can (R52): the same
+ * geometry (nodes bit for bit, faces), the same grid in time (step count and step, which a coarser
+ * bin changes) and the same kind of record. */
 export function surfaceMismatch(a: SurfaceMap, base: SurfaceMap): string | null {
   if (a.faceCount !== base.faceCount) return `the baseline's map has ${base.faceCount} faces, this run's ${a.faceCount}`;
   if (a.timeStepCount !== base.timeStepCount) return `the baseline has ${base.timeStepCount} steps, this run ${a.timeStepCount}`;
+  if (Math.fround(a.timeStepS) !== Math.fround(base.timeStepS)) return `the baseline's steps are ${Number((base.timeStepS * 1000).toPrecision(6))} ms, this run's ${Number((a.timeStepS * 1000).toPrecision(6))} ms`;
+  if (a.recordType !== base.recordType) return `the baseline's map holds record type ${base.recordType}, this run's ${a.recordType}`;
   if (a.nodeCount !== base.nodeCount) return `the baseline's map has ${base.nodeCount} nodes, this run's ${a.nodeCount}`;
   const pa = new Uint32Array(a.positions.buffer, a.positions.byteOffset, a.positions.length);
   const pb = new Uint32Array(base.positions.buffer, base.positions.byteOffset, base.positions.length);

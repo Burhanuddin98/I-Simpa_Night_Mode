@@ -138,6 +138,10 @@ pub struct SppsSettings {
     pub save_surface_intersection: bool,
     /// `save_receivers_intersection` ≠ 0; on when absent.
     pub save_receivers_intersection: bool,
+    /// `surf_receiv_method`: 0 the maps hold intensity (the energy crossing a face), 1 the sound
+    /// level (`reportmanager.cpp:186-191, 280-285`: each crossing over its cosine); 0 when absent.
+    #[serde(default)]
+    pub surf_receiv_method: i32,
 }
 
 /// What a run folder's `config.xml` asks for.
@@ -303,6 +307,7 @@ impl Expectation {
                 || atoi(&s("save_surface_intersection")) != 0,
             save_receivers_intersection: !present("save_receivers_intersection")
                 || atoi(&s("save_receivers_intersection")) != 0,
+            surf_receiv_method: atoi(&s("surf_receiv_method")),
         });
 
         Ok(Expectation {

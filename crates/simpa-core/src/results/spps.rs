@@ -268,6 +268,9 @@ pub struct SppsResults {
     pub trans_epsilon: f64,
     /// `output_recp_bysource`: each point receiver has an echogram per source.
     pub echogram_per_source: bool,
+    /// `surf_receiv_method`: 1 the surface maps hold the sound level (energy density), 0
+    /// intensity ([`crate::run::expect::SppsSettings::surf_receiv_method`]).
+    pub surf_receiv_method: i32,
     pub sources: Vec<SourcePoint>,
     /// In the order of their folder names.
     pub point_receivers: Vec<PointReceiver>,
@@ -1264,6 +1267,7 @@ pub(crate) fn read(
         particles_per_source: exp.spps.as_ref().map_or(1, |s| s.nbparticules),
         trans_epsilon,
         echogram_per_source: exp.spps.as_ref().is_some_and(|s| s.output_recp_bysource),
+        surf_receiv_method: exp.spps.as_ref().map_or(0, |s| s.surf_receiv_method),
         sources,
         point_receivers,
         total_energy,
@@ -1303,6 +1307,7 @@ mod tests {
             particles_per_source: 1000,
             trans_epsilon: eps,
             echogram_per_source: false,
+            surf_receiv_method: 1,
             sources: Vec::new(),
             point_receivers: Vec::new(),
             total_energy: Vec::new(),
