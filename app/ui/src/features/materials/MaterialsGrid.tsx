@@ -25,7 +25,10 @@
 // Parity M45: each row's swatch is its colour picker (ColourInput.tsx), outside the cell cursor as the
 // Law select is.
 //
-// It writes only through `actions.apply` with `ops`, and `actions.setLaw`, `actions.setMaterialColor`
+// Parity M5 (v1.1-backlog 20): under the grid, Law per band edits the focused material's law one band
+// at a time (`actions.setBandLaw`, one `replace_material`), saved as a per-band law.
+//
+// It writes only through `actions.apply` with `ops`, and `actions.setLaw`, `actions.setBandLaw`, `actions.setMaterialColor`
 // and `actions.addFromLibrary`, which do the same.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import * as actions from '../../actions';
@@ -39,7 +42,7 @@ import { registerHook } from '../../testhooks';
 import { bandColumns, type BandColumn, type F64 } from './bands';
 import { boundsOf, clampCell, inRect, planFill, rectOf, type Cell } from './fill';
 import { dismiss, errorOf, IssueLines, lineOf, visibleRefusals, type Line } from './inline';
-import { changesLaw, LAWS, lawOf, lawState, lawTitle, lawValue, PER_BAND, SEMI_DIFFUSE_NOTE, usesLaw } from './law';
+import { bandLaws, changesLaw, LAW_SHORT, LAWS, lawLabel, lawOf, lawState, lawTitle, lawValue, PER_BAND, SEMI_DIFFUSE_NOTE, usesLaw } from './law';
 import { ColourInput } from './ColourInput';
 import { LibraryMenu } from './LibraryMenu';
 import {
@@ -322,6 +325,18 @@ export function MaterialsGrid() {
     const law = lawOf(value);
     if (!law || !changesLaw(m, law)) return;
     actions.setLaw(m.id, law).catch((e: unknown) => {
+      const err = errorOf(e);
+      setLocal([{ code: err.code, message: err.message, cells: [lawKey(m.id)] }]);
+    });
+  };
+
+  /** Parity M5 (v1.1-backlog 20): one band's law of `m`, every other band kept: one
+   * `replace_material`, one undo step; the same law again is no edit. */
+  const commitBandLaw = (m: Material, band: number, value: string) => {
+    attempt();
+    const law = lawOf(value);
+    if (!law) return;
+    actions.setBandLaw(m.id, band, law).catch((e: unknown) => {
       const err = errorOf(e);
       setLocal([{ code: err.code, message: err.message, cells: [lawKey(m.id)] }]);
     });
@@ -793,6 +808,14 @@ export function MaterialsGrid() {
           <span className="mono">{transmissionText(focused)}</span>
         </div>
       )}
+      {focused && (
+        <LawBands
+          material={focused}
+          columns={columns}
+          issue={bad.get(lawKey(focused.id))}
+          onChoose={commitBandLaw}
+        />
+      )}
     </section>
   );
 }
@@ -834,6 +857,55 @@ function LawCell(props: {
         ))}
       </select>
     </td>
+  );
+}
+
+/**
+ * Parity M5 (v1.1-backlog 20): the focused material's law band by band, one select per band in the
+ * grid's column order (`[data-law-band=<band index>]` inside `[data-part="law-bands"]`). Choosing a
+ * law sets that band only, as upstream's GUI does in each band's row (`e_data_row_materiau.h:218`);
+ * the Law column's select still sets every band at once. Outside the cell cursor, as the Law select is.
+ */
+function LawBands(props: {
+  material: Material;
+  columns: readonly BandColumn[];
+  issue: string | undefined;
+  onChoose: (m: Material, band: number, value: string) => void;
+}) {
+  const { material: m, columns, issue, onChoose } = props;
+  const laws = bandLaws(m, columns.length);
+  return (
+    <div className={`mg-law-bands${issue ? ' bad' : ''}`} data-part="law-bands" data-material-id={m.id} data-cell-issue={issue}>
+      <span className="mg-law-bands-head">
+        Law per band{' '}
+        <span className="mg-of" data-input="" title={m.name}>
+          · {displayName(m.name)}
+        </span>
+      </span>
+      <div className="mg-law-bands-row">
+        {columns.map((c) => {
+          const law = laws[c.index];
+          return (
+            <label key={c.index} className="mg-law-band" title={`${m.name} · ${c.hz} Hz: ${lawLabel(law)}`}>
+              <span className="k">{c.label}</span>
+              <select
+                className="mg-law-select"
+                data-law-band={c.index}
+                aria-label={`${m.name}: reflection law at ${c.hz} Hz`}
+                value={law}
+                onChange={(e) => onChoose(m, c.index, e.target.value)}
+              >
+                {LAWS.map((o) => (
+                  <option key={o.law} value={o.law} title={o.note ? `${o.label}: ${o.note}` : o.label}>
+                    {LAW_SHORT[o.law]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

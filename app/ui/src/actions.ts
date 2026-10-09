@@ -29,6 +29,7 @@ import {
 import type { Setting, UiIssue } from './bindings/ipc';
 import type { BandKind, Op, ReflectionLaw } from './bindings/schema';
 import { blockerText, regroupFaces } from './chrome/sceneModel';
+import { withBandLaw } from './features/materials/law';
 import { noteRecent } from './chrome/recent';
 import { dropChoice } from './chrome/drop';
 import { addRefusal, type Job, type JobStatus, jobsSummary, jobStatusText, nextJob, samePath, withJob } from './features/simulate/jobs';
@@ -1123,6 +1124,17 @@ export async function setLaw(materialId: string, law: ReflectionLaw): Promise<Ed
   const m = sceneStore.get()?.view.materials.find((x) => x.id === materialId);
   if (!m) throw new Error(`setLaw: no material ${materialId}`);
   return apply(replaceMaterial(withLaw(m, law)), `material:${materialId}:reflection_law`);
+}
+
+/** Parity M5 (v1.1-backlog 20): the reflection law of one band of a material, every other band
+ * kept: one undo step. Null when it is that law already, or the material is gone. */
+export async function setBandLaw(materialId: string, band: number, law: ReflectionLaw): Promise<EditOutcome | null> {
+  const view = sceneStore.get()?.view;
+  const m = view?.materials.find((x) => x.id === materialId);
+  if (!m || !view) return null;
+  const next = withBandLaw(m, view.bands.frequencies_hz.length, band, law);
+  if (next === null) return null;
+  return apply(replaceMaterial({ ...m, reflection_law: next }), `material:${materialId}:reflection_law`);
 }
 
 /**

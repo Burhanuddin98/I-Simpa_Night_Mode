@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import type { ReflectionLaw } from '../../bindings/schema.ts';
-import { changesLaw, LAWS, lawLabel, lawOf, lawState, lawTitle, lawValue, PER_BAND, usesLaw } from './law.ts';
+import { bandLaws, changesLaw, LAW_SHORT, LAWS, lawLabel, lawOf, lawState, lawTitle, lawValue, PER_BAND, usesLaw, withBandLaw } from './law.ts';
 
 test("the laws are the core's seven, in ReflectionLaw::ALL order, each labelled", () => {
   // crates/simpa-core/src/schema/model.rs: Specular 0, Uniform 1, Lambert 2, W2 3, W3 4, W4 5,
@@ -63,14 +63,37 @@ test('labels: known laws by name, an unknown spelling as itself', () => {
 test('the tooltip names every band of a per-band law, and the note of semi-diffuse', () => {
   const t = lawTitle(lawState({ reflection_law: ['lambert', 'specular', 'w3'] }), [125, 250]);
   assert.deepEqual(t.split('\n'), [
-    'Reflection law per band (from an I-Simpa project):',
+    'Reflection law per band:',
     '125 Hz Lambert',
     '250 Hz Specular',
     'band 3 W3',
-    'Choosing a law sets it for every band.',
+    'Choosing a law here sets it for every band; Law per band, under the grid, sets one.',
   ]);
   const s = lawTitle(lawState({ reflection_law: 'semi_diffuse' }), [125]);
   assert.ok(s.startsWith('Reflection law: Semi-diffuse in every band\nSPPS has no semi-diffuse case'), s);
   assert.ok(s.includes('refused at export (EXPORT_FAILED)') && !s.includes('specularly'), s);
   assert.ok(s.endsWith('it has no effect in SPPS.'), s);
+});
+
+test("M5: one band's law changes that band only and the rest keep theirs", () => {
+  // A single law becomes a per-band list with exactly the one band changed.
+  assert.deepEqual(withBandLaw({ reflection_law: 'specular' }, 4, 2, 'lambert'), ['specular', 'specular', 'lambert', 'specular']);
+  // A per-band list keeps every other band's law.
+  assert.deepEqual(withBandLaw({ reflection_law: ['w2', 'lambert', 'w3'] }, 3, 0, 'uniform'), ['uniform', 'lambert', 'w3']);
+  // Every band alike again: one law, as the core's ReflectionLaws::from_bands spells it.
+  assert.equal(withBandLaw({ reflection_law: ['specular', 'lambert'] }, 2, 1, 'specular'), 'specular');
+  // No change, or no such band: null, so no empty undo step is made.
+  assert.equal(withBandLaw({ reflection_law: 'lambert' }, 3, 1, 'lambert'), null);
+  assert.equal(withBandLaw({ reflection_law: ['w2', 'w3'] }, 2, 1, 'w3'), null);
+  assert.equal(withBandLaw({ reflection_law: 'lambert' }, 3, 3, 'w2'), null);
+  assert.equal(withBandLaw({ reflection_law: 'lambert' }, 3, -1, 'w2'), null);
+  // A one-band project: the law is always one law.
+  assert.equal(withBandLaw({ reflection_law: 'lambert' }, 1, 0, 'w4'), 'w4');
+});
+
+test("M5: each band's law reads from either spelling; every law has a short name", () => {
+  assert.deepEqual(bandLaws({ reflection_law: 'w2' }, 3), ['w2', 'w2', 'w2']);
+  assert.deepEqual(bandLaws({ reflection_law: ['w2', 'lambert'] }, 2), ['w2', 'lambert']);
+  for (const o of LAWS) assert.ok(LAW_SHORT[o.law] && LAW_SHORT[o.law].length <= 4, o.law);
+  assert.equal(new Set(Object.values(LAW_SHORT)).size, LAWS.length);
 });

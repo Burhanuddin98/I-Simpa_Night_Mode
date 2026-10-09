@@ -95,5 +95,42 @@ export function lawTitle(state: LawState, frequencies: readonly number[]): strin
     const f = frequencies[i];
     return `${f === undefined ? `band ${i + 1}` : `${f} Hz`} ${lawLabel(l)}`;
   });
-  return ['Reflection law per band (from an I-Simpa project):', ...bands, 'Choosing a law sets it for every band.'].join('\n');
+  return ['Reflection law per band:', ...bands, 'Choosing a law here sets it for every band; Law per band, under the grid, sets one.'].join('\n');
 }
+
+/** Each band's law, `bandCount` long: a single law repeated, or the per-band list as stored. */
+export function bandLaws(m: Pick<Material, 'reflection_law'>, bandCount: number): ReflectionLaw[] {
+  const s = lawState(m);
+  return s.kind === 'all' ? Array.from({ length: bandCount }, () => s.law) : [...s.laws];
+}
+
+/**
+ * Parity M5 (v1.1-backlog 20): the material's law with band `band` set to `law` and every other
+ * band kept, as the core's `ReflectionLaws::from_bands` spells it: one law when every band has the
+ * same law, else one per band. Null when nothing changes (no empty undo step) or `band` is not a
+ * band. Upstream's GUI keeps a law per band (`loi` in each row, `e_data_row_materiau.h:218`), and
+ * config.xml writes it per band (`type_surface/bfreq@loi`), which both solvers read per band
+ * (`lib_interface/data_manager/base_core_configuration.cpp:220`).
+ */
+export function withBandLaw(
+  m: Pick<Material, 'reflection_law'>,
+  bandCount: number,
+  band: number,
+  law: ReflectionLaw,
+): Material['reflection_law'] | null {
+  const laws = bandLaws(m, bandCount);
+  if (band < 0 || band >= laws.length || laws[band] === law) return null;
+  laws[band] = law;
+  return laws.every((l) => l === laws[0]) ? laws[0] : laws;
+}
+
+/** Short names for the per-band selects, where seven bands or more share one row. */
+export const LAW_SHORT: Readonly<Record<ReflectionLaw, string>> = {
+  specular: 'Spec',
+  uniform: 'Unif',
+  lambert: 'Lamb',
+  w2: 'W2',
+  w3: 'W3',
+  w4: 'W4',
+  semi_diffuse: 'Semi',
+};

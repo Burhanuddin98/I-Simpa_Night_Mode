@@ -413,6 +413,35 @@ input.mat-colour:focus-visible {
   color: var(--text-2);
 }
 
+/* Parity M5 (v1.1-backlog 20): the focused material's law band by band, under the grid. */
+.mg-law-bands {
+  margin-top: 12px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.mg-law-bands .mg-of {
+  color: var(--text-3);
+}
+.mg-law-bands-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(62px, 1fr));
+  gap: 6px;
+  margin-top: 6px;
+}
+.mg-law-band {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.mg-law-band .k {
+  font-family: var(--mono);
+}
+.mg-law-bands.bad .mg-law-select {
+  outline: 1px solid var(--red);
+}
+
 /* M11, row 22 (M1): "+ From library" and its list of upstream's reference materials. */
 .mg-lib-menu {
   position: relative;

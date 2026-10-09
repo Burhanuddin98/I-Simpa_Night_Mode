@@ -1224,3 +1224,119 @@ fn every_band_selected_or_none_and_set_back_leaves_the_solver_input_byte_identic
     }
     assert!(checked >= 20, "{checked}");
 }
+
+// ---- M5: a material's reflection law edited in one band (v1.1-backlog 20) -------------------------
+//
+// The Materials step's Law per band sends the material back whole with `reflection_law` one per
+// band, that band changed (`withBandLaw`, `actions.setBandLaw`). Upstream writes the law per band,
+// `type_surface/bfreq@loi` (`e_data_row_materiau.h:65-81`), and both solvers read it per band
+// (`lib_interface/data_manager/base_core_configuration.cpp:220`): config.xml must move by exactly
+// that attribute of that band, in every `type_surface` of a group that has the material, with the
+// solver code; a list with one law in every band must write what the single law writes; and set
+// back, the input is byte-identical.
+
+/// The solver code of a law spelled as in the project JSON.
+fn law_code(law: &str) -> u32 {
+    [
+        "specular",
+        "uniform",
+        "lambert",
+        "w2",
+        "w3",
+        "w4",
+        "semi_diffuse",
+    ]
+    .iter()
+    .position(|l| *l == law)
+    .unwrap_or_else(|| panic!("law {law}")) as u32
+}
+
+#[test]
+fn a_reflection_law_edited_in_one_band_moves_only_that_bands_loi() {
+    let mut checked = 0;
+    for (name, original) in fixtures() {
+        let configs = both_configs(&original);
+        let n = original.bands.len();
+        let band = n / 2;
+        let hz = original.bands.frequencies_hz[band];
+        for m in &original.materials {
+            let item = serde_json::to_value(m).unwrap();
+            let laws: Vec<String> = match &item["reflection_law"] {
+                Value::String(l) => vec![l.clone(); n],
+                Value::Array(a) => a.iter().map(|l| l.as_str().unwrap().to_string()).collect(),
+                other => panic!("{name}: reflection_law {other}"),
+            };
+            if laws.iter().any(|l| l == "semi_diffuse") {
+                continue; // refused at export (v1.1-backlog 22); nothing is written to compare
+            }
+            // One law in every band spelled as a list writes what the single law writes.
+            let mut spelled = item.clone();
+            spelled["reflection_law"] = Value::from(laws.clone());
+            let mut p = original.clone();
+            replace_op("replace_material", "material", spelled)
+                .apply(&mut p)
+                .unwrap();
+            assert_eq!(
+                both_configs(&p),
+                configs,
+                "{name} '{}': the same laws as a list",
+                m.name
+            );
+
+            let old = laws[band].clone();
+            let new = if old == "lambert" { "w2" } else { "lambert" };
+            let mut changed = laws.clone();
+            changed[band] = new.to_string();
+            let mut edited = item.clone();
+            edited["reflection_law"] = Value::from(changed);
+            let mut p = original.clone();
+            let undo = replace_op("replace_material", "material", edited)
+                .apply(&mut p)
+                .unwrap();
+            let groups = original
+                .surface_groups
+                .iter()
+                .filter(|g| g.material == m.id)
+                .count();
+            let after = both_configs(&p);
+            for (k, solver) in [SolverKind::Spps, SolverKind::Tcr].into_iter().enumerate() {
+                let (a, b): (Vec<&str>, Vec<&str>) =
+                    (after[k].lines().collect(), configs[k].lines().collect());
+                assert_eq!(a.len(), b.len(), "{name} {solver:?}: the same lines");
+                let from = format!(" loi=\"{}\"", law_code(&old));
+                let to = format!(" loi=\"{}\"", law_code(new));
+                let mut moved = 0;
+                for (x, y) in a.iter().zip(&b) {
+                    if x == y {
+                        continue;
+                    }
+                    assert!(
+                        y.contains(&format!("<bfreq freq=\"{hz}\" "))
+                            && *x == y.replace(&from, &to),
+                        "{name} '{}' {solver:?}: only {hz} Hz's loi moves:\n  got  {x}\n  was  {y}",
+                        m.name
+                    );
+                    moved += 1;
+                }
+                assert_eq!(
+                    moved, groups,
+                    "{name} '{}' {solver:?}: one line per group that has it",
+                    m.name
+                );
+            }
+            undo.apply(&mut p).unwrap();
+            assert_eq!(p, original, "{name} '{}': undone", m.name);
+            assert_eq!(
+                both_configs(&p),
+                configs,
+                "{name} '{}': undone, byte-identical",
+                m.name
+            );
+            if groups > 0 {
+                checked += 1;
+            }
+        }
+    }
+    assert!(checked >= 10, "{checked}");
+    println!("{checked} materials edited in one band, only that band's loi moved");
+}
