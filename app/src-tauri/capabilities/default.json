@@ -46,6 +46,7 @@
     "allow-run-start",
     "allow-run-cancel",
     "allow-runs-list",
+    "allow-run-label",
     "allow-run-results",
     "allow-run-report",
     "allow-run-data",

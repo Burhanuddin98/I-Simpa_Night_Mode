@@ -25,6 +25,7 @@ use crate::examples;
 use crate::guard::{self, CmdError, CmdResult, lock};
 use crate::mesh_now::{self, MeshNowReport};
 use crate::results_data::{self, EchogramView, ReportView, RunDataIndex};
+use crate::run_files;
 use crate::runs::{
     self, GpuCache, GpuStatus, LibraryMaterial, LibrarySpectrum, ResultsState, RunSlot, RunStarted,
     RunStreamBatch, RunsView, SolversCache, SolversStatus,
@@ -616,6 +617,35 @@ pub async fn runs_list(state: State<'_, AppState>) -> CmdResult<RunsView> {
         };
         let active = lock(&slot, "run")?.active_run().map(str::to_string);
         runs::list(&runs::runs_root(&path), &path, active.as_deref())
+    })
+    .await
+}
+
+/// The open project's file and its runs root, or `RUN_NOT_FOUND` for `run` when it was never saved.
+fn project_and_root(session: &Mutex<Session>, run: &str) -> CmdResult<(PathBuf, PathBuf)> {
+    let path = project_path(session)?.ok_or_else(|| {
+        CmdError::new(
+            "RUN_NOT_FOUND",
+            format!("no run '{run}': the project has no runs"),
+        )
+    })?;
+    let root = runs::runs_root(&path);
+    Ok((path, root))
+}
+
+/// Parity R2: sets the label of `run` (empty clears it), kept in `notes.json` beside its
+/// `run.json` (`run_files`); answers the runs as `runs_list` lists them after it.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn run_label(
+    state: State<'_, AppState>,
+    run: String,
+    label: String,
+) -> CmdResult<RunsView> {
+    let (session, slot) = (state.session.clone(), state.run.clone());
+    guard::blocking("run_label", move || {
+        let (path, root) = project_and_root(&session, &run)?;
+        let active = lock(&slot, "run")?.active_run().map(str::to_string);
+        run_files::set_label(&root, &path, active.as_deref(), &run, &label)
     })
     .await
 }

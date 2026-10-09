@@ -167,6 +167,8 @@ export const backend = {
     invoke<RunStarted>('run_start', { solver, device, on_event: onEvent, on_live: onLive }),
   runCancel: () => invoke<boolean>('run_cancel'),
   runsList: () => invoke<RunsView>('runs_list'),
+  /** R2: a run's label (empty clears it), kept beside its run.json; answers the runs listed after it. */
+  runLabel: (run: string, label: string) => invoke<RunsView>('run_label', { run, label }),
   runResults: (run: string) => invoke<ResultsState>('run_results', { run }),
   projImport: (path: string) => invoke<SceneState>('proj_import', { path }),
   materialLibrary: () => invoke<LibraryMaterial[]>('material_library'),

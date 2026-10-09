@@ -676,6 +676,16 @@ export async function refreshRuns(): Promise<RunsView | null> {
   return view;
 }
 
+/** R2: labels run `run` (an empty label clears it); the Runs tab takes the list it answers. A
+ * refusal (too long, a control character, the run still running) is a FAIL line, nothing changes. */
+export async function labelRun(runName: string, label: string): Promise<RunsView> {
+  const view = await run(`Could not label the run`, () => backend.runLabel(runName, label));
+  runsStore.set(view);
+  const row = view.rows.find((r) => r.run === runName);
+  if (row) log('OK', row.label ? `Run ${row.number} labelled "${row.label}"` : `Run ${row.number}'s label cleared`);
+  return view;
+}
+
 /**
  * A run the backend is running that this page has no record of: the page was reloaded mid-run
  * (WebView2's reload, the devtools), which loses everything in its memory, `runStore` included,

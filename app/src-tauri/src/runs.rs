@@ -257,6 +257,11 @@ pub struct RunRow {
     pub exit_code: Option<u32>,
     /// `run.json` is there but does not read.
     pub manifest_error: Option<String>,
+    /// Parity R2: the person's own name for the run, from `notes.json` beside `run.json`
+    /// (`run_files`); `None` when it has none.
+    pub label: Option<String>,
+    /// `notes.json` is there but does not read (`run_files`): said, never taken as no notes.
+    pub notes_error: Option<String>,
 }
 
 /// A run's solver build, verified or not, with the reason's core and UI codes (backlog 38).
@@ -585,6 +590,8 @@ pub fn row_from_manifest(run: &str, number: u32, m: &RunManifest) -> RunRow {
         work: None,
         exit_code: m.outcome.as_ref().and_then(|o| o.exit_code),
         manifest_error: None,
+        label: None,
+        notes_error: None,
     }
 }
 
@@ -619,6 +626,8 @@ fn bare_row(
         work: None,
         exit_code: None,
         manifest_error: error,
+        label: None,
+        notes_error: None,
     }
 }
 
@@ -681,7 +690,7 @@ pub fn list(root: &Path, project: &Path, active: Option<&str>) -> CmdResult<Runs
     names.sort_by_key(|n| run_order(n));
     for name in names {
         let manifest = root.join(&name).join(MANIFEST_FILE);
-        let row = match std::fs::read_to_string(&manifest) {
+        let mut row = match std::fs::read_to_string(&manifest) {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 if active == Some(name.as_str()) {
                     bare_row(&name, RunStatusUi::Running, None, None)
@@ -710,6 +719,7 @@ pub fn list(root: &Path, project: &Path, active: Option<&str>) -> CmdResult<Runs
                 Err(e) => unreadable(&name, format!("{}: {e}", manifest.display())),
             },
         };
+        crate::run_files::annotate(&mut row, &root.join(&name));
         view.rows.push(row);
     }
     for (i, r) in view.rows.iter_mut().enumerate() {

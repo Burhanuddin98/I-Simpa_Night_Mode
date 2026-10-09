@@ -5376,6 +5376,11 @@ export interface RunRow {
    * --probe` printed before the run; `None` for a run on the CPU.
    */
   gpu_device?: string | null;
+  /**
+   * Parity R2: the person's own name for the run, from `notes.json` beside `run.json`
+   * (`run_files`); `None` when it has none.
+   */
+  label?: string | null;
   lines?: LineCounts | null;
   /**
    * SPPS with its statistics table read.
@@ -5386,6 +5391,10 @@ export interface RunRow {
    */
   manifest_error?: string | null;
   mesh_sha256?: string | null;
+  /**
+   * `notes.json` is there but does not read (`run_files`): said, never taken as no notes.
+   */
+  notes_error?: string | null;
   /**
    * 1, 2, ... by start time among this project's runs.
    */

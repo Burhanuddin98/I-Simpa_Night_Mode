@@ -310,6 +310,18 @@
 .dock .verified.verified {
   color: var(--ok);
 }
+/* R2: a run's label leads its Check column, in the row's own ink; edited in the detail. */
+.run-main .c-check .run-label {
+  color: var(--text);
+  font-weight: 500;
+}
+.run-label-input {
+  width: 320px;
+  max-width: 100%;
+  height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+}
 .runs-foot {
   padding: 10px 0 4px;
   font-size: 12px;

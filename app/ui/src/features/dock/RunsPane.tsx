@@ -5,13 +5,16 @@
 // - Status is text (PQ5): OK, FAIL, CRASH, Cancelled, Running, Interrupted, in `[data-part=status]`.
 // - Check: "Particles lost x.xx %", the worst band, then the limit; each reason as its UI code and
 //   core code (`data-reason-code`); the warnings; the solver time.
+// - R2: the person's label for a run, from notes.json beside its run.json, leads the Check column
+//   (`[data-part=label]`); the selected row's detail edits it (`[data-field=run-label]`: Enter or
+//   leaving the field keeps it, Esc puts it back, empty clears it).
 // - A click selects the run (the Results step shows it). The selected row opens to show the
 //   per-band loss, the exe's sha256 and the solver build's verdict (the core's, `buildMark`,
 //   backlog 38), the mesh's sha256, the line counts, the exit code and the folder.
 //
 // Every number with a unit is a leaf diagnostic span holding Rust's string from run.json
 // (PLAN.md 2.3, 3.4 rule 1); a core detail that quotes one is left to run.json (model.detailView).
-import { type ReactNode, useEffect } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import * as actions from '../../actions';
 import type { ReasonUi, RunRow } from '../../bindings/ipc';
 import { statusWord, WITHHELD_DETAIL } from '../../flow';
@@ -65,6 +68,13 @@ function Reason({ r }: { r: ReasonUi }) {
 /** The Check column: what decided the row, in one line that wraps. */
 function Check({ row, active }: { row: RunRow; active: ActiveRun | null }) {
   const pieces: ReactNode[] = [];
+  if (row.label) {
+    pieces.push(
+      <span key="label" className="run-label" data-part="label" title={row.label}>
+        {row.label}
+      </span>,
+    );
+  }
   if (row.status === 'RUNNING') {
     const mine = active?.run === row.run ? active : null;
     const progress = mine?.progressText ? progressPct(mine.progressText) : null;
@@ -118,12 +128,59 @@ function Check({ row, active }: { row: RunRow; active: ActiveRun | null }) {
   );
 }
 
+/** R2: the run's label, edited in place: Enter or leaving the field keeps it, Esc puts it back. */
+function LabelField({ row }: { row: RunRow }) {
+  const [text, setText] = useState<string | null>(null);
+  // Esc blurs the field after putting the label back; the blur must not keep the edit.
+  const dropped = useRef(false);
+  const shown = text ?? row.label ?? '';
+  const keep = () => {
+    const edited = dropped.current ? null : text;
+    dropped.current = false;
+    setText(null);
+    if (edited !== null && edited.trim() !== (row.label ?? '')) actions.fire(actions.labelRun(row.run, edited));
+  };
+  const running = row.status === 'RUNNING';
+  return (
+    <div className="detail-line" data-part="label-line">
+      <span className="k">Label</span>
+      <input
+        className="run-label-input"
+        data-field="run-label"
+        value={shown}
+        maxLength={80}
+        disabled={running}
+        placeholder={running ? 'A run is labelled once it has ended' : 'Name this run (Enter to keep)'}
+        aria-label={`Label of run ${row.number}`}
+        onClick={(e) => e.stopPropagation()}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={keep}
+        onKeyDown={(e) => {
+          // The row's own keys (Enter and Space select it) stay out of the field.
+          e.stopPropagation();
+          if (e.key === 'Enter') e.currentTarget.blur();
+          else if (e.key === 'Escape') {
+            dropped.current = true;
+            e.currentTarget.blur();
+          }
+        }}
+      />
+      {row.notes_error && (
+        <span data-part="notes-error">
+          <span className="flag">FAIL</span> notes.json does not read: the label is not shown or changed
+        </span>
+      )}
+    </div>
+  );
+}
+
 /** The selected row's detail: what a run's record holds beyond its verdict. */
 function Detail({ row, root }: { row: RunRow; root: string | null }) {
   const mark = buildMark(row);
   const counts = row.lines;
   return (
     <div className="run-detail" data-part="detail">
+      <LabelField row={row} />
       {row.loss && (
         <div className="detail-line" data-part="bands">
           <span className="k">Particle loss per band</span>

@@ -75,7 +75,8 @@ export function ResultsPanel() {
   );
 
   const variants = scene?.view.variants ?? [];
-  const label = row ? `Run ${row.number} · ${runVariantName(row.variant, variants)}` : selected;
+  // R2: the person's label for the run, when it has one, after its number.
+  const label = row ? `Run ${row.number}${row.label ? ` · ${row.label}` : ''} · ${runVariantName(row.variant, variants)}` : selected;
   // Which solver made the run, read from its run.json (A5): `SPPS on the GPU, <device>` names the
   // device, whose name may hold digits, so it sits in a run-label span like the run's own name.
   const solver = runSolverText(row?.solver, row?.gpu_device);

@@ -5244,6 +5244,13 @@
             "null"
           ]
         },
+        "label": {
+          "description": "Parity R2: the person's own name for the run, from `notes.json` beside `run.json`\n(`run_files`); `None` when it has none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "lines": {
           "anyOf": [
             {
@@ -5273,6 +5280,13 @@
           ]
         },
         "mesh_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "notes_error": {
+          "description": "`notes.json` is there but does not read (`run_files`): said, never taken as no notes.",
           "type": [
             "string",
             "null"

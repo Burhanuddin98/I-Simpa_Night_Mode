@@ -41,6 +41,7 @@ fn main() {
         "run_start",
         "run_cancel",
         "runs_list",
+        "run_label",
         "run_results",
         "run_report",
         "run_data",

@@ -483,7 +483,7 @@ export function AcousticsPane() {
   // R36: a TCR run's receiver levels, in the Receivers card's band.
   const levels = tcrLevels(report, b);
   const variants = scene?.view.variants ?? [];
-  const label = row ? `Run ${row.number} · ${runVariantName(row.variant, variants)}` : selected;
+  const label = row ? `Run ${row.number}${row.label ? ` · ${row.label}` : ''} · ${runVariantName(row.variant, variants)}` : selected;
   // EDT's row 37 marks, T30's row 46 mark, STI's MQ3 note: each only while its parameter is shown.
   const marks = paramMarks(report);
 

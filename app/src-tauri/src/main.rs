@@ -42,6 +42,7 @@ mod guard;
 mod live;
 mod mesh_now;
 mod results_data;
+mod run_files;
 mod runs;
 mod scene;
 mod selftest;
@@ -271,6 +272,7 @@ fn run(args: GuiArgs) -> ExitCode {
             commands::run_start,
             commands::run_cancel,
             commands::runs_list,
+            commands::run_label,
             commands::run_results,
             commands::run_report,
             commands::run_data,
