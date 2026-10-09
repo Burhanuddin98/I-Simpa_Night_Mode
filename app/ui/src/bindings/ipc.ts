@@ -3559,6 +3559,11 @@ export interface MeshNowReport {
    */
   codes: string[];
   /**
+   * G37: the model's faces TetGen named (skipped, or in a self-intersection), by project face
+   * index, ascending, each once. A fitting zone's triangles are not the model's and are left out.
+   */
+  faces: number[];
+  /**
    * The scratch folder, on the temp drive; the next mesh on demand of this project replaces it.
    */
   folder: string;

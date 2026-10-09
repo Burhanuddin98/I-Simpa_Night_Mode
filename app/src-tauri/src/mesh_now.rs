@@ -8,6 +8,11 @@
 //!
 //! The project is cloned under the session lock and meshed without it, so the app stays usable
 //! while TetGen works; one mesh on demand at a time, and none while a run is active.
+//!
+//! Parity G37, upstream's mesh test highlighting the faces TetGen complains of: the report names the
+//! model's faces TetGen skipped as self-intersecting or named in its self-intersection stop and its
+//! `-d` follow-up (the manifest's `skipped_facets` and `self_intersection.facets`, each mapped to its
+//! scene face, which is the project's face index), and the 3D view marks them while the report holds.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -46,6 +51,9 @@ pub struct MeshNowReport {
     pub refined_faces: usize,
     /// The mesh input hash of the project as meshed, as a run's `mesh.json` records it.
     pub mesh_input_hash: Option<String>,
+    /// G37: the model's faces TetGen named (skipped, or in a self-intersection), by project face
+    /// index, ascending, each once. A fitting zone's triangles are not the model's and are left out.
+    pub faces: Vec<u32>,
     /// The scratch folder, on the temp drive; the next mesh on demand of this project replaces it.
     pub folder: String,
     /// The scene, with the Console lines this added.
@@ -121,6 +129,10 @@ pub fn mesh_now(
         preprocessed: manifest.preprocess.is_some(),
         refined_faces: manifest.counts.var_constraints,
         mesh_input_hash: manifest.mesh_input_hash.clone(),
+        faces: named_faces(
+            &manifest.skipped_facets,
+            manifest.self_intersection.as_ref(),
+        ),
         folder: dir.display().to_string(),
         state,
     })
@@ -146,6 +158,19 @@ fn build(
             format!("the mesh folder {} could not be used: {e}", dir.display()),
         )
     })
+}
+
+/// G37: the model's faces the manifest says TetGen named (its `skipped_facets` and
+/// `self_intersection`), ascending and each once.
+fn named_faces(skipped: &[mesh::SkippedFacet], si: Option<&mesh::SelfIntersection>) -> Vec<u32> {
+    let mut faces: Vec<u32> = skipped
+        .iter()
+        .chain(si.iter().flat_map(|s| s.facets.iter()))
+        .filter_map(|f| f.scene_face)
+        .collect();
+    faces.sort_unstable();
+    faces.dedup();
+    faces
 }
 
 fn status_word(s: MeshStatus) -> &'static str {
@@ -190,6 +215,18 @@ fn lines(m: &MeshManifest, dir: &Path) -> Vec<(LineClass, String)> {
     for msg in &m.messages {
         out.push((LineClass::Info, format!("Mesh now: {msg}")));
     }
+    let faces = named_faces(&m.skipped_facets, m.self_intersection.as_ref());
+    if !faces.is_empty() {
+        out.push((
+            LineClass::Info,
+            format!(
+                "Mesh now: {} {} of the model TetGen named {} marked in the 3D view",
+                faces.len(),
+                if faces.len() == 1 { "face" } else { "faces" },
+                if faces.len() == 1 { "is" } else { "are" }
+            ),
+        ));
+    }
     out
 }
 
@@ -225,6 +262,7 @@ mod tests {
         // The box refines its scene receiver to 0.1 m²: the .var was written and obeyed.
         assert!(r.refined_faces > 0);
         assert!(!r.preprocessed, "the box's scene correction is off");
+        assert!(r.faces.is_empty(), "a box that meshes has no face to mark");
         assert!(
             r.state
                 .lines
@@ -241,6 +279,27 @@ mod tests {
         let s = session.lock().unwrap();
         assert_eq!(s.json().unwrap(), json);
         assert_eq!(s.info().unwrap().undo_depth, undo);
+    }
+
+    /// G37: the faces marked are the model's faces TetGen named, from both lists, each once, a
+    /// fitting zone's triangles (no scene face) left out.
+    #[test]
+    fn the_faces_marked_are_the_models_faces_tetgen_named() {
+        let facet = |marker: i64, scene_face: Option<u32>| mesh::SkippedFacet {
+            marker,
+            scene_face,
+            group: None,
+            fitting_zone: scene_face.is_none().then(|| "Zone 1".to_string()),
+        };
+        assert!(named_faces(&[], None).is_empty());
+        let si = mesh::SelfIntersection {
+            facets: vec![facet(12, Some(12)), facet(9, Some(9)), facet(30, None)],
+            ..mesh::SelfIntersection::default()
+        };
+        assert_eq!(
+            named_faces(&[facet(9, Some(9)), facet(3, Some(3))], Some(&si)),
+            [3, 9, 12]
+        );
     }
 
     /// The refusals, before any program is looked for: no project, no model, one at a time.

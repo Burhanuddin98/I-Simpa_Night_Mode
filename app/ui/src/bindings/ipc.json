@@ -2345,6 +2345,15 @@
           },
           "type": "array"
         },
+        "faces": {
+          "description": "G37: the model's faces TetGen named (skipped, or in a self-intersection), by project face\nindex, ascending, each once. A fitting zone's triangles are not the model's and are left out.",
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "array"
+        },
         "folder": {
           "description": "The scratch folder, on the temp drive; the next mesh on demand of this project replaces it.",
           "type": "string"
@@ -2405,6 +2414,7 @@
         "messages",
         "preprocessed",
         "refined_faces",
+        "faces",
         "folder",
         "state"
       ],

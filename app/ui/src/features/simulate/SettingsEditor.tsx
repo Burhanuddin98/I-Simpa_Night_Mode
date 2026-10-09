@@ -31,7 +31,8 @@ import { fieldKey } from '../../issues';
 import { parseStrictDecimal } from '../../numbers';
 import { setBandComputed, setEnvironment, setSolverSettings } from '../../ops';
 import { RUN_ACTIVE_TITLE } from '../../chrome/MenuBar';
-import { deviceStore, meshNowStore, refusalStore, runStore, runsStore, type SolverName, useStore } from '../../store';
+import { deviceStore, meshNowStore, meshStore, refusalStore, runStore, runsStore, selectionStore, type SolverName, useStore } from '../../store';
+import { groupNamesOf } from '../viewport/hide';
 import { reasonWords } from './reasonWords';
 import { EDT_MARKS } from '../acoustics/model';
 import { bandsText, hzText, projectSettings, type ProjectSettings, settingsRows } from './model';
@@ -390,6 +391,13 @@ function AirEditor({ scene, s, solver }: { scene: SceneState; s: ProjectSettings
   );
 }
 
+/** The names of the surface groups the faces sit in, in the scene's order (a face selection carries them). */
+function facesGroups(scene: SceneState, faces: readonly number[]): string[] {
+  const mesh = meshStore.get();
+  if (!mesh || mesh.geometryRev !== scene.info.geometry_rev) return [];
+  return groupNamesOf(faces, mesh.groups, scene.view.surface_groups.map((g) => g.name));
+}
+
 /**
  * G32, mesh on demand: TetGen on the model now with the mesh settings above, as a run would mesh it,
  * to learn whether it meshes and how large the mesh is before a run. A run still meshes again
@@ -412,6 +420,7 @@ function MeshNowBlock({ scene, s }: { scene: SceneState; s: ProjectSettings }) {
       setBusy(false);
     }
   };
+  // G37: the faces TetGen named are marked in the 3D view while this report stands (engine.ts updateHighlight).
   return (
     <div className="sim-setting sim-block" data-setting="mesh_now">
       <div className="sim-field-line">
@@ -438,6 +447,22 @@ function MeshNowBlock({ scene, s }: { scene: SceneState; s: ProjectSettings }) {
               {reasonWords(c)} <span className="mono">{c}</span>
             </div>
           ))}
+          {shown.faces.length > 0 && (
+            <div className="sim-field-line" data-part="mesh-now-faces">
+              <span>
+                {shown.faces.length} {shown.faces.length === 1 ? 'face' : 'faces'} of the model TetGen named {shown.faces.length === 1 ? 'is' : 'are'} marked in the 3D view
+                {shown.faces.length <= 6 && <span className="mono"> (face {shown.faces.join(', ')})</span>}.
+              </span>
+              <button
+                className="small-button"
+                data-action="mesh-now-pick-faces"
+                title="Pick these faces in the 3D view, to see their surfaces, isolate them or move them to a group"
+                onClick={() => selectionStore.set({ kind: 'faces', faces: [...shown.faces], groups: facesGroups(scene, shown.faces) })}
+              >
+                Pick them
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

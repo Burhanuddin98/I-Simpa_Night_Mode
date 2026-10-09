@@ -85,7 +85,8 @@ import * as actions from '../../actions';
 import type { SceneMesh } from '../../mesh';
 import type { Particles, SurfaceMap } from '../../resultsData';
 import { displayName, effectiveMaterial, sentence } from '../../chrome/sceneModel';
-import { fittingZonesStore, log, meshStore, sceneStore, selectionStore, stepStore, Store, toolStore, viewportStore, type Selection } from '../../store';
+import { fittingZonesStore, log, meshNowStore, meshStore, sceneStore, selectionStore, stepStore, Store, toolStore, viewportStore, type Selection } from '../../store';
+import { meshNowBasis } from '../simulate/settings';
 import { registerHook } from '../../testhooks';
 import { buildTopology, coplanarFaces, faceNormalOf, type FaceTopology } from './floodfill';
 import { bgraToRgba, flipRows, unpadRows } from './snapshot';
@@ -912,6 +913,9 @@ class ViewportEngine {
         this.updateZones();
         this.invalidate();
       }),
+      // G37: a Mesh now report, or the settings it was made on changing, moves the faces marked.
+      meshNowStore.subscribe(() => this.refreshHighlight()),
+      settingsStore.subscribe(() => this.refreshHighlight()),
       selectionStore.subscribe(() => this.onSelection()),
       viewStyle.subscribe(() => this.applyStyle()),
       toolStore.subscribe(() => this.applyTool()),
@@ -2232,19 +2236,34 @@ class ViewportEngine {
     this.invalidate();
   }
 
+  /** G37: the highlight again, and the chip's count with it. */
+  private refreshHighlight(): void {
+    this.updateHighlight();
+    this.setUi({ highlightCount: this.highlightCount });
+    this.invalidate();
+  }
+
   private onSelection(): void {
     this.updateSelection();
     this.updateMarkers();
     this.invalidate();
   }
 
-  /** The model check's faces, only when the check and the drawn mesh are the same geometry. */
+  /**
+   * The model check's faces, and (G37) the faces the last Mesh now found TetGen naming while its report
+   * still holds (the same project, model and mesh settings, as the Simulate step shows it): only when they
+   * and the drawn mesh are the same geometry.
+   */
   private updateHighlight(): void {
     const state = sceneStore.get();
     const mesh = this.mesh;
     let faces: number[] = [];
-    if (state?.check && mesh && state.info.geometry_rev === mesh.geometryRev) {
-      faces = state.check.highlight_faces.filter((f) => f >= 0 && f < mesh.faceCount);
+    if (state && mesh && state.info.geometry_rev === mesh.geometryRev) {
+      const named = new Set<number>(state.check?.highlight_faces ?? []);
+      const last = meshNowStore.get();
+      const meshing = settingsStore.get()?.solvers.meshing;
+      if (last && meshing && last.basis === meshNowBasis(state.info.id, state.info.geometry_rev, meshing)) for (const f of last.report.faces) named.add(f);
+      faces = [...named].filter((f) => f >= 0 && f < mesh.faceCount).sort((a, b) => a - b);
     }
     this.highlight.geometry.dispose();
     this.highlight.geometry = this.overlay(faces);
