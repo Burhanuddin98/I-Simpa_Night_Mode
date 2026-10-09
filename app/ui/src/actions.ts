@@ -745,6 +745,15 @@ export async function openHelp(topic: string, what: string): Promise<string> {
   return opened;
 }
 
+/** A43: Help › Tutorial N: the tutorial's project opened as the user's copy (as the landing page's
+ * card opens it, after the save prompt), then its text page in the browser. Nothing opens in the
+ * browser when the user cancelled the prompt or a run is active. */
+export async function openTutorial(example: string, topic: string, what: string): Promise<SceneState | null> {
+  const state = await openExample(example);
+  if (state) await openHelp(topic, what);
+  return state;
+}
+
 /** A23: what Help › About shows of this build (about.rs). */
 export async function loadAbout(): Promise<AboutInfo> {
   return run('Could not read the build for About', () => backend.appAbout());

@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tutorial 2: the Elmia hall</title>
+<!-- Parity A43: upstream I-Simpa's tutorial 2 in Night Mode, beside its example project (examples/tutorial_2.simpa,
+     built by examples/build_tutorials.py). Embedded in app.exe (help.rs PAGES) and opened by Help, Tutorial 2;
+     styled as manual.html. What it says of this build was measured: docs/investigations/2026-10-09-tutorials. -->
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0c0a0a;
+    --panel: #131010;
+    --line: #221d1c;
+    --text: #efe9e5;
+    --text-2: #cbc2bd;
+    --text-3: #b0a6a0;
+    --red: #e0202e;
+    --red-hi: #ff6b74;
+    --red-wash: #1a0b0e;
+    --sans: 'Segoe UI', system-ui, sans-serif;
+    --mono: 'Cascadia Mono', Consolas, ui-monospace, monospace;
+  }
+  html { background: var(--bg); }
+  body {
+    margin: 0 auto;
+    max-width: 52rem;
+    padding: 2rem 1.25rem 4rem;
+    color: var(--text);
+    background: var(--bg);
+    font: 15px/1.6 var(--sans);
+  }
+  header { border-bottom: 2px solid var(--red); padding-bottom: 0.75rem; margin-bottom: 1.5rem; }
+  h1 { font-size: 1.6rem; margin: 0; letter-spacing: 0.01em; }
+  .sub { color: var(--text-3); margin: 0.25rem 0 0; }
+  h2 { font-size: 1.15rem; margin: 2.2rem 0 0.6rem; padding-top: 0.6rem; border-top: 1px solid var(--line); }
+  h3 { font-size: 1rem; margin: 1.4rem 0 0.4rem; color: var(--text-2); }
+  p, li { color: var(--text-2); }
+  a { color: var(--red-hi); }
+  b, strong { color: var(--text); }
+  kbd, code, .ui {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 0 0.3em;
+  }
+  .ui { font-family: var(--sans); font-size: 0.92em; }
+  nav ol { columns: 2; padding-left: 1.2rem; }
+  nav li { margin: 0.1rem 0; }
+  table { border-collapse: collapse; width: 100%; margin: 0.5rem 0 1rem; }
+  th, td { text-align: left; padding: 0.3rem 0.6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--text); font-weight: 600; }
+  td { color: var(--text-2); }
+  .note { border-left: 3px solid var(--red); background: var(--red-wash); padding: 0.5rem 0.9rem; margin: 1rem 0; }
+  .note p { margin: 0.3rem 0; }
+  footer { margin-top: 3rem; color: var(--text-3); font-size: 0.9em; border-top: 1px solid var(--line); padding-top: 0.8rem; }
+  @media (max-width: 40rem) { nav ol { columns: 1; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Tutorial 2: the Elmia hall</h1>
+  <p class="sub">Upstream I-Simpa's second tutorial, done in Night Mode. <a href="manual.html">The manual</a> ·
+  <a href="tutorial-1.html">Tutorial 1</a> · <a href="tutorial-3.html">Tutorial 3</a></p>
+</header>
+
+<p>This is upstream I-Simpa's tutorial <i>Study of the Elmia hall</i> (<code>Docs/tutorial_Elmia_hall.rst</code>), the
+concert hall of the second Round Robin on room-acoustics simulation, on the project upstream ships with it,
+<code>tutorial_2.proj</code>, with SPPS set as the text's calculation step says.</p>
+
+<h2 id="set">What is already set</h2>
+<table>
+  <tr><th>In the project</th><th>Upstream's text</th></tr>
+  <tr><td>The hall as upstream's project carries it: the corrected geometry, ten surface groups</td><td>rst:48-96 (see below)</td></tr>
+  <tr><td>Sources S01 (8.5, 0, 2.1), S02 (3, 3.5, 2.1), S03 (1, 1, 0.9), white noise, 80 dB</td><td>rst:101</td></tr>
+  <tr><td>Receivers R01 to R06</td><td>rst:108</td></tr>
+  <tr><td>Two plane receivers over the audience</td><td>rst:115-121</td></tr>
+  <tr><td>The Round Robin's materials, assigned to their groups</td><td>rst:130-136</td></tr>
+  <tr><td>SPPS: octave bands 125 Hz to 4 kHz, no scene correction, time step 0.005 s, Energetic, 100 000 particles
+  per source, no surface receiver per band</td><td>rst:150-159</td></tr>
+</table>
+<p>Where the project and the text differ, the project is kept: R02 is at (12.9, 10.2, 5.3) in the project and
+(12.9, 10.5, 5.3) in the text (rst:108).</p>
+<p><b>The geometry steps are not in this version.</b> Upstream imports the raw <code>elmia.ply</code>, whose surfaces
+intersect (the text says so, rst:51), and rebuilds it with <i>Average model remesh</i> (rst:53-96). Night Mode has no average-model remesh; the
+project carries the hall upstream's own correction left, which meshes as it is.</p>
+
+<h2 id="steps">In Night Mode</h2>
+<ol>
+  <li>Help › <span class="ui">Tutorial 2: the Elmia hall</span>, or its card on the start page, opens your own copy.</li>
+  <li><b>Simulate</b>: SPPS is set as the text says. Run it (<kbd>F5</kbd>, rst:161).</li>
+  <li><b>Results</b>: the Acoustics tab gives the parameters at R01 to R06. Values that ISO 3382-1 defines per source
+  and receiver (EDT, T20, T30, C50, C80, D50, Ts) are given for one source at a time: choose it under
+  <span class="ui">Source</span>. <span class="ui">Open response</span> shows R01's energy response, as upstream's
+  echogram does; the <span class="ui">Map</span> card draws the two planes.</li>
+</ol>
+
+<h2 id="expected">What upstream expects</h2>
+<ul>
+  <li><b>The echogram at R01</b> (rst:175-179, the figure <code>tutorial_2_Results_Echogram.PNG</code>, computed with
+  1 000 000 particles per source): all bands and all three sources together, with its Schroeder curve. The text
+  prints no value; read off the figure, the Schroeder curve falls about 33 dB per second between 0.2 s and 1.0 s, a
+  decay of about 1.8 s for 60 dB.</li>
+  <li><b>The noise maps</b> of the two planes (rst:181-185), a picture with no scale.</li>
+  <li><b>The volume</b> of the remeshed hall, 9624 m³ (rst:80).</li>
+</ul>
+
+<h2 id="here">On this build</h2>
+<ul>
+  <li><b>The echogram at R01: reproduced.</b> Run as shipped (100 000 particles per source), R01's energy summed over
+  the bands and the sources, read the same way as upstream's figure, decays at the rate the figure shows, within what
+  can be read off a picture.</li>
+  <li><b>The volume: not reproduced, and not comparable.</b> The hall here is the corrected geometry upstream's project
+  carries, not a new average-model remesh, so its air volume (on the status bar) is not the 9624 m³ the remesh
+  gives.</li>
+  <li><b>The maps</b> have no scale in upstream's figure, so there is nothing to compare but their look.</li>
+</ul>
+<p>The comparison, its method and the numbers are recorded with the app's source
+(<code>docs/investigations/2026-10-09-tutorials/README.md</code>).</p>
+
+<footer>Upstream's tutorial text, project and figures are I-Simpa's (Université Gustave Eiffel), GPL-3.0. Line numbers
+refer to upstream's <code>Docs/tutorial_Elmia_hall.rst</code> at the tag this app's solvers are built from.</footer>
+</body>
+</html>

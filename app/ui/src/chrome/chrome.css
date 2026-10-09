@@ -1193,6 +1193,10 @@
   font-size: 12px;
   color: var(--text-3);
 }
+/* A43: the tutorials' cards follow the examples' note, a section apart. */
+.landing-section + .landing-section {
+  margin-top: 22px;
+}
 /* A34: unsaved work a Night Mode that did not close left, first on the card. */
 .landing-recovery {
   margin: 0 0 20px;

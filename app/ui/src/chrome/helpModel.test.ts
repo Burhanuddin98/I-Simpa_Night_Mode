@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { HELP_LINKS, HELP_PAGES, helpLink } from './helpModel.ts';
+import { HELP_LINKS, HELP_PAGES, helpLink, TUTORIALS } from './helpModel.ts';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const HELP_RS = path.join(HERE, '..', '..', '..', 'src-tauri', 'src', 'help.rs');
@@ -23,6 +23,17 @@ test('help: the pages shipped in the app are exactly the core’s PAGES, in orde
   const topics = [...pages.matchAll(/topic: "([a-z0-9-]+)"/g)].map((m) => m[1]);
   assert.deepEqual(topics, HELP_PAGES.map((l) => l.topic));
   assert.equal(HELP_PAGES[0].label, 'User manual');
+});
+
+test('help: each tutorial opens an example examples.rs ships, and its own page (A43)', () => {
+  const rs = readFileSync(path.join(HERE, '..', '..', '..', 'src-tauri', 'src', 'examples.rs'), 'utf8');
+  const ids = [...rs.matchAll(/id: "([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(TUTORIALS.map((t) => t.example), ['tutorial-1', 'tutorial-2', 'tutorial-3']);
+  for (const t of TUTORIALS) {
+    assert.ok(ids.includes(t.example), t.example);
+    assert.equal(t.topic, t.example);
+  }
+  assert.equal(TUTORIALS[1].label, 'Tutorial 2: the Elmia hall');
 });
 
 test('help: ids and labels are unique, and no address is written here', () => {

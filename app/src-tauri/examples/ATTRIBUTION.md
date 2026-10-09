@@ -1,6 +1,6 @@
 # The example projects: sources and licences
 
-These six `.simpa` files ship inside the app (`src/examples.rs`, `include_bytes!`) and are
+These nine `.simpa` files ship inside the app (`src/examples.rs`, `include_bytes!`) and are
 offered on the landing page while no project is open. Opening one writes a copy into the user's
 `Documents\Night Mode\Examples` folder. The files here are never modified at run time.
 
@@ -12,6 +12,23 @@ offered on the landing page while no project is open. Opening one writes a copy 
 | `bras_cr2.simpa` | BRAS CR2, seminar room (BRAS scene 9) | The BRAS database | CC BY-SA 4.0 |
 | `bras_cr3.simpa` | BRAS CR3, chamber music hall (BRAS scene 10) | The BRAS database | CC BY-SA 4.0 |
 | `bras_cr4.simpa` | BRAS CR4, auditorium (BRAS scene 11) | The BRAS database | CC BY-SA 4.0 |
+| `tutorial_1.simpa` | Tutorial 1: a teaching room | Upstream I-Simpa's tutorial 1 (`tutorial_1.proj`) | GPL-3.0 |
+| `tutorial_2.simpa` | Tutorial 2: the Elmia hall | Upstream I-Simpa's tutorial 2 (`tutorial_2.proj`) | GPL-3.0 |
+| `tutorial_3.simpa` | Tutorial 3: an industrial hall | Upstream I-Simpa's tutorial 3 (`tutorial_3.proj`, `Industrial_hall.ply`) | GPL-3.0 |
+
+## Upstream's tutorials 1 to 3 (parity A43)
+
+| file | from | built by |
+|---|---|---|
+| `tutorial_1.simpa` | `tests/fixtures/rooms/tutorial1_box.simpa`, the import of upstream's `tutorial 1/tutorial_1.proj` | `build_tutorials.py`: name and description only |
+| `tutorial_2.simpa` | `tests/fixtures/rooms/elmia_corrected.simpa`, the import of upstream's `tutorial 2/tutorial_2.proj` | `build_tutorials.py`: SPPS as `Docs/tutorial_Elmia_hall.rst:150-159` says |
+| `tutorial_3.simpa` | `industrial_hall.simpa` below, the import of upstream's `tutorial 3/tutorial_3.proj` | `build_tutorials.py`: the document's sources, zones, doors and SPPS (`Docs/tutorial_industrial_hall.rst`), no variant |
+
+Upstream I-Simpa (Université Gustave Eiffel, <https://github.com/Universite-Gustave-Eiffel/I-Simpa>), GPL-3.0, as
+this app. Each file is the upstream project set as the tutorial's document says where the two differ; the differences,
+line by line, are in `build_tutorials.py` and in each tutorial's page (`../manual/tutorial-N.html`), which also says
+what upstream expects and what this build gives, measured in `docs/investigations/2026-10-09-tutorials/`. Regenerate
+with `python build_tutorials.py <simpa.exe>`; `examples.rs`'s test holds the files to the documents' settings.
 
 ## Elmia hall
 

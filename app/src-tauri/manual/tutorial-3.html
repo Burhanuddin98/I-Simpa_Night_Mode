@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tutorial 3: an industrial hall</title>
+<!-- Parity A43: upstream I-Simpa's tutorial 3 in Night Mode, beside its example project (examples/tutorial_3.simpa,
+     built by examples/build_tutorials.py). Embedded in app.exe (help.rs PAGES) and opened by Help, Tutorial 3;
+     styled as manual.html. What it says of this build was measured: docs/investigations/2026-10-09-tutorials. -->
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0c0a0a;
+    --panel: #131010;
+    --line: #221d1c;
+    --text: #efe9e5;
+    --text-2: #cbc2bd;
+    --text-3: #b0a6a0;
+    --red: #e0202e;
+    --red-hi: #ff6b74;
+    --red-wash: #1a0b0e;
+    --sans: 'Segoe UI', system-ui, sans-serif;
+    --mono: 'Cascadia Mono', Consolas, ui-monospace, monospace;
+  }
+  html { background: var(--bg); }
+  body {
+    margin: 0 auto;
+    max-width: 52rem;
+    padding: 2rem 1.25rem 4rem;
+    color: var(--text);
+    background: var(--bg);
+    font: 15px/1.6 var(--sans);
+  }
+  header { border-bottom: 2px solid var(--red); padding-bottom: 0.75rem; margin-bottom: 1.5rem; }
+  h1 { font-size: 1.6rem; margin: 0; letter-spacing: 0.01em; }
+  .sub { color: var(--text-3); margin: 0.25rem 0 0; }
+  h2 { font-size: 1.15rem; margin: 2.2rem 0 0.6rem; padding-top: 0.6rem; border-top: 1px solid var(--line); }
+  h3 { font-size: 1rem; margin: 1.4rem 0 0.4rem; color: var(--text-2); }
+  p, li { color: var(--text-2); }
+  a { color: var(--red-hi); }
+  b, strong { color: var(--text); }
+  kbd, code, .ui {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 0 0.3em;
+  }
+  .ui { font-family: var(--sans); font-size: 0.92em; }
+  nav ol { columns: 2; padding-left: 1.2rem; }
+  nav li { margin: 0.1rem 0; }
+  table { border-collapse: collapse; width: 100%; margin: 0.5rem 0 1rem; }
+  th, td { text-align: left; padding: 0.3rem 0.6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--text); font-weight: 600; }
+  td { color: var(--text-2); }
+  .note { border-left: 3px solid var(--red); background: var(--red-wash); padding: 0.5rem 0.9rem; margin: 1rem 0; }
+  .note p { margin: 0.3rem 0; }
+  footer { margin-top: 3rem; color: var(--text-3); font-size: 0.9em; border-top: 1px solid var(--line); padding-top: 0.8rem; }
+  @media (max-width: 40rem) { nav ol { columns: 1; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Tutorial 3: an industrial hall</h1>
+  <p class="sub">Upstream I-Simpa's third tutorial, done in Night Mode. <a href="manual.html">The manual</a> ·
+  <a href="tutorial-1.html">Tutorial 1</a> · <a href="tutorial-2.html">Tutorial 2</a></p>
+</header>
+
+<p>This is upstream I-Simpa's tutorial <i>Study of an industrial room</i>
+(<code>Docs/tutorial_industrial_hall.rst</code>): a factory hall coupled through a door to a corridor and another room,
+two milling machines of three sources each, two fitting zones, walls that transmit sound, and at the end the effect of
+one absorbing wall. The project is upstream's <code>tutorial_3.proj</code>, set as the text says where the two
+differ.</p>
+
+<h2 id="set">What is already set</h2>
+<table>
+  <tr><th>In the project</th><th>Upstream's text</th></tr>
+  <tr><td>The hall, <code>Industrial_hall.ply</code>, with its surface groups</td><td>rst:35-46</td></tr>
+  <tr><td>Two machines, groups <i>Milling Machine</i> and <i>Milling Machine 2</i>, three sources each, pink noise,
+  80 dB; the second is the first moved by (5, -2, 0)</td><td>rst:57-79</td></tr>
+  <tr><td>The scene fitting zone (alpha 0.25, mean free path 0.5 m, uniform) and the box zone from (13, 4, 0) to
+  (18, 1, 1.2) (alpha 0.15, mean free path 0.3 m, uniform)</td><td>rst:97-136</td></tr>
+  <tr><td>Trans_material on trans_room and trans_ro01; Open_door, open in every band, on both doors; 30 % absorbing
+  everywhere else, diff_wall included</td><td>rst:141-247</td></tr>
+  <tr><td>Absorbing_material, in the project, on no surface yet</td><td>rst:383-431</td></tr>
+  <tr><td>Five receivers on a line, 1.6 m up</td><td>rst:270-306</td></tr>
+  <tr><td>A plane receiver at 1.6 m</td><td>rst:315</td></tr>
+  <tr><td>SPPS: air absorption, fittings and transmission on, Energetic, 150 000 particles per source, extinction
+  10<sup>5</sup>, receiver radius 0.31 m, 2 s in steps of 0.002 s, sound level maps, octave bands 125 Hz to 4 kHz</td><td>rst:334-373</td></tr>
+</table>
+<p><b>Where upstream's project and its text differ</b>, the text is followed: the project has white noise, the
+zones at alpha 0.2 and 0 with a mean free path of 1 m, Absorbing_material on door_room2, the door closed at 125 Hz,
+50 000 particles over 2 s and one band. The receivers are the project's, on the line (k − 1, k, 1.6); the text's grid
+table describes another line. Receiver 1 is moved 0.5 m along that line, off the wall it touched in the project:
+Night Mode refuses a receiver on a surface.</p>
+
+<h2 id="steps">In Night Mode</h2>
+<ol>
+  <li>Help › <span class="ui">Tutorial 3: an industrial hall</span>, or its card on the start page, opens your own copy.</li>
+  <li><b>Simulate</b>: run SPPS (rst:375). This is the reference.</li>
+  <li><b>Materials</b>: pick the group <i>diff_wall</i> and choose <span class="ui">Absorbing_material</span>
+  (rst:433). Save (<kbd>Ctrl+S</kbd>).</li>
+  <li><b>Simulate</b>: run SPPS again with the same settings (rst:435).</li>
+  <li><b>Results</b>: with the second run selected, switch on <span class="ui">Difference from baseline</span> in the
+  <span class="ui">Map</span> card. The baseline is the run before it, the reference, so the map is the second run
+  minus the first, in dB: upstream's <i>Compare surface receivers</i> (rst:437-445).</li>
+</ol>
+<p>Upstream builds the scene with tools this version does without: copying and moving a group of sources (here the
+machines are already placed), the receiver grid and the comparison tool's own result file.</p>
+
+<h2 id="expected">What upstream expects</h2>
+<p>A picture: the difference map (rst:446-450, <code>Screenshot_6_tutorial_3.PNG</code>), all bands, cumulated. Its
+legend runs from about −0.1 dB to about −1.8 dB, with contours at −0.5 dB and −1.0 dB: the absorbing wall lowers the
+level everywhere on the plane, least around the machines, most at the end of the hall by the origin. The text prints
+no value; these are read off the figure's legend.</p>
+
+<h2 id="here">On this build</h2>
+<ul>
+  <li><b>The difference: reproduced.</b> Both runs end OK with nothing on the solver's error output, and their
+  results pass the app's check. Cumulated over the run, the second minus the first spans the plane over the range
+  upstream's legend shows, within about a tenth of a decibel at either end, and falls the same way: least around
+  the machines, most at the end of the hall by the origin.</li>
+  <li><b>Not drawn as upstream draws it.</b> The Map card draws the difference step by step, averaged over a short
+  time window; it does not cumulate a difference, so the figure's cumulated map is not on screen in this version.
+  The comparison above was made from the two runs' own files.</li>
+  <li><b>Not a variant.</b> diff_wall shares its material's solver id with the other groups on 30 % absorbing, as
+  upstream's project numbers them, and a variant that changes one group of such a set is refused when the run is
+  prepared. Changing the group's own material, as upstream's text does, runs.</li>
+</ul>
+<p>The comparison, its method and the numbers are recorded with the app's source
+(<code>docs/investigations/2026-10-09-tutorials/README.md</code>); the two gaps are rows 109 and 110 of
+<code>docs/v1.1-backlog.md</code>.</p>
+
+<footer>Upstream's tutorial text, project and figures are I-Simpa's (Université Gustave Eiffel), GPL-3.0. Line numbers
+refer to upstream's <code>Docs/tutorial_industrial_hall.rst</code> at the tag this app's solvers are built from.</footer>
+</body>
+</html>

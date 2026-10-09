@@ -5,7 +5,7 @@
 // Pure: MenuBar.tsx draws it; helpModel.test.ts holds every topic to help.rs's list.
 
 /** A topic `help_open` takes (help.rs): a web page (`LINKS`) or a page shipped in the app (`PAGES`). */
-export type HelpTopic = 'manual' | 'licence' | 'notices' | 'upstream-guide' | 'upstream-site' | 'source';
+export type HelpTopic = 'manual' | 'licence' | 'notices' | 'tutorial-1' | 'tutorial-2' | 'tutorial-3' | 'upstream-guide' | 'upstream-site' | 'source';
 
 export interface HelpLink {
   topic: HelpTopic;
@@ -48,8 +48,26 @@ export const HELP_NOTICES: HelpLink = {
   what: 'the third-party notices',
 };
 
+/** A43: upstream's tutorials. Each menu item opens the tutorial's project (examples.rs, `example`)
+ * as the user's copy and its text page (help.rs PAGES, `topic`). */
+export interface Tutorial extends HelpLink {
+  example: string;
+}
+
+export const TUTORIALS: readonly Tutorial[] = [1, 2, 3].map((n) => {
+  const room = ['a teaching room', 'the Elmia hall', 'an industrial hall'][n - 1];
+  return {
+    topic: `tutorial-${n}` as HelpTopic,
+    id: `help-tutorial-${n}`,
+    example: `tutorial-${n}`,
+    label: `Tutorial ${n}: ${room}`,
+    title: `Upstream I-Simpa’s tutorial ${n}: opens its project as your own copy, and its text, with what upstream expects, in your browser`,
+    what: `the text of tutorial ${n}`,
+  };
+});
+
 /** The pages shipped in the app, in help.rs `PAGES`'s order. */
-export const HELP_PAGES: readonly HelpLink[] = [HELP_MANUAL, HELP_LICENCE, HELP_NOTICES];
+export const HELP_PAGES: readonly HelpLink[] = [HELP_MANUAL, HELP_LICENCE, HELP_NOTICES, ...TUTORIALS];
 
 /** The web destinations, in the menu's order. */
 export const HELP_LINKS: readonly HelpLink[] = [

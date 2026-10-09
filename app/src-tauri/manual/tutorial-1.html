@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tutorial 1: a teaching room</title>
+<!-- Parity A43: upstream I-Simpa's tutorial 1 in Night Mode, beside its example project (examples/tutorial_1.simpa,
+     built by examples/build_tutorials.py). Embedded in app.exe (help.rs PAGES) and opened by Help, Tutorial 1;
+     styled as manual.html. What it says of this build was measured: docs/investigations/2026-10-09-tutorials. -->
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0c0a0a;
+    --panel: #131010;
+    --line: #221d1c;
+    --text: #efe9e5;
+    --text-2: #cbc2bd;
+    --text-3: #b0a6a0;
+    --red: #e0202e;
+    --red-hi: #ff6b74;
+    --red-wash: #1a0b0e;
+    --sans: 'Segoe UI', system-ui, sans-serif;
+    --mono: 'Cascadia Mono', Consolas, ui-monospace, monospace;
+  }
+  html { background: var(--bg); }
+  body {
+    margin: 0 auto;
+    max-width: 52rem;
+    padding: 2rem 1.25rem 4rem;
+    color: var(--text);
+    background: var(--bg);
+    font: 15px/1.6 var(--sans);
+  }
+  header { border-bottom: 2px solid var(--red); padding-bottom: 0.75rem; margin-bottom: 1.5rem; }
+  h1 { font-size: 1.6rem; margin: 0; letter-spacing: 0.01em; }
+  .sub { color: var(--text-3); margin: 0.25rem 0 0; }
+  h2 { font-size: 1.15rem; margin: 2.2rem 0 0.6rem; padding-top: 0.6rem; border-top: 1px solid var(--line); }
+  h3 { font-size: 1rem; margin: 1.4rem 0 0.4rem; color: var(--text-2); }
+  p, li { color: var(--text-2); }
+  a { color: var(--red-hi); }
+  b, strong { color: var(--text); }
+  kbd, code, .ui {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 0 0.3em;
+  }
+  .ui { font-family: var(--sans); font-size: 0.92em; }
+  nav ol { columns: 2; padding-left: 1.2rem; }
+  nav li { margin: 0.1rem 0; }
+  table { border-collapse: collapse; width: 100%; margin: 0.5rem 0 1rem; }
+  th, td { text-align: left; padding: 0.3rem 0.6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--text); font-weight: 600; }
+  td { color: var(--text-2); }
+  .note { border-left: 3px solid var(--red); background: var(--red-wash); padding: 0.5rem 0.9rem; margin: 1rem 0; }
+  .note p { margin: 0.3rem 0; }
+  footer { margin-top: 3rem; color: var(--text-3); font-size: 0.9em; border-top: 1px solid var(--line); padding-top: 0.8rem; }
+  @media (max-width: 40rem) { nav ol { columns: 1; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Tutorial 1: a teaching room</h1>
+  <p class="sub">Upstream I-Simpa's first tutorial, done in Night Mode. <a href="manual.html">The manual</a> ·
+  <a href="tutorial-2.html">Tutorial 2</a> · <a href="tutorial-3.html">Tutorial 3</a></p>
+</header>
+
+<p>This is upstream I-Simpa's tutorial <i>Study of a teaching room</i> (<code>Docs/tutorial_teaching_room.rst</code>
+in upstream's source), on the project it ships, <code>tutorial_1.proj</code>. Upstream's text builds the room step by
+step; the project Night Mode opens is that text's end state, so here you check what is set, run both solvers and read
+the results.</p>
+
+<h2 id="set">What is already set</h2>
+<table>
+  <tr><th>In the project</th><th>Upstream's text</th></tr>
+  <tr><td>A closed box, 6 m wide, 10 m long, 3 m high</td><td>rst:8, 43</td></tr>
+  <tr><td>Surface groups Ceiling, Floor and Walls with the reference materials 30 %, 10 % and 20 % absorbing</td><td>rst:49-69</td></tr>
+  <tr><td>Source 1 at (3, 5, 1.8), white noise, 80 dB global sound power</td><td>rst:74-80</td></tr>
+  <tr><td>A surface receiver on the floor</td><td>rst:85-87</td></tr>
+  <tr><td>Receiver 1 at (1, 1, 1.8) and Receiver 2 at (3, 7, 1.8)</td><td>rst:92-96</td></tr>
+  <tr><td>Surface-receiver face size 0.1 m² (Simulate, meshing settings)</td><td>rst:104-108</td></tr>
+  <tr><td>SPPS at the project's own settings (upstream's defaults)</td><td>the text sets none</td></tr>
+</table>
+
+<h2 id="steps">In Night Mode</h2>
+<ol>
+  <li>Help › <span class="ui">Tutorial 1: a teaching room</span>, or its card on the start page, opens your own
+  copy in <code>Documents\Night Mode\Examples</code>.</li>
+  <li>Look through the steps: <b>Geometry</b> shows the model check passed; <b>Materials</b> the three groups;
+  <b>Sources &amp; receivers</b> the source and the two receivers.</li>
+  <li><b>Simulate</b>: choose <span class="ui">TCR</span> and run (<kbd>F5</kbd>). Then choose
+  <span class="ui">SPPS</span> and run again (rst:101-117).</li>
+  <li><b>Results</b>, the TCR run: the Acoustics tab's <span class="ui">Receiver levels</span> card gives each
+  receiver's direct level and its total by Sabine and by Eyring (upstream's punctual receiver window, rst:139), and
+  <span class="ui">Sabine / Eyring</span> gives the room's reverberation time, diffuse level and absorption area
+  (upstream's <i>Main results</i>, rst:143).</li>
+  <li><b>Results</b>, the SPPS run: the <span class="ui">Receivers</span> card gives the room-acoustic
+  parameters at each receiver, computed for you (upstream's <i>Calculate acoustics parameters</i>, rst:151-153);
+  <span class="ui">Open response</span> shows the energy response; the <span class="ui">Map</span> card draws the
+  floor's sound map, cumulated or over a time window (upstream's animations, rst:155-164).</li>
+</ol>
+
+<h2 id="expected">What upstream expects</h2>
+<p>The tutorial's text names the results to look at but gives <b>no value</b> for any of them (rst:119-170), and the
+project ships without its results (the folder holds the project and a screenshot of the room). So there is no number
+of upstream's to compare a run with.</p>
+
+<h2 id="here">On this build</h2>
+<p>Both runs end OK with nothing on the solvers' error output, and their results pass the app's check, so the values
+are shown. Every result the text names has its place here, with two differences:</p>
+<ul>
+  <li>Upstream's maps of acoustic parameters on the surface receiver (rst:170) are not in this version; the map shows
+  the sound level.</li>
+  <li>Values that ISO 3382-1 defines per source and receiver are computed by the app itself, so there is no
+  <i>Calculate acoustics parameters</i> step to run.</li>
+</ul>
+
+<footer>Upstream's tutorial text and project are I-Simpa's (Université Gustave Eiffel), GPL-3.0. Line numbers refer to
+upstream's <code>Docs/tutorial_teaching_room.rst</code> at the tag this app's solvers are built from.</footer>
+</body>
+</html>

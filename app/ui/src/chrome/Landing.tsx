@@ -8,7 +8,7 @@
 import { useState } from 'react';
 import * as actions from '../actions';
 import { boxRoomRequestStore, runStore, sceneStore, useStore } from '../store';
-import { EXAMPLES, EXAMPLES_HEAD, EXAMPLES_NOTE, exampleLine, LANDING_LEAD, LANDING_TITLE, landingShown } from './landingModel';
+import { EXAMPLES, EXAMPLES_HEAD, EXAMPLES_NOTE, exampleLine, LANDING_LEAD, LANDING_TITLE, landingShown, TUTORIALS_HEAD, TUTORIALS_NOTE } from './landingModel';
 import { RUN_ACTIVE_TITLE } from './MenuBar';
 import { forgetRecent, recentStore, reopenLastStore, reopenProblemStore, setReopenLast } from './recent';
 import { keptAt, recentLabel } from './recentModel';
@@ -108,26 +108,34 @@ export function Landing() {
           </div>
         )}
 
-        <h2 className="landing-head">{EXAMPLES_HEAD}</h2>
-        <ul className="landing-examples">
-          {EXAMPLES.map((e) => (
-            <li key={e.id}>
-              <button
-                className="landing-example"
-                data-example={e.id}
-                disabled={blocked}
-                title={title}
-                aria-busy={busy === e.id}
-                onClick={() => go(e.id, () => actions.openExample(e.id))}
-              >
-                <span className="name">{e.name}</span>
-                <span className="line">{exampleLine(e)}</span>
-                {busy === e.id && <span className="opening">Opening…</span>}
-              </button>
-            </li>
-          ))}
-        </ul>
-        <p className="landing-note">{EXAMPLES_NOTE}</p>
+        {[
+          { head: EXAMPLES_HEAD, cards: EXAMPLES.filter((e) => !e.tutorial), note: EXAMPLES_NOTE },
+          // A43: upstream's tutorials, their own heading.
+          { head: TUTORIALS_HEAD, cards: EXAMPLES.filter((e) => e.tutorial), note: TUTORIALS_NOTE },
+        ].map((sec) => (
+          <section key={sec.head} className="landing-section" aria-label={sec.head}>
+            <h2 className="landing-head">{sec.head}</h2>
+            <ul className="landing-examples">
+              {sec.cards.map((e) => (
+                <li key={e.id}>
+                  <button
+                    className="landing-example"
+                    data-example={e.id}
+                    disabled={blocked}
+                    title={title}
+                    aria-busy={busy === e.id}
+                    onClick={() => go(e.id, () => actions.openExample(e.id))}
+                  >
+                    <span className="name">{e.name}</span>
+                    <span className="line">{exampleLine(e)}</span>
+                    {busy === e.id && <span className="opening">Opening…</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <p className="landing-note">{sec.note}</p>
+          </section>
+        ))}
 
         <div className="landing-actions">
           <button

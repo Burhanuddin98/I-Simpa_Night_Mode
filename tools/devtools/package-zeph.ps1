@@ -32,6 +32,15 @@ $manualSrc = "$Repo\app\src-tauri\manual"
 $pages = @(Get-ChildItem $manualSrc -Filter *.html)
 if (-not ($pages | Where-Object Name -eq 'manual.html')) { throw "$manualSrc has no manual.html" }
 $pages | ForEach-Object { Copy-Item $_.FullName "$dest\manual\$($_.Name)" }
+# Parity A43: upstream's tutorials 1 to 3 travel inside app.exe (examples.rs) with their pages in manual\; the
+# projects are copied beside it too, as upstream's installer ships doc\tutorial, to open with File > Open.
+New-Item -ItemType Directory -Force -Path "$dest\tutorials" | Out-Null
+foreach ($n in 1, 2, 3) {
+  $proj = "$Repo\app\src-tauri\examples\tutorial_$n.simpa"
+  if (-not (Test-Path $proj)) { throw "$proj is missing" }
+  if (-not (Test-Path "$dest\manual\tutorial-$n.html")) { throw "manual\tutorial-$n.html is missing" }
+  Copy-Item $proj "$dest\tutorials\tutorial_$n.simpa"
+}
 # Parity A23: the app's licence and the third-party notices beside it (About opens the same texts).
 & python "$Repo\tools\devtools\third_party_notices.py" --check
 if ($LASTEXITCODE -ne 0) { throw 'THIRD-PARTY-NOTICES.txt is stale: run tools\devtools\third_party_notices.py' }
@@ -43,6 +52,8 @@ I-Simpa Night Mode, portable build $stamp ($Branch branch $Sha)
 
 Run:   app.exe            (double-click, or app.exe --project <file.simpa>)
 Read:  manual\manual.html (the user manual; Help > User manual opens the copy app.exe carries)
+       manual\tutorial-1.html to -3.html, upstream I-Simpa's tutorials with what upstream expects;
+       their projects are in tutorials\ (Help > Tutorial N opens a fresh copy of each)
        LICENSE.txt (GPL-3.0, this app's licence) and THIRD-PARTY-NOTICES.txt (the solvers,
        TetGen under the AGPL-3.0, fonts, data and libraries); Help > About Night Mode says the same
 The solvers (spps, spps-gpu, classicalTheory, preprocess, tetgen) are in solvers\ beside app.exe and

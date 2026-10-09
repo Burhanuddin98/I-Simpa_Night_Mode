@@ -66,6 +66,23 @@ pub const EXAMPLES: &[Example] = &[
         file_stem: "BRAS CR4",
         bytes: include_bytes!("../examples/bras_cr4.simpa"),
     },
+    // Parity A43: upstream I-Simpa's tutorials 1 to 3 at the configuration their documents give
+    // (`examples/build_tutorials.py`); Help › Tutorial N opens one with its text (help.rs PAGES).
+    Example {
+        id: "tutorial-1",
+        file_stem: "Tutorial 1 - teaching room",
+        bytes: include_bytes!("../examples/tutorial_1.simpa"),
+    },
+    Example {
+        id: "tutorial-2",
+        file_stem: "Tutorial 2 - Elmia hall",
+        bytes: include_bytes!("../examples/tutorial_2.simpa"),
+    },
+    Example {
+        id: "tutorial-3",
+        file_stem: "Tutorial 3 - industrial hall",
+        bytes: include_bytes!("../examples/tutorial_3.simpa"),
+    },
 ];
 
 /// Unknown example ids are refused with this code.
@@ -206,6 +223,73 @@ mod tests {
         assert!(!examples_dir(&docs).exists());
         assert!(s.info().is_none());
         std::fs::remove_dir_all(&docs).unwrap();
+    }
+
+    /// A43: each tutorial ships at the settings its upstream document gives (rst lines in
+    /// `examples/build_tutorials.py`), so a later edit of a file cannot drift from the text
+    /// `manual/tutorial-N.html` shows beside it.
+    #[test]
+    fn the_tutorials_are_set_as_upstreams_documents_say() {
+        let json = |id: &str| -> serde_json::Value {
+            serde_json::from_slice(find(id).unwrap().bytes).unwrap()
+        };
+        let octaves = |p: &serde_json::Value, solver: &str| -> Vec<u64> {
+            let f = p["bands"]["frequencies_hz"].as_array().unwrap();
+            let on = p["solvers"][solver]["bands_computed"].as_array().unwrap();
+            f.iter()
+                .zip(on)
+                .filter(|(_, b)| b.as_bool().unwrap())
+                .map(|(f, _)| f.as_u64().unwrap())
+                .collect()
+        };
+        let t1 = json("tutorial-1");
+        assert_eq!(t1["name"], "Tutorial 1: a teaching room");
+        assert_eq!(
+            t1["solvers"]["meshing"]["surface_receiver_max_area_m2"],
+            0.1
+        );
+        assert_eq!(
+            t1["sources"][0]["position"],
+            serde_json::json!([3.0, 5.0, 1.8])
+        );
+
+        let t2 = json("tutorial-2");
+        let sp = &t2["solvers"]["spps"];
+        assert_eq!(octaves(&t2, "spps"), [125, 250, 500, 1000, 2000, 4000]);
+        assert_eq!(sp["time_step_s"], 0.005);
+        assert_eq!(sp["method"], "energetic");
+        assert_eq!(sp["particles_per_source"], 100_000);
+        assert_eq!(sp["sound_maps_per_band"], false);
+        assert_eq!(t2["solvers"]["meshing"]["preprocess"], false);
+
+        let t3 = json("tutorial-3");
+        let sp = &t3["solvers"]["spps"];
+        assert_eq!(octaves(&t3, "spps"), [125, 250, 500, 1000, 2000, 4000]);
+        for (k, v) in [
+            ("air_absorption", serde_json::json!(true)),
+            ("fittings", serde_json::json!(true)),
+            ("direct_field_only", serde_json::json!(false)),
+            ("transmission", serde_json::json!(true)),
+            ("method", serde_json::json!("energetic")),
+            ("echogram_per_source", serde_json::json!(false)),
+            ("sound_maps_per_band", serde_json::json!(false)),
+            ("extinction_exponent", serde_json::json!(5.0)),
+            ("particles_per_source", serde_json::json!(150_000)),
+            ("receiver_radius_m", serde_json::json!(0.31)),
+            ("duration_s", serde_json::json!(2.0)),
+            ("sound_map", serde_json::json!("spl")),
+            ("time_step_s", serde_json::json!(0.002)),
+        ] {
+            assert_eq!(sp[k], v, "tutorial 3 SPPS {k}");
+        }
+        assert!(
+            t3["sources"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|s| s["power"]["shape"]["kind"] == "pink" && s["power"]["global_db"] == 80.0)
+        );
+        assert_eq!(t3["variants"], serde_json::json!([]));
     }
 
     #[test]

@@ -1,0 +1,20 @@
+{
+ "upstream": {
+  "source": "Docs/tutorial_Elmia_hall.rst:175-179, images/Tutorial/tutorial_2_Results_Echogram.PNG",
+  "particles_per_source": 1000000,
+  "curve_points": 543,
+  "slope_db_per_s_200_1000ms": -32.83,
+  "decay_time_60db_s": 1.828
+ },
+ "ours": {
+  "run": "C:\\tmp\\p2h\\t2-20261009-171246\\runs\\20261009-171316-472-spps",
+  "particles_per_source": 100000,
+  "time_step_s": 0.004999999888241291,
+  "slope_db_per_s_200_1000ms_integrated_to_1_5s": -33.1,
+  "decay_time_60db_s_integrated_to_1_5s": 1.813,
+  "slope_db_per_s_200_1000ms_whole_run": -32.95,
+  "decay_time_60db_s_whole_run": 1.821
+ },
+ "difference_s_like_for_like": -0.015,
+ "difference_percent_like_for_like": -0.8
+}

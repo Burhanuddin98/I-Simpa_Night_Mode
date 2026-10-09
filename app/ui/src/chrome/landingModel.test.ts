@@ -7,7 +7,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import type { SceneState } from '../bindings/ipc.ts';
-import { counted, EXAMPLES, EXAMPLES_HEAD, EXAMPLES_NOTE, exampleLine, LANDING_LEAD, LANDING_TITLE, landingShown, listed } from './landingModel.ts';
+import { counted, EXAMPLES, EXAMPLES_HEAD, EXAMPLES_NOTE, exampleLine, LANDING_LEAD, LANDING_TITLE, landingShown, listed, TUTORIALS_HEAD, TUTORIALS_NOTE } from './landingModel.ts';
 
 const TAURI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'src-tauri');
 const SHIPPED = path.join(TAURI, 'examples');
@@ -51,6 +51,9 @@ test('landing: the lines read as plain sentences', () => {
       'A seminar room from the BRAS benchmark: 2 sources, 5 receivers and every surface’s material — ready to run.',
       'A chamber music hall from the BRAS benchmark: 2 sources, 5 receivers and every surface’s material — ready to run.',
       'An auditorium from the BRAS benchmark: 2 sources, 5 receivers, a sound-level plane, every surface’s material and one variant set — ready to run.',
+      'I-Simpa’s first tutorial, a box-shaped classroom for TCR and SPPS: 1 source, 2 receivers, a sound-level plane and every surface’s material — ready to run.',
+      'I-Simpa’s second tutorial, the Elmia hall of the second Round Robin, at the tutorial’s SPPS settings: 3 sources, 6 receivers, 2 sound-level planes and every surface’s material — ready to run.',
+      'I-Simpa’s third tutorial, a factory hall with two machines, fitting zones and walls that transmit: 6 sources, 5 receivers, a sound-level plane and every surface’s material — ready to run.',
     ],
   );
   assert.equal(counted(1, 'source', 'sources'), '1 source');
@@ -61,11 +64,17 @@ test('landing: the lines read as plain sentences', () => {
 });
 
 test('landing: no string on the page is a number with an acoustic unit (no_acoustic_numbers)', () => {
-  const shown = [LANDING_TITLE, LANDING_LEAD, EXAMPLES_HEAD, EXAMPLES_NOTE, ...EXAMPLES.flatMap((e) => [e.name, exampleLine(e)])];
+  const shown = [LANDING_TITLE, LANDING_LEAD, EXAMPLES_HEAD, EXAMPLES_NOTE, TUTORIALS_HEAD, TUTORIALS_NOTE, ...EXAMPLES.flatMap((e) => [e.name, exampleLine(e)])];
   for (const s of shown) assert.deepEqual(s.match(ACOUSTIC), null, s);
   // Say-NO: the same check finds a number with a unit.
   assert.ok('Reverberation 1.2 s'.match(ACOUSTIC));
   assert.ok('a plane 1.6 m above the floor'.match(ACOUSTIC));
+});
+
+test('landing (A43): the tutorials are the last three cards, numbered 1 to 3, under their own heading', () => {
+  assert.deepEqual(EXAMPLES.filter((e) => e.tutorial).map((e) => [e.id, e.tutorial]), [['tutorial-1', 1], ['tutorial-2', 2], ['tutorial-3', 3]]);
+  assert.deepEqual(EXAMPLES.slice(-3).map((e) => e.tutorial), [1, 2, 3]);
+  assert.equal(TUTORIALS_HEAD, 'I-Simpa tutorials');
 });
 
 test('landing: shown exactly while no project is open', () => {

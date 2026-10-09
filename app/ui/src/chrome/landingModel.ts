@@ -22,6 +22,8 @@ export interface ExampleCard {
   /** Surface receivers: the Sound-level planes section's planes. */
   planes: number;
   variants: number;
+  /** A43: upstream's tutorial number, for the cards under Tutorials (Help › Tutorial N has its text). */
+  tutorial?: number;
 }
 
 export const LANDING_TITLE = 'Start with a room';
@@ -90,7 +92,45 @@ export const EXAMPLES: readonly ExampleCard[] = [
     planes: 1,
     variants: 1,
   },
+  // A43: upstream's tutorials 1 to 3, set as their documents say (examples/build_tutorials.py).
+  {
+    id: 'tutorial-1',
+    name: 'Tutorial 1: a teaching room',
+    what: 'I-Simpa’s first tutorial, a box-shaped classroom for TCR and SPPS',
+    file: 'tutorial_1.simpa',
+    sources: 1,
+    receivers: 2,
+    planes: 1,
+    variants: 0,
+    tutorial: 1,
+  },
+  {
+    id: 'tutorial-2',
+    name: 'Tutorial 2: the Elmia hall',
+    what: 'I-Simpa’s second tutorial, the Elmia hall of the second Round Robin, at the tutorial’s SPPS settings',
+    file: 'tutorial_2.simpa',
+    sources: 3,
+    receivers: 6,
+    planes: 2,
+    variants: 0,
+    tutorial: 2,
+  },
+  {
+    id: 'tutorial-3',
+    name: 'Tutorial 3: an industrial hall',
+    what: 'I-Simpa’s third tutorial, a factory hall with two machines, fitting zones and walls that transmit',
+    file: 'tutorial_3.simpa',
+    sources: 6,
+    receivers: 5,
+    planes: 1,
+    variants: 0,
+    tutorial: 3,
+  },
 ];
+
+/** A43: the heading and note over the tutorials' cards. */
+export const TUTORIALS_HEAD = 'I-Simpa tutorials';
+export const TUTORIALS_NOTE = 'Upstream I-Simpa’s tutorials, set up as their documents say. Help, Tutorial 1 to 3 opens one with its text and what upstream expects.';
 
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
 

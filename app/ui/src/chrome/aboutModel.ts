@@ -45,7 +45,7 @@ export const LICENCES: readonly LicenceRow[] = [
   {
     what: 'Example rooms',
     licence: 'GPL-3.0 · CC BY-SA 4.0',
-    note: 'The Elmia hall and the industrial hall come from upstream I-Simpa’s tutorials (GPL-3.0); BRAS CR1 to CR4 are adapted from the BRAS benchmark (CC BY-SA 4.0).',
+    note: 'The Elmia hall, the industrial hall and Tutorials 1 to 3 come from upstream I-Simpa’s tutorials (GPL-3.0); BRAS CR1 to CR4 are adapted from the BRAS benchmark (CC BY-SA 4.0).',
   },
   {
     what: 'Libraries',

@@ -25,7 +25,7 @@ import { joinBlockers } from '../flow';
 import { aboutOpenStore, boxRoomRequestStore, groupRenameStore, reportStore, runStore, sceneStore, selectedRunStore, selectionStore, solversStatusStore, solverStore, stepStore, useStore, viewportStore } from '../store';
 import { ADD_GROUP_LABEL, DELETE_GROUP_LABEL, MERGE_LABEL, mergePlan, RENAME_GROUP_LABEL, renameTarget } from './groupsModel';
 import { clipboardStore, copySelected, deleteGroup, pasteCopied } from './sceneUi';
-import { ABOUT_LABEL, HELP_LINKS, HELP_MANUAL } from './helpModel';
+import { ABOUT_LABEL, HELP_LINKS, HELP_MANUAL, TUTORIALS } from './helpModel';
 import { Search } from './icons';
 import { recentStore, reopenLastStore, setReopenLast } from './recent';
 import { recentMenuLabel } from './recentModel';
@@ -258,6 +258,14 @@ export function MenuBar() {
         label: l.label,
         title: l.title,
         run: () => actions.fire(actions.openHelp(l.topic, l.what)),
+      })),
+      // A43: upstream's tutorials, each its project (after the save prompt) and its text.
+      ...TUTORIALS.map((t) => ({
+        id: t.id,
+        label: t.label,
+        title: running ? RUN_ACTIVE_TITLE : t.title,
+        disabled: running,
+        run: () => actions.fire(actions.openTutorial(t.example, t.topic, t.what)),
       })),
       // A23: this build, the solvers' build and the licences.
       { id: 'help-about', label: ABOUT_LABEL, title: 'This build’s version and commit, the solvers it runs, and the licences', run: () => aboutOpenStore.set(true) },

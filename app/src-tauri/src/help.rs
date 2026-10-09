@@ -73,6 +73,23 @@ pub const PAGES: &[Page] = &[
         file: "THIRD-PARTY-NOTICES.txt",
         text: include_str!("../about/THIRD-PARTY-NOTICES.txt"),
     },
+    // Parity A43: upstream's tutorials 1 to 3, each the text beside its example project
+    // (examples.rs `tutorial-N`): what is set, what to do here, what upstream expects.
+    Page {
+        topic: "tutorial-1",
+        file: "tutorial-1.html",
+        text: include_str!("../manual/tutorial-1.html"),
+    },
+    Page {
+        topic: "tutorial-2",
+        file: "tutorial-2.html",
+        text: include_str!("../manual/tutorial-2.html"),
+    },
+    Page {
+        topic: "tutorial-3",
+        file: "tutorial-3.html",
+        text: include_str!("../manual/tutorial-3.html"),
+    },
 ];
 
 /// The pages could not be written where the browser is to read them.

@@ -1,0 +1,28 @@
+{
+ "upstream": {
+  "source": "Docs/tutorial_industrial_hall.rst:433-450, images/Tutorial/Screenshot_6_tutorial_3.PNG",
+  "legend_range_db": [
+   -0.12,
+   -1.83
+  ],
+  "contours_db": [
+   -0.5,
+   -1.0
+  ],
+  "particles_per_source": "not stated for the figure (the document's table, rst:358-359: 150 000)"
+ },
+ "ours": {
+  "reference_run": "C:\\tmp\\p2h\\t3-20261009-171723\\runs\\20261009-171727-526-spps",
+  "absorbing_run": "C:\\tmp\\p2h\\t3-20261009-171723\\runs\\20261009-171915-042-spps",
+  "faces": 1248,
+  "faces_compared": 1248,
+  "min_db": -1.887,
+  "p5_db": -1.5,
+  "median_db": -0.916,
+  "p95_db": -0.464,
+  "max_db": -0.175,
+  "share_above_minus_0_5": 0.061,
+  "share_between": 0.559,
+  "share_below_minus_1_0": 0.38
+ }
+}
