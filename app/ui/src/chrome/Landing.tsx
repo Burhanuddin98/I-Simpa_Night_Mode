@@ -1,12 +1,12 @@
 // The landing page (Burhan, 2026-10-06 01:24): while no project is open it stands in for the
 // empty window, a card over the 3D view's background with the shipped examples (landingModel.ts), New
-// project and Open. Each action is the one File › New project, File › Open… and the examples
+// project, New box room (G11, BoxRoomDialog.tsx) and Open. Each action is the one File › New project, File › Open… and the examples
 // command run (actions.ts), so the save prompt and the run guard hold here too. A failure is
 // shown on the card, since the Console is behind it. The menu bar stays above it and the status
 // bar beside it; App.tsx makes the regions behind it inert, so Tab moves only through the card.
 import { useState } from 'react';
 import * as actions from '../actions';
-import { runStore, sceneStore, useStore } from '../store';
+import { boxRoomRequestStore, runStore, sceneStore, useStore } from '../store';
 import { EXAMPLES, EXAMPLES_HEAD, EXAMPLES_NOTE, exampleLine, LANDING_LEAD, LANDING_TITLE, landingShown } from './landingModel';
 import { RUN_ACTIVE_TITLE } from './MenuBar';
 
@@ -68,6 +68,14 @@ export function Landing() {
             onClick={() => go('new', () => actions.newProject())}
           >
             New project
+          </button>
+          <button
+            data-landing-action="new-box-room"
+            disabled={blocked}
+            title={title ?? 'A new project whose model is a closed box of the width, length and height you give'}
+            onClick={() => boxRoomRequestStore.set(true)}
+          >
+            New box room…
           </button>
           <button data-landing-action="open" disabled={blocked} title={title ?? 'Open a project or a room model'} onClick={() => go('open', actions.openDialog)}>
             Open…

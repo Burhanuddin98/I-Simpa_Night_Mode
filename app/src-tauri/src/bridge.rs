@@ -489,6 +489,30 @@ impl Session {
         self.state()
     }
 
+    /// Parity G11, upstream's New scene: a new project whose model is a box room `width` (x) by
+    /// `length` (y) by `height` (z) metres (`geometry::shoebox`), its floor, walls and ceiling in
+    /// three groups on upstream's placeholder, so Run waits for their materials. The history is
+    /// cleared, as for New project; nothing is saved until the user saves.
+    pub fn scene_new_box(
+        &mut self,
+        name: &str,
+        width: f64,
+        length: f64,
+        height: f64,
+    ) -> CmdResult<SceneState> {
+        let project = simpa_core::geometry::shoebox::shoebox(name, width, length, height)
+            .map_err(|e| CmdError::new("BOX_ROOM_INVALID", e.0))?;
+        self.replace(project, None, name.to_string());
+        self.lines.push(LogLine::new(
+            LineClass::Info,
+            format!(
+                "New box room \"{name}\": {width} x {length} x {height} m, its floor, walls and \
+                 ceiling as three surface groups; choose their materials (Run waits for them)"
+            ),
+        ));
+        self.state()
+    }
+
     pub fn scene_open(&mut self, path: &Path) -> CmdResult<SceneState> {
         self.open(path)?;
         self.state()
@@ -1467,6 +1491,43 @@ mod m10_tests {
             "NO_PROJECT"
         );
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// G11: a box room is a new, unsaved project whose model the check takes, its three groups
+    /// on the placeholder (Run waits for materials), nothing to undo; a side that is no length is
+    /// refused and the open project stays.
+    #[test]
+    fn a_new_box_room_is_checked_blank_and_waits_for_materials() {
+        let mut s = Session::default();
+        let st = s.scene_new_box("Box room", 6.0, 10.0, 3.0).unwrap();
+        assert!(st.info.dirty && st.info.path.is_none());
+        assert_eq!((st.info.faces, st.info.surface_groups), (12, 3));
+        assert_eq!((st.info.sources, st.info.point_receivers), (0, 0));
+        assert!(!st.info.can_undo);
+        let check = st.check.as_ref().expect("the model is checked");
+        assert_eq!(check.verdict, scene::CheckVerdict::Ok, "{check:?}");
+        assert!(
+            st.issues
+                .iter()
+                .filter(|i| i.code == MATERIALS_UNASSIGNED)
+                .count()
+                == 3,
+            "{:?}",
+            st.issues
+        );
+        assert!(
+            st.lines.iter().any(|l| l
+                .text
+                .starts_with("New box room \"Box room\": 6 x 10 x 3 m")),
+            "{:?}",
+            st.lines
+        );
+        let id = st.info.id.clone();
+        assert_eq!(
+            s.scene_new_box("Box room", 6.0, 0.0, 3.0).unwrap_err().code,
+            "BOX_ROOM_INVALID"
+        );
+        assert_eq!(s.info().unwrap().id, id, "the open project stays");
     }
 
     #[test]

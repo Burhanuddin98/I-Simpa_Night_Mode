@@ -344,6 +344,26 @@ pub async fn scene_new(state: State<'_, AppState>, name: String) -> CmdResult<Sc
     .await
 }
 
+/// Parity G11: a new project holding a box room `width` (x) by `length` (y) by `height` (z) metres
+/// (`Session::scene_new_box`). Refused while a run is active, and for a side that is no length
+/// (`BOX_ROOM_INVALID`). The history is cleared.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn scene_new_box(
+    state: State<'_, AppState>,
+    name: String,
+    width: f64,
+    length: f64,
+    height: f64,
+) -> CmdResult<SceneState> {
+    let (session, slot) = (state.session.clone(), state.run.clone());
+    guard::blocking("scene_new_box", move || {
+        let mut s = lock(&session, "project")?;
+        runs::refuse_while_running(&slot, "New box room")?;
+        s.scene_new_box(&name, width, length, height)
+    })
+    .await
+}
+
 /// Opens a `.simpa` file (`schema::load`), then runs the model check and the validator.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn scene_open(state: State<'_, AppState>, path: String) -> CmdResult<SceneState> {

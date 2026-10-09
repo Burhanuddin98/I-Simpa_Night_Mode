@@ -143,6 +143,21 @@ export async function newProject(name = 'Untitled'): Promise<SceneState | null> 
 }
 
 /**
+ * G11, upstream's New scene: a new project holding a box room `width` (x) by `length` (y) by `height` (z)
+ * metres, after the save prompt, as New project; `null` when the user cancelled or a run is active. A side
+ * the core refuses (`BOX_ROOM_INVALID`) throws, for the dialog to show, and the open project stays.
+ */
+export async function newBoxRoom(width: number, length: number, height: number, name = 'Box room'): Promise<SceneState | null> {
+  if (refuseDuringRun('New box room')) return null;
+  if (!(await confirmDiscard())) return null;
+  refusalStore.set(new Map());
+  const state = await run('Could not create the box room', async () => accept(await backend.sceneNewBox(name, width, length, height)));
+  forgetRuns();
+  fire(refreshRuns());
+  return state;
+}
+
+/**
  * The Results step's run and the verdicts checked so far belong to one project's runs root:
  * after New, an Open, an import, or a Save as into another folder, neither may be shown. Kept,
  * the Results step read "OK Results verified" for the previous project's run (M11 review 2,

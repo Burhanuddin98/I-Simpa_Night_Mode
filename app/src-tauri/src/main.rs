@@ -254,6 +254,7 @@ fn run(args: GuiArgs) -> ExitCode {
             commands::selftest_report,
             commands::scene_state,
             commands::scene_new,
+            commands::scene_new_box,
             commands::scene_open,
             commands::example_open,
             commands::model_import,

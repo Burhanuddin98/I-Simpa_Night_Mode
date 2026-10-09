@@ -1500,3 +1500,11 @@ input.marker-colour:focus-visible {
   width: 100%;
   min-width: 0;
 }
+
+/* G11: the New box room dialog's three sides. */
+.box-room-side {
+  width: 140px;
+}
+[data-part='box-room-dialog'] .issue {
+  margin-top: 8px;
+}

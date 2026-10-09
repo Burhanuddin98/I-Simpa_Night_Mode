@@ -5,3 +5,4 @@ pub mod check;
 pub mod export;
 pub mod import;
 pub mod repair;
+pub mod shoebox;

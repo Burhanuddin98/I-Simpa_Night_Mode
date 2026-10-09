@@ -127,6 +127,8 @@ export const backend = {
   // M10 (PLAN.md 1.5). Each returns the whole SceneState, or the mesh bytes.
   sceneState: () => invoke<SceneState | null>('scene_state'),
   sceneNew: (name: string) => invoke<SceneState>('scene_new', { name }),
+  /** G11: a new project holding a box room of `width` (x) by `length` (y) by `height` (z) metres. */
+  sceneNewBox: (name: string, width: number, length: number, height: number) => invoke<SceneState>('scene_new_box', { name, width, length, height }),
   sceneOpen: (path: string) => invoke<SceneState>('scene_open', { path }),
   /** The landing page's example `id`: the core writes a fresh copy into Documents\Night Mode\Examples
    * (never over a file) and opens it as `scene_open` does. */

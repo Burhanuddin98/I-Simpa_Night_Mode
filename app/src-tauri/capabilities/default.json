@@ -28,6 +28,7 @@
     "allow-selftest-report",
     "allow-scene-state",
     "allow-scene-new",
+    "allow-scene-new-box",
     "allow-scene-open",
     "allow-example-open",
     "allow-model-import",

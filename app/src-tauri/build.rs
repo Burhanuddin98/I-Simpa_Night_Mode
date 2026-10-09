@@ -23,6 +23,7 @@ fn main() {
         "selftest_report",
         "scene_state",
         "scene_new",
+        "scene_new_box",
         "scene_open",
         "example_open",
         "model_import",

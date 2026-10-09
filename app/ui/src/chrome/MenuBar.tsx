@@ -22,7 +22,7 @@ import * as actions from '../actions';
 import { exportParams, exportView, paramsRefusal, viewRefusal } from '../features/export/exportActions';
 import { focusSelection, frameModel, hideStore, isolateWhyNot, setRoofOff, setView, toggleIsolate, viewFrom } from '../features/viewport/engine';
 import { joinBlockers } from '../flow';
-import { groupRenameStore, reportStore, runStore, sceneStore, selectedRunStore, selectionStore, solversStatusStore, solverStore, stepStore, useStore, viewportStore } from '../store';
+import { boxRoomRequestStore, groupRenameStore, reportStore, runStore, sceneStore, selectedRunStore, selectionStore, solversStatusStore, solverStore, stepStore, useStore, viewportStore } from '../store';
 import { ADD_GROUP_LABEL, DELETE_GROUP_LABEL, MERGE_LABEL, mergePlan, RENAME_GROUP_LABEL, renameTarget } from './groupsModel';
 import { deleteGroup } from './sceneUi';
 import { Search } from './icons';
@@ -89,6 +89,13 @@ export function MenuBar() {
         run: () => actions.fire(actions.newProject()),
         disabled: running,
         title: running ? RUN_ACTIVE_TITLE : undefined,
+      },
+      {
+        id: 'new-box-room',
+        label: 'New box room…',
+        run: () => boxRoomRequestStore.set(true),
+        disabled: running,
+        title: running ? RUN_ACTIVE_TITLE : 'A new project whose model is a closed box of the width, length and height you give',
       },
       {
         id: 'open',
