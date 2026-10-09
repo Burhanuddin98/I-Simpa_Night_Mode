@@ -235,6 +235,9 @@ function PointEditor({ scene, kind, point }: { scene: SceneState; kind: Kind; po
     (i) => i.field !== 'name' && i.field !== 'position' && !i.field.startsWith('position/') && !i.field.startsWith('name/'),
   );
   const removeRefused = refusedFor(entityKey(kind, id));
+  // G48: the face a placement click put it on, while it still stands at the point written.
+  const placement = useStore(actions.placementStore).get(id);
+  const placed = placement && placement.point.every((v, i) => v === point.position[i]) ? placement : null;
   const errors = worstSeverity(scene.issues.filter((i) => i.entity?.kind === kind && i.entity.id === id)) === 'error';
   const source = kind === 'source' ? (point as Source) : null;
   // A disabled source is not checked against the room (the validator reads enabled ones only).
@@ -298,6 +301,11 @@ function PointEditor({ scene, kind, point }: { scene: SceneState; kind: Kind; po
           ))}
         </div>
         <Issues refused={[...localPos, ...posRefused]} current={posIssues} />
+        {placed && (
+          <div className="hint" data-part="placed-on" title="Where the 3D view's placement click put it; a move clears this">
+            Placed {actions.placementText(placed)}.
+          </div>
+        )}
       </div>
 
       {source && <EmissionEditor scene={scene} source={source} />}
@@ -427,7 +435,7 @@ export function SourcesPanel() {
               data-part="place-in-view"
               aria-pressed={placing}
               disabled={!canPlace}
-              title="Click a floor in the 3D view to place a receiver there"
+              title="Click any face in the 3D view to place a receiver: above a floor, or off a wall or ceiling into the room"
               onClick={() => toolStore.set(placing ? 'select' : 'place-receiver')}
             >
               Place in view
@@ -455,8 +463,8 @@ export function SourcesPanel() {
         {!view.point_receivers.length && <div className="empty">No receivers yet.</div>}
         <Issues refused={refusals.get(fieldKey('point_receiver', 'new', 'position')) ?? []} current={[]} />
         <div className="hint">
-          Receivers snap to {actions.PLACE_HEIGHT_M.receiver} m ear height. A point outside the room is refused,
-          and the project is left unchanged.
+          + Receiver puts one at {actions.PLACE_HEIGHT_M.receiver} m ear height; Place in view puts it the distance the
+          view's hint shows from the face clicked. A point outside the room is refused, and the project is left unchanged.
         </div>
       </div>
 

@@ -20,6 +20,7 @@ import { MOVE_TO_LABEL, moveTargets } from '../../chrome/groupsModel';
 import { displayName, REGROUP_LABEL, regroupFaces } from '../../chrome/sceneModel';
 import { onWindowEntityKey } from '../../chrome/sceneUi';
 import { sceneStore, selectionStore, stepStore, toolStore, useStore, type Tool } from '../../store';
+import { parseStrictDecimal } from '../../numbers';
 import { attachViewport, frameModel, hideStore, presentStore, setIsolate, setPresent, setRoofOff, setTurntable, setView, toggleIsolate, viewportUi, type ViewMode } from './engine';
 import { groupList } from './hide';
 import { VIEWPORT_LIBRARIES } from './libraries';
@@ -85,11 +86,58 @@ const FrameTool = () => (
   </svg>
 );
 
+/** G48: the distance a placement click puts the receiver or source from the face, edited in the view (Enter or blur). */
+function PlaceOffset({ kind }: { kind: 'receiver' | 'source' }) {
+  const offsets = useStore(actions.placeOffsetStore);
+  const value = String(offsets[kind]);
+  const [draft, setDraft] = useState<string | null>(null);
+  const [bad, setBad] = useState<string | null>(null);
+  const commit = () => {
+    if (draft === null) return;
+    const p = parseStrictDecimal(draft);
+    if (!p.ok || !(p.value > 0) || p.value > PLACE_OFFSET_MAX_M) {
+      setBad(`"${draft}" is not a distance from 0 to ${PLACE_OFFSET_MAX_M} m: the ${kind} is placed ${value} m off the face`);
+      return;
+    }
+    setBad(null);
+    setDraft(null);
+    actions.placeOffsetStore.set({ ...actions.placeOffsetStore.get(), [kind]: p.value });
+  };
+  return (
+    <label className="vp-chip place-offset" data-part="place-offset" title={bad ?? `How far the ${kind} goes from the face clicked: straight up from a floor, along the normal from any other face`}>
+      <span>Distance from the face</span>
+      <input
+        className="mono"
+        data-field="place-offset"
+        aria-label={`Distance of the ${kind} from the face, metres`}
+        aria-invalid={bad !== null}
+        spellCheck={false}
+        value={draft ?? value}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === 'Enter') commit();
+          else if (e.key === 'Escape') {
+            setDraft(null);
+            setBad(null);
+          }
+        }}
+        onBlur={commit}
+      />
+      <span>m</span>
+      {bad && <span className="vp-fail" data-part="place-offset-error">Not a distance</span>}
+    </label>
+  );
+}
+
+/** G48: the largest distance from a face the place hint takes, metres. */
+const PLACE_OFFSET_MAX_M = 100;
+
 const TOOLS: { key: Tool; label: string; title: string; Icon: () => JSX.Element; needsModel: boolean }[] = [
   { key: 'select', label: 'Select', title: 'Select: click a face; Ctrl+click adds or removes one, Shift+click adds; Shift+drag a box adds every face seen in it; double-click takes its whole flat surface', Icon: SelectTool, needsModel: false },
   { key: 'orbit', label: 'Orbit', title: 'Orbit: drag to turn the view; clicks select nothing', Icon: OrbitTool, needsModel: false },
-  { key: 'place-receiver', label: 'Place receiver', title: 'Place receiver: click a floor', Icon: ReceiverTool, needsModel: true },
-  { key: 'place-source', label: 'Place source', title: 'Place source: click a floor', Icon: SourceTool, needsModel: true },
+  { key: 'place-receiver', label: 'Place receiver', title: 'Place receiver: click any face; it goes above a floor, or off a wall or ceiling into the room', Icon: ReceiverTool, needsModel: true },
+  { key: 'place-source', label: 'Place source', title: 'Place source: click any face; it goes above a floor, or off a wall or ceiling into the room', Icon: SourceTool, needsModel: true },
 ];
 const NOT_YET = [
   ['Section plane', SectionTool],
@@ -123,6 +171,7 @@ export function Viewport() {
   const step = useStore(stepStore);
   const rightDown = useRef<{ x: number; y: number } | null>(null);
   const hidden = useStore(hideStore);
+  const offsets = useStore(actions.placeOffsetStore);
 
   useEffect(() => {
     if (!menu) return;
@@ -285,9 +334,10 @@ export function Viewport() {
         )}
         {placing && ui.hasModel && (
           <div className="vp-chip hint" data-part="place-hint" role="status">
-            {ui.notice ?? `Click a floor: the ${placeKind} goes ${actions.PLACE_HEIGHT_M[placeKind]} m above it. Esc ends.`}
+            {ui.notice ?? `Click any face: the ${placeKind} goes ${offsets[placeKind]} m above a floor, or ${offsets[placeKind]} m off a wall or ceiling into the room. Esc ends.`}
           </div>
         )}
+        {placing && ui.hasModel && <PlaceOffset kind={placeKind} />}
       </div>
 
       {/* Items 7 and 8: what the view leaves out, under the view bar (a long list would run under it at the top). */}

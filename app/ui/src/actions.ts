@@ -75,6 +75,7 @@ import {
   deviceStore,
   gpuStatusStore,
   type SppsDevice,
+  Store,
 } from './store';
 
 /** A rejected action's `{code, message}`, for a package that shows it inline (packages never
@@ -414,6 +415,29 @@ export async function projectJson(): Promise<string> {
 
 /** Receivers sit 1.2 m above a floor hit (ear height), sources 1.5 m (PLAN.md 6.1). */
 export const PLACE_HEIGHT_M = { receiver: 1.2, source: 1.5 } as const;
+
+/**
+ * G48: how far a placement click in the 3D view puts a receiver or a source from the face clicked,
+ * metres: straight up from a floor, along the normal into the room from any other face. Starts at
+ * PLACE_HEIGHT_M; the place hint edits it for this session.
+ */
+export const placeOffsetStore = new Store<{ receiver: number; source: number }>({ ...PLACE_HEIGHT_M });
+
+/** G48: where a placement click put a source or receiver: the face, its group, the lift and the point written. */
+export interface Placement {
+  face: number;
+  group: string | null;
+  lift: number;
+  how: 'above' | 'off';
+  point: Vec3;
+}
+/** G48: this session's placements by source or receiver id (shown while it still stands where it was put). */
+export const placementStore = new Store<ReadonlyMap<string, Placement>>(new Map());
+
+/** G48: a placement in words: "1.2 m above face 4 (Floor)". */
+export function placementText(p: Placement): string {
+  return `${p.lift} m ${p.how === 'above' ? 'above' : 'off'} face ${p.face}${p.group ? ` (${p.group})` : ''}`;
+}
 
 /**
  * Adds a receiver or a source at `point` (already lifted by the caller), at the end of its list,

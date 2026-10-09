@@ -729,3 +729,21 @@ html.present .viewport > :not(.viewport-host) {
   background: color-mix(in srgb, var(--red) 12%, transparent);
   border-radius: 1px;
 }
+
+/* G48: the placement distance, under the place hint; its field takes the pointer (the chips do not). */
+.vp-chip.place-offset {
+  pointer-events: auto;
+}
+.vp-chip.place-offset input {
+  width: 52px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 4px;
+  border: 1px solid var(--edge);
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+}
+.vp-chip.place-offset input[aria-invalid='true'] {
+  border-color: var(--red-hi);
+}

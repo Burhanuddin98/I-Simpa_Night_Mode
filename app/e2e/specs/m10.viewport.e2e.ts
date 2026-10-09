@@ -23,6 +23,11 @@ const TEACHING_ROOM = () => repo('tests/fixtures/ui/teaching_room.simpa');
 const BOX = () => repo('tests/fixtures/rooms/tutorial1_box.simpa');
 const CORRECTED_HALL = () => repo('testdata/elmia_corrected.ply');
 
+// WebDriver key codes.
+const KEY_CTRL = String.fromCharCode(0xe009);
+const KEY_ENTER = String.fromCharCode(0xe007);
+const KEY_BACKSPACE = String.fromCharCode(0xe003);
+
 type Point = { x: number; y: number };
 type Sel = { faces: number[]; groups: string[] };
 type Cam = {
@@ -226,7 +231,7 @@ describe('M10 viewport', () => {
     assert.equal((await cameraState()).projection, 'perspective');
   });
 
-  it('viewport: a placement click puts a receiver 1.2 m and a source 1.5 m above the floor', async () => {
+  it('viewport: a placement click puts a receiver 1.2 m and a source 1.5 m above the floor, and off a wall (G48)', async () => {
     await m10.openProject(TEACHING_ROOM());
     const start = JSON.parse(await m10.projectJson()) as Project;
     const depth = await m10.undoDepth();
@@ -256,20 +261,46 @@ describe('M10 viewport', () => {
     assert.equal(s.position[2], 1.5);
     assert.equal(await m10.undoDepth(), depth + 2);
 
-    // A wall is not a floor: nothing is placed and the project is unchanged.
+    // G48: a wall takes a placement too, 1.2 m off it into the room along its normal (the left wall is y = 6),
+    // and the hint names the face it sits on.
     await clickSelector('[data-tool="place-receiver"]');
     const wall = (await facesOfGroup('Left wall'))[0];
     const w = await aimAtFace(wall);
     assert.ok(w, 'the wall is in view');
-    const before = await m10.projectJson();
     await settleClick();
     await clickAt(w);
+    const three = await projectWhen((x) => x.point_receivers.length === start.point_receivers.length + 2, 'the wall placement');
+    const rw = three.point_receivers[three.point_receivers.length - 1];
+    console.log(`viewport placement receipt: ${rw.name} at ${JSON.stringify(rw.position)} off face ${wall}`);
+    assert.equal(rw.position[1], 4.8, '1.2 m off the wall at y = 6');
+    assert.ok(rw.position[2] > 0 && rw.position[2] < 3, 'at the height clicked');
+    const notice = await browser.execute(() => document.querySelector('[data-part="place-hint"]')?.textContent ?? '');
+    assert.ok(notice.includes(`off face ${wall} (Left wall)`), `the hint names the face: ${notice}`);
+    assert.equal(await m10.undoDepth(), depth + 3);
+
+    // A distance that puts the point outside the room is refused: nothing placed, the hint says so.
+    const field = await $('[data-field="place-offset"]');
+    await field.click();
+    await browser.keys([KEY_CTRL, 'a']);
+    await browser.keys(KEY_BACKSPACE);
+    for (const ch of '20') await browser.keys(ch);
+    await browser.keys(KEY_ENTER);
+    const w2 = await aimAtFace(wall);
+    assert.ok(w2, 'the wall is in view');
+    const before = await m10.projectJson();
+    await settleClick();
+    await clickAt(w2);
     await browser.pause(500);
     await m10.idle();
-    assert.equal(await m10.projectJson(), before, 'a wall click places nothing');
-    const notice = await browser.execute(() => document.querySelector('[data-part="place-hint"]')?.textContent ?? '');
-    assert.ok(notice.startsWith('Not a floor'), `the hint says why: ${notice}`);
-    assert.equal(await m10.undoDepth(), depth + 2);
+    assert.equal(await m10.projectJson(), before, 'a point outside the room places nothing');
+    const refused = await browser.execute(() => document.querySelector('[data-part="place-hint"]')?.textContent ?? '');
+    assert.ok(refused.startsWith('Not placed 20 m off face'), `the hint says why: ${refused}`);
+    assert.equal(await m10.undoDepth(), depth + 3);
+    await field.click();
+    await browser.keys([KEY_CTRL, 'a']);
+    await browser.keys(KEY_BACKSPACE);
+    for (const ch of '1.2') await browser.keys(ch);
+    await browser.keys(KEY_ENTER);
     await clickSelector('[data-tool="select"]');
   });
 

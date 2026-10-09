@@ -8,6 +8,7 @@ import {
   formatMetres,
   gizmoAxes,
   isFloorLike,
+  placeOffFace,
   placementPoint,
   planDimensions,
   rayOnFacePlane,
@@ -60,6 +61,27 @@ test('a raised floor keeps its height through the lift', () => {
   const hit = rayOnFacePlane(raised, new Uint32Array([0, 2, 1]), 0, [0.2, 0.3, 5], [0, 0, -1]);
   assert.deepEqual(hit, [0.2, 0.3, 0.1]);
   assert.deepEqual(placementPoint(hit as Vec, 1.2), [0.2, 0.3, 1.3]);
+});
+
+test('G48: a placement on a wall or the ceiling goes the lift off it, into the room, along its normal', () => {
+  // Left wall (faces 4, 5) lies in y = 6, its outward normal +y: the point is 1.2 m inside, at y = 4.8.
+  const wall = rayOnFacePlane(ROOM, ROOM_FACES, 4, [3.3, 2, 1.7], [0, 1, 0]);
+  assert.deepEqual(wall, [3.3, 6, 1.7]);
+  assert.deepEqual(placeOffFace(wall as Vec, faceNormalOf(ROOM, ROOM_FACES, 4), 1.2), { point: [3.3, 4.8, 1.7], how: 'off' });
+  // The ceiling at z = 3: 1.5 m below it.
+  const ceiling = rayOnFacePlane(ROOM, ROOM_FACES, 2, [4, 4, 1], [0, 0, 1]);
+  assert.deepEqual(placeOffFace(ceiling as Vec, faceNormalOf(ROOM, ROOM_FACES, 2), 1.5), { point: [4, 4, 1.5], how: 'off' });
+  // The floor keeps its height rule: straight up.
+  assert.deepEqual(placeOffFace([6.1234, 2.5, 0], faceNormalOf(ROOM, ROOM_FACES, 0), 1.2), { point: [6.123, 2.5, 1.2], how: 'above' });
+});
+
+test('G48: a raked floor is lifted straight up, a steep face along its normal, a degenerate one not at all', () => {
+  const t = (30 * Math.PI) / 180;
+  assert.deepEqual(placeOffFace([1, 1, 2], [Math.sin(t), 0, -Math.cos(t)], 1.2), { point: [1, 1, 3.2], how: 'above' });
+  const s = (60 * Math.PI) / 180;
+  const steep = placeOffFace([1, 1, 2], [Math.sin(s), 0, -Math.cos(s)], 1)?.point;
+  assert.deepEqual(steep, [0.134, 1, 2.5]);
+  assert.equal(placeOffFace([0, 0, 0], [0, 0, 0], 1.2), null);
 });
 
 test('a ray parallel to the plane, or pointing away from it, gives no point', () => {

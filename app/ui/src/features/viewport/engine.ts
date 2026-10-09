@@ -84,7 +84,7 @@ import type { MeshBVH } from 'three-mesh-bvh';
 import * as actions from '../../actions';
 import type { SceneMesh } from '../../mesh';
 import type { Particles, SurfaceMap } from '../../resultsData';
-import { effectiveMaterial } from '../../chrome/sceneModel';
+import { displayName, effectiveMaterial, sentence } from '../../chrome/sceneModel';
 import { log, meshStore, sceneStore, selectionStore, stepStore, Store, toolStore, viewportStore, type Selection } from '../../store';
 import { registerHook } from '../../testhooks';
 import { buildTopology, coplanarFaces, faceNormalOf, type FaceTopology } from './floodfill';
@@ -98,7 +98,7 @@ import { insideBox, NO_REVEAL, revealRadius, rimOpacity, speedOfSound, SPREAD_MA
 import { settingsStore } from '../simulate/runSize';
 import { facePlan, faceShowOf, type FacePlan, type FaceShow } from './faces';
 import { ResultsLayer, type MapMeta, type ParticleMeta } from './resultsLayer';
-import { faceBounds, faceCentroid, fitOrtho, gizmoAxes, isFloorLike, placementPoint, planDimensions, rayOnFacePlane, type Box, type Vec } from './geometry';
+import { faceBounds, faceCentroid, fitOrtho, gizmoAxes, placeOffFace, planDimensions, rayOnFacePlane, type Box, type Vec } from './geometry';
 import { BG, glowPixels, RED, ringPixels, WHITE } from './sprites';
 import { GLOW_MAX, GLOW_RGB, glowLevel, glowRadius, glowTerm, pulsePhase, spriteScale, STILL_PHASE } from './glow';
 import { aoFactor, aoReach, bakeAo } from './ao';
@@ -2817,24 +2817,35 @@ class ViewportEngine {
     const mesh = this.mesh;
     const hit = this.pickFace(x, y);
     if (!mesh || !hit) {
-      this.notify(`Click a floor inside the room to place a ${kind}.`);
+      this.notify(`Click a face of the room to place a ${kind}.`);
       return;
     }
-    const normal = this.topo ? (Array.from(this.topo.normals.subarray(3 * hit.face, 3 * hit.face + 3)) as Vec) : faceNormalOf(mesh.positions, mesh.indices, hit.face);
-    if (!isFloorLike(normal)) {
-      this.notify(`Not a floor. Click a surface that faces up to place a ${kind}.`);
+    // G48: any face. A floor lifts the point straight up, any other face along its normal into the room.
+    const normal = faceNormalOf(mesh.positions, mesh.indices, hit.face);
+    const on = rayOnFacePlane(mesh.positions, mesh.indices, hit.face, hit.origin, hit.dir);
+    const lift = actions.placeOffsetStore.get()[kind];
+    const placed = on ? placeOffFace(on, normal, lift) : null;
+    if (!placed) {
+      this.notify(`Face ${hit.face} has no direction (a degenerate face): nothing placed.`);
       return;
     }
-    const floor = rayOnFacePlane(mesh.positions, mesh.indices, hit.face, hit.origin, hit.dir);
-    if (!floor) return;
-    const point = placementPoint(floor, actions.PLACE_HEIGHT_M[kind]);
+    const group = this.groupNames([hit.face])[0] ?? null;
+    const where = actions.placementText({ face: hit.face, group: group === null ? null : displayName(group), lift, how: placed.how, point: placed.point });
     actions.fire(
-      actions.placeAt(kind, point).then((outcome) => {
-        if (!outcome.applied) return;
+      actions.placeAt(kind, placed.point).then((outcome) => {
+        if (!outcome.applied) {
+          this.notify(`Not placed ${where}: ${outcome.refusals[0] ? sentence(outcome.refusals[0].message) : 'the edit was refused'} The project is unchanged.`);
+          return;
+        }
         const view = outcome.state.view;
         const list = kind === 'receiver' ? view.point_receivers : view.sources;
         const added = list[list.length - 1];
-        if (added) selectionStore.set({ kind, id: added.id });
+        if (!added) return;
+        const next = new Map(actions.placementStore.get());
+        next.set(added.id, { face: hit.face, group: group === null ? null : displayName(group), lift, how: placed.how, point: placed.point });
+        actions.placementStore.set(next);
+        this.notify(`${added.name} placed ${where}.`);
+        selectionStore.set({ kind, id: added.id });
       }),
     );
   }

@@ -64,6 +64,21 @@ export function placementPoint(floor: Vec, lift: number): Vec {
   return [toMillimetre(floor[0]), toMillimetre(floor[1]), toMillimetre(floor[2] + lift)];
 }
 
+/**
+ * G48: the point a placement click on any face writes, and how it was lifted. On a floor-like face
+ * (isFloorLike) it is `lift` metres straight up, as `placementPoint` (an ear height stays a height
+ * on a raked floor); on a wall, ceiling or any other face it is `lift` metres off the face along
+ * its normal, into the room (`outward` points out of the room, so the point moves against it).
+ * To the millimetre. Null for a degenerate face (a zero normal).
+ */
+export function placeOffFace(hit: Vec, outward: Vec, lift: number): { point: Vec; how: 'above' | 'off' } | null {
+  const len = Math.hypot(outward[0], outward[1], outward[2]);
+  if (!(len > 0) || !Number.isFinite(len)) return null;
+  if (isFloorLike(outward)) return { point: placementPoint(hit, lift), how: 'above' };
+  const k = lift / len;
+  return { point: [toMillimetre(hit[0] - k * outward[0]), toMillimetre(hit[1] - k * outward[1]), toMillimetre(hit[2] - k * outward[2])], how: 'off' };
+}
+
 export interface Box {
   min: Vec;
   max: Vec;
