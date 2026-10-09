@@ -8,6 +8,7 @@ import {
   forecastRunTime,
   liveFinishMs,
   measuredRun,
+  remainingText,
   runTimeText,
   solverSentence,
   workNow,
@@ -146,6 +147,16 @@ test('while SPPS solves: the finish from the progress so far', () => {
   assert.equal(liveFinishMs({ stage: 'solve', progress: 25, solveAt: undefined, progressAt: solveAt }), null);
 });
 
+test('C36: the time left in words and the finish clock, from the progress so far', () => {
+  const now = new Date(2026, 9, 9, 4, 0, 0).getTime();
+  assert.equal(remainingText(now + 6 * 60_000, now), 'About 6 min left, done about 04:06, from the progress so far');
+  assert.equal(remainingText(now + 40_000, now), 'Under a minute left, done about 04:01, from the progress so far');
+  assert.equal(remainingText(now + 125 * 60_000, now), 'About 2 h 05 min left, done about 06:05, from the progress so far');
+  assert.equal(remainingText(now - 5_000, now), 'Should finish any moment: the progress so far gave done about 04:00', 'never below zero');
+  assert.equal(remainingText(null, now), null, 'no projection yet');
+  assert.equal(remainingText(Number.NaN, now), null);
+});
+
 test('no acoustic number in anything this module says', () => {
   const m = measuredRun(runs(row(1)), 'spps', 'cpu');
   const now = new Date(2026, 9, 9, 4, 0, 0).getTime();
@@ -158,6 +169,7 @@ test('no acoustic number in anything this module says', () => {
       return [t.forecast ?? '', t.finish ?? '', t.basis];
     }),
     runTimeText(null, 'spps', 'cpu', now, false).basis,
+    ...[-5, 1, 59, 600, 7200].map((s) => remainingText(now + s * 1000, now) ?? ''),
   ];
   for (const t of texts) {
     assert.doesNotMatch(t, ACOUSTIC_NUMBER_RE, t);

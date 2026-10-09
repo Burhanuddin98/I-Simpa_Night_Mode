@@ -15,8 +15,9 @@
 //   blocks Run, and holds no number next to s, ms, dB or % (m10-h): a duration's or a time
 //   step's new value shows in its own field once applied;
 // - while a run is active, the running block: what it is doing ("Meshing…", "Solving · <p> %"),
-//   the bar, the elapsed m:ss, the finish as a clock time from SPPS's progress so far
-//   (`[data-part="running-finish"]`, runTime.ts `liveFinishMs`), Cancel (`[data-part="cancel-run"]`, PQ2);
+//   the bar, the elapsed m:ss, the time left in words and the finish as a clock time from SPPS's progress
+//   so far (`[data-part="running-finish"]`, runTime.ts `liveFinishMs`, `remainingText`; parity C36),
+//   Cancel (`[data-part="cancel-run"]`, PQ2);
 // - when idle, the last run: "Run <n> · <variant>" (a link to the Results step), its status as
 //   text, "Particles lost <x> % / <l> % limit", "Solver warnings <n>", and the big Run button.
 //
@@ -70,7 +71,7 @@ import {
 } from './model';
 import { SettingsEditor } from './SettingsEditor';
 import { reasonWords } from './reasonWords';
-import { clockText, liveFinishMs, solverSentence } from './runTime';
+import { liveFinishMs, remainingText, solverSentence } from './runTime';
 import './simulate.css';
 
 /**
@@ -298,7 +299,7 @@ function RunningBlock({ active }: { active: ActiveRun }) {
       </div>
       <div className="sim-running-finish" data-part="running-finish">
         {finish !== null
-          ? `Done about ${clockText(finish, now)}, from the progress so far`
+          ? remainingText(finish, now)
           : active.solver === 'tcr'
             ? 'TCR reports no progress: no finish time until it ends.'
             : 'The finish time shows once the solver reports progress.'}

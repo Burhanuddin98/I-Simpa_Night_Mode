@@ -177,3 +177,17 @@ export function solverSentence(solver: SolverName, device: SppsDevice, gpuName: 
     return `SPPS on the GPU will run: the same particle tracing as SPPS, on ${gpuName ?? 'the CUDA device'}. Its time grows with the particles, sources, bands and duration.`;
   return 'SPPS will run on the CPU: it traces sound particles through the room for the echograms at the receivers and the sound maps. Its time grows with the particles, sources, bands and duration.';
 }
+
+/**
+ * C36: the running block's line while SPPS solves, from `liveFinishMs`: the time left in words and the finish as a
+ * clock time, `About 6 min left, done about 04:31, from the progress so far`. Past the projected finish it says so
+ * rather than count below zero. Null when there is no projection yet (`liveFinishMs` null). Never a number next to s.
+ */
+export function remainingText(finishMs: number | null, nowMs: number): string | null {
+  if (finishMs === null || !Number.isFinite(finishMs)) return null;
+  const left = (finishMs - nowMs) / 1000;
+  const done = `done about ${clockText(finishMs, nowMs)}`;
+  if (left <= 0) return `Should finish any moment: the progress so far gave ${done}`;
+  const words = durationWords(left);
+  return `${words.charAt(0).toUpperCase()}${words.slice(1)} left, ${done}, from the progress so far`;
+}

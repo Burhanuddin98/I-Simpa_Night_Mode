@@ -10,6 +10,7 @@ import type { Unit, Up } from './backend';
 import type { Op } from './bindings/schema';
 import { joinBlockers } from './flow';
 import { blockersWithSize } from './features/simulate/runSize';
+import { liveFinishMs } from './features/simulate/runTime';
 import { STEPS, type StepKey } from './steps';
 import {
   busyStore,
@@ -110,6 +111,12 @@ function foundationHooks(): Record<string, Hook> {
     // What the Run button's data-blockers shows: the project's, the solvers' and RUN_ACTIVE.
     runBlockers: () => joinBlockers(blockersWithSize(sceneStore.get(), solverStore.get()), solversStatusStore.get(), runStore.get() !== null) ?? [],
     dirty: () => sceneStore.get()?.info.dirty ?? false,
+    // C36: the running block's projection as it stands (v1.1-backlog 18's measurement samples it): the solve's
+    // start, the last progress line and its time, the projected finish, and the page's clock, all ms.
+    runTiming: () => {
+      const a = runStore.get();
+      return a ? { run: a.run ?? null, stage: a.stage ?? null, progress: a.progress, solveAt: a.solveAt ?? null, progressAt: a.progressAt ?? null, finishMs: liveFinishMs(a), now: Date.now() } : null;
+    },
     // The validator's issues on the open project, each with its UI code and the core's rule
     // (M11 m11-r22-default reads `material_placeholder` here).
     issues: () =>
