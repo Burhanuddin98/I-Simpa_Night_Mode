@@ -30,6 +30,7 @@ fn main() {
         "model_repair",
         "model_reimport",
         "project_save",
+        "project_save_copy",
         "edit_apply",
         "advice_apply",
         "edit_reband",

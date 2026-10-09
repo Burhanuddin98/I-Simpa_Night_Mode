@@ -142,6 +142,8 @@ export const backend = {
   meshNow: () => invoke<MeshNowReport>('mesh_now'),
   /** `null` saves to the project's own path; a path is Save As. */
   projectSave: (path: string | null) => invoke<SceneState>('project_save', { path }),
+  /** A6: the project as it is now written to `path`; the open project stays on its own file, unsaved changes kept. */
+  projectSaveCopy: (path: string) => invoke<SceneState>('project_save_copy', { path }),
   /** The checked apply. The op goes as `opText`, never `JSON.stringify` (-0, NaN). */
   editApply: (op: Op) => invoke<EditOutcome>('edit_apply', { op: opText(op) }),
   /** A band preset (PQ3): the core rebands the project and applies it as one checked edit. */

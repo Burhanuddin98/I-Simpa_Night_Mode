@@ -865,6 +865,69 @@ impl Session {
         self.state()
     }
 
+    /// Parity A6, upstream's "save a copy": the project as it is now written to `path`, whole or
+    /// not at all, while the session stays on its own file: the path, the unsaved-changes mark and
+    /// the history are untouched, so a later Save still writes the project's own file. Refused for
+    /// the project's own file (that is Save). A copy in another folder whose directivity files no
+    /// longer resolve beside it (they are named relative to the project's folder) is written, with
+    /// a WARN line naming how many.
+    pub fn save_copy(&mut self, path: &Path) -> CmdResult<SceneState> {
+        let project = self.project.as_ref().ok_or_else(no_project)?;
+        let own = |p: &Path| std::path::absolute(p).unwrap_or_else(|_| p.to_path_buf());
+        if self.path.as_deref().is_some_and(|mine| {
+            own(mine)
+                .to_string_lossy()
+                .eq_ignore_ascii_case(&own(path).to_string_lossy())
+        }) {
+            return Err(CmdError::new(
+                "SAVE_COPY_SELF",
+                format!(
+                    "{} is the open project's own file: use Save to write it",
+                    path.display()
+                ),
+            ));
+        }
+        schema::save(project, path).map_err(|e| {
+            CmdError::new(
+                "SAVE_IO",
+                format!("could not save a copy to {}: {e}", path.display()),
+            )
+        })?;
+        let missing = |ctx: &Context| {
+            validate::validate_with(project, ctx)
+                .iter()
+                .filter(|i| i.code == validate::codes::DIRECTIVITY_FILE_MISSING)
+                .count()
+        };
+        let lost =
+            missing(&Context::for_project_file(path)).saturating_sub(missing(&self.context()));
+        let open = match &self.path {
+            Some(p) => format!("the open project is still {}", p.display()),
+            None => "the open project is still unsaved".to_string(),
+        };
+        self.lines.push(LogLine::new(
+            LineClass::Ok,
+            format!("Saved a copy to {}; {open}", path.display()),
+        ));
+        if lost > 0 {
+            self.lines.push(LogLine::new(
+                LineClass::Warn,
+                format!(
+                    "The copy names {} by a path relative to its folder, and {} not there: copy \
+                     the file{} beside it before running it",
+                    plural_n(
+                        u32::try_from(lost).unwrap_or(u32::MAX),
+                        "directivity file",
+                        "directivity files"
+                    ),
+                    if lost == 1 { "it is" } else { "they are" },
+                    if lost == 1 { "" } else { "s" }
+                ),
+            ));
+        }
+        self.state()
+    }
+
     /// The checked apply (PLAN.md 1.8). The op is tried on a copy and validated. If that
     /// introduces an error the project does not already have, the edit is refused and the
     /// project and its history are unchanged; otherwise it goes through the history.
@@ -1279,6 +1342,52 @@ mod m10_tests {
             position: Vec3::new(p[0], p[1], p[2]),
         }
         .to_json()
+    }
+
+    /// A6: a copy holds the project as edited, and the session stays on its own file, its
+    /// unsaved changes still unsaved; the project's own file is refused (that is Save).
+    #[test]
+    fn a6_a_copy_is_written_and_the_open_project_stays_on_its_own_file() {
+        let dir = scratch("save-copy");
+        let own = dir.join("room.simpa");
+        let mut s = opened("tests/fixtures/rooms/tutorial1_box.simpa");
+        s.save(Some(&own)).unwrap();
+        let r1 = project(&s).point_receivers[0].id;
+        assert!(
+            s.edit_apply(&move_receiver(r1, [4.0, 2.0, 1.8]))
+                .unwrap()
+                .applied
+        );
+        let on_disk = std::fs::read(&own).unwrap();
+        let copy = dir.join("copy of room.simpa");
+        let st = s.save_copy(&copy).unwrap();
+        assert_eq!(
+            schema::to_json(&schema::load(&copy).unwrap()),
+            s.json().unwrap(),
+            "the copy is the project as edited"
+        );
+        assert_eq!(
+            st.info.path.as_deref(),
+            Some(own.display().to_string().as_str())
+        );
+        assert!(st.info.dirty && st.info.undo_depth == 1, "{:?}", st.info);
+        assert_eq!(
+            std::fs::read(&own).unwrap(),
+            on_disk,
+            "the own file untouched"
+        );
+        assert!(
+            st.lines.iter().any(|l| l.class == LineClass::Ok
+                && l.text.starts_with("Saved a copy to ")
+                && l.text
+                    .ends_with(&format!("the open project is still {}", own.display()))),
+            "{:?}",
+            st.lines
+        );
+        let upper = PathBuf::from(own.display().to_string().to_uppercase());
+        assert_eq!(s.save_copy(&upper).unwrap_err().code, "SAVE_COPY_SELF");
+        assert_eq!(std::fs::read(&own).unwrap(), on_disk);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

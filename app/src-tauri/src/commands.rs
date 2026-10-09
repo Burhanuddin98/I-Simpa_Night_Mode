@@ -482,6 +482,17 @@ pub async fn project_save(
     .await
 }
 
+/// Parity A6: the project as it is now written to `path` (`Session::save_copy`); the open project
+/// stays on its own file with its unsaved changes. Refused for the project's own file.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn project_save_copy(state: State<'_, AppState>, path: String) -> CmdResult<SceneState> {
+    let session = state.session.clone();
+    guard::blocking("project_save_copy", move || {
+        lock(&session, "project")?.save_copy(&PathBuf::from(path))
+    })
+    .await
+}
+
 /// The checked apply: `op` is one `Op` as JSON text. A validator refusal is `applied: false`,
 /// not an error.
 #[tauri::command(rename_all = "snake_case")]

@@ -108,6 +108,13 @@ export function MenuBar() {
       { id: 'save', label: 'Save', keys: 'Ctrl+S', run: () => actions.fire(actions.save()), disabled: !info },
       { id: 'save-as', label: 'Save as…', keys: 'Ctrl+Shift+S', run: () => actions.fire(actions.saveAs()), disabled: !info },
       {
+        id: 'save-copy',
+        label: 'Save a copy…',
+        run: () => actions.fire(actions.saveCopy()),
+        disabled: !info,
+        title: info ? 'Write the project as it is now to another file; this window stays on its own file' : 'Open a project first',
+      },
+      {
         id: 'export-view',
         label: 'Export view as PNG…',
         run: () => actions.fire(exportView()),

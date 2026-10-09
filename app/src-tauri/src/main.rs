@@ -263,6 +263,7 @@ fn run(args: GuiArgs) -> ExitCode {
             commands::model_reimport,
             commands::mesh_now,
             commands::project_save,
+            commands::project_save_copy,
             commands::edit_apply,
             commands::advice_apply,
             commands::edit_reband,

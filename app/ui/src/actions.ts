@@ -312,6 +312,24 @@ export async function saveAs(path?: string): Promise<SceneState | null> {
   return state;
 }
 
+/**
+ * A6, Save a copy: the project as it is now to `path`, or to a path the native dialog asks for
+ * (`<name> copy.simpa` suggested). The open project stays on its own file: its name, its runs and its
+ * unsaved changes are as they were, so a later Save still writes its own file. `null` when cancelled.
+ */
+export async function saveCopy(path?: string): Promise<SceneState | null> {
+  const state = sceneStore.get();
+  if (!state) return null;
+  const target =
+    path ??
+    (await saveDialog({
+      defaultPath: `${state.info.name} copy.simpa`,
+      filters: [{ name: 'Night Mode project', extensions: ['simpa'] }],
+    }));
+  if (typeof target !== 'string') return null;
+  return run(`Could not save a copy to ${target}`, async () => accept(await backend.projectSaveCopy(target)));
+}
+
 /** Save: to the project's own path, or Save as for a project never saved. */
 export async function save(): Promise<SceneState | null> {
   const state = sceneStore.get();

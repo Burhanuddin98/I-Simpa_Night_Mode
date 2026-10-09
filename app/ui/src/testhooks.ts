@@ -93,6 +93,11 @@ function foundationHooks(): Record<string, Hook> {
       await actions.saveAs(path);
       return idle();
     },
+    // A6: File › Save a copy… past its native dialog.
+    saveCopy: async (path: string) => {
+      await actions.saveCopy(path);
+      return idle();
+    },
     edit: async (op: Op) => {
       const outcome = await actions.apply(op);
       await idle();

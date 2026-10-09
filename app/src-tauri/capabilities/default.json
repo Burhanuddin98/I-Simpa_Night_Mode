@@ -36,6 +36,7 @@
     "allow-model-reimport",
     "allow-mesh-now",
     "allow-project-save",
+    "allow-project-save-copy",
     "allow-edit-apply",
     "allow-advice-apply",
     "allow-edit-reband",
