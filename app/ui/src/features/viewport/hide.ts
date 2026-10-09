@@ -79,6 +79,13 @@ export function groupNamesOf(faces: readonly number[], groupOf: ArrayLike<number
   return names.filter((_, i) => seen.has(i));
 }
 
+/** Why Isolate cannot start with this selection, or null when it can: it isolates faces or surface groups. */
+export function isolateRefusal(kind: string, faces: number): string | null {
+  if (kind === 'source' || kind === 'receiver') return 'Isolate shows surfaces: pick faces or a surface group, not a source or receiver';
+  if (faces === 0) return 'Pick faces in the view, or a surface group in the scene list, to isolate them';
+  return null;
+}
+
 /** "Ceiling, Roof" or "Ceiling, Roof and 3 more": the chip's list of groups. */
 export function groupList(names: readonly string[], most = 3): string {
   if (names.length <= most) return names.join(', ');

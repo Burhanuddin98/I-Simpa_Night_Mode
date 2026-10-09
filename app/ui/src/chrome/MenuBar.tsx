@@ -20,7 +20,7 @@ import { blockersWithSize, settingsStore } from '../features/simulate/runSize';
 import { useEffect, useRef, useState } from 'react';
 import * as actions from '../actions';
 import { exportParams, exportView, paramsRefusal, viewRefusal } from '../features/export/exportActions';
-import { focusSelection, frameModel, hideStore, setRoofOff, setView, viewFrom } from '../features/viewport/engine';
+import { focusSelection, frameModel, hideStore, isolateWhyNot, setRoofOff, setView, toggleIsolate, viewFrom } from '../features/viewport/engine';
 import { joinBlockers } from '../flow';
 import { groupRenameStore, reportStore, runStore, sceneStore, selectedRunStore, selectionStore, solversStatusStore, solverStore, stepStore, useStore, viewportStore } from '../store';
 import { ADD_GROUP_LABEL, DELETE_GROUP_LABEL, MERGE_LABEL, mergePlan, RENAME_GROUP_LABEL, renameTarget } from './groupsModel';
@@ -185,6 +185,15 @@ export function MenuBar() {
       { id: 'view-corner', label: 'View from the corner', run: () => viewFrom('corner'), disabled: !hasModel },
       // Item 7: a view state, the model untouched.
       { id: 'roof-off', label: hidden.roof ? 'Put the roof back' : 'Roof off', keys: 'R', run: () => setRoofOff(!hidden.roof), disabled: !hasModel, title: 'Leave out the faces that close the room from above, so you can look in from above' },
+      // Item 8: a view state, the model untouched.
+      {
+        id: 'isolate',
+        label: hidden.isolate ? 'Show everything' : 'Isolate selection',
+        keys: 'I',
+        run: () => toggleIsolate(),
+        disabled: !hasModel || (!hidden.isolate && isolateWhyNot() !== null),
+        title: hidden.isolate ? 'Show the faces Isolate hid' : (isolateWhyNot() ?? 'Show only the picked faces or surface groups'),
+      },
     ],
     Simulate: [
       {

@@ -9,10 +9,12 @@
 //
 // Item 7: Hide > Roof off (R): the faces that close the room from above left out of the view (hide.ts),
 // a view state; the chip over the view says how many and which groups.
+// Item 8: Hide > Isolate selection (I): only the picked faces or surface groups drawn until shown again.
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../../store';
 import { closingProps, usePresence } from '../../chrome/usePresence';
-import { hideStore, setRoofOff, viewStyle, type EdgeStyle, type SurfaceStyle } from './engine';
+import { selectionStore } from '../../store';
+import { hideStore, isolateWhyNot, setRoofOff, toggleIsolate, viewStyle, type EdgeStyle, type SurfaceStyle } from './engine';
 import { FACE_SHOWS } from './faces';
 
 const SURFACES: { key: SurfaceStyle; label: string; hint: string }[] = [
@@ -29,6 +31,8 @@ const EDGES: { key: EdgeStyle; label: string; hint: string }[] = [
 export function ViewStyleMenu() {
   const style = useStore(viewStyle);
   const hidden = useStore(hideStore);
+  useStore(selectionStore);
+  const isolateWhy = hidden.isolate ? null : isolateWhyNot();
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const listed = usePresence(open);
@@ -167,6 +171,16 @@ export function ViewStyleMenu() {
             onClick={() => setRoofOff(!hidden.roof)}
           >
             Roof off<span className="view-style-key">R</span>
+          </button>
+          <button
+            role="menuitemcheckbox"
+            aria-checked={hidden.isolate !== null}
+            data-isolate=""
+            disabled={isolateWhy !== null}
+            title={isolateWhy ?? (hidden.isolate ? 'Show everything again' : 'Show only the picked faces or surface groups, like isolate in a modelling tool; the model is not changed')}
+            onClick={() => toggleIsolate()}
+          >
+            Isolate selection<span className="view-style-key">I</span>
           </button>
         </div>
       )}

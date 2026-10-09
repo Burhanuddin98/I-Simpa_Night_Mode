@@ -1,7 +1,7 @@
 // hide.ts under `node --test` (Burhan's 10-05 UI list, items 7 Roof off and 8 Isolate).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { groupList, groupNamesOf, indexOf, leftOut, roofFaces, ROOF_MIN_UP, shownPerVertex } from './hide.ts';
+import { groupList, groupNamesOf, indexOf, isolateRefusal, leftOut, roofFaces, ROOF_MIN_UP, shownPerVertex } from './hide.ts';
 
 // A toy model as columns: each face has an outward normal z and a height; a face is covered when a face
 // not left out lies above it in the same column (the ray straight up meets it).
@@ -60,6 +60,13 @@ test('the drawn and the left-out triangles split the index between them, in face
   assert.deepEqual([...indexOf(idx, out, 1)], [2, 1, 3]);
   assert.deepEqual([...shownPerVertex(3, out)], [1, 1, 1, 0, 0, 0, 1, 1, 1]);
   assert.deepEqual([...shownPerVertex(2, null)], [1, 1, 1, 1, 1, 1]);
+});
+
+test('Isolate takes picked faces or surface groups, and says why not otherwise', () => {
+  assert.equal(isolateRefusal('faces', 3), null);
+  assert.equal(isolateRefusal('groups', 120), null);
+  assert.match(isolateRefusal('source', 0) ?? '', /not a source or receiver/);
+  assert.match(isolateRefusal('none', 0) ?? '', /Pick faces/);
 });
 
 test('the chip names the groups hidden, in the scene order, and shortens a long list', () => {

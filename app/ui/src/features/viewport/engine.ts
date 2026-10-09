@@ -89,7 +89,7 @@ import { bgraToRgba, flipRows, unpadRows } from './snapshot';
 import { animatorStore } from './animator';
 import { firstFace, modelGeometry, pickingBvh } from './pick';
 import { ARC_MS, arcPose, easeInOut, type Pose } from './arc';
-import { groupNamesOf, indexOf, leftOut, roofFaces, shownPerVertex } from './hide';
+import { groupNamesOf, indexOf, isolateRefusal, leftOut, roofFaces, shownPerVertex } from './hide';
 import { facePlan, faceShowOf, type FacePlan, type FaceShow } from './faces';
 import { ResultsLayer, type MapMeta, type ParticleMeta } from './resultsLayer';
 import { faceBounds, faceCentroid, fitOrtho, gizmoAxes, isFloorLike, placementPoint, planDimensions, rayOnFacePlane, type Box, type Vec } from './geometry';
@@ -842,6 +842,10 @@ class ViewportEngine {
       registerHook('viewHidden', () => ({ ...hideStore.get(), faces: this.out ? [...this.out.keys()].filter((f) => this.out?.[f]) : [] })),
       registerHook('setRoofOff', (on: boolean) => {
         this.setRoofOff(on);
+        return hideStore.get();
+      }),
+      registerHook('setIsolate', (on: boolean) => {
+        this.setIsolate(on);
         return hideStore.get();
       }),
       // Decision 68 (b): which backend draws the view, once it has started (null while it starts).
@@ -1807,6 +1811,22 @@ class ViewportEngine {
   setRoofOff(on: boolean): void {
     hideStore.set({ ...hideStore.get(), roof: on });
     this.applyHidden();
+  }
+
+  /**
+   * Item 8: Isolate on (the picked faces or surface groups, as picked now; the view keeps them until shown
+   * again) or off. Returns whether it is on; it stays off with nothing picked that has faces.
+   */
+  setIsolate(on: boolean): boolean {
+    const faces = on ? this.selectedFaces() : [];
+    this.isolated = on && faces.length > 0 ? [...faces].sort((a, b) => a - b) : null;
+    this.applyHidden();
+    return this.isolated !== null;
+  }
+
+  /** The faces the selection covers now (what Isolate would keep). */
+  pickedFaceCount(): number {
+    return this.selectedFaces().length;
   }
 
   /** G43: how a pass draws and picks the faces, as View style > Faces is set; `plan` for the plan camera. */
@@ -2830,6 +2850,22 @@ export function frameModel(): void {
 /** Item 7: Roof off (hide.ts), a view state. */
 export function setRoofOff(on: boolean): void {
   engine.setRoofOff(on);
+}
+
+/** Item 8: Isolate the picked faces or groups (true), or show everything again (false); returns whether it is on. */
+export function setIsolate(on: boolean): boolean {
+  return engine.setIsolate(on);
+}
+
+/** Item 8: why Isolate cannot start with the selection now, or null (hide.ts `isolateRefusal`). */
+export function isolateWhyNot(): string | null {
+  return isolateRefusal(selectionStore.get().kind, engine.pickedFaceCount());
+}
+
+/** Item 8: Isolate on with the selection, or off when it is on (I, the menus). */
+export function toggleIsolate(): void {
+  if (hideStore.get().isolate) engine.setIsolate(false);
+  else if (!isolateWhyNot()) engine.setIsolate(true);
 }
 
 /** Item 6: the model framed from a preset direction, flown on the arc (View menu). */

@@ -20,7 +20,7 @@ import { MOVE_TO_LABEL, moveTargets } from '../../chrome/groupsModel';
 import { displayName, REGROUP_LABEL, regroupFaces } from '../../chrome/sceneModel';
 import { onWindowEntityKey } from '../../chrome/sceneUi';
 import { sceneStore, selectionStore, stepStore, toolStore, useStore, type Tool } from '../../store';
-import { attachViewport, frameModel, hideStore, presentStore, setPresent, setRoofOff, setTurntable, setView, viewportUi, type ViewMode } from './engine';
+import { attachViewport, frameModel, hideStore, presentStore, setIsolate, setPresent, setRoofOff, setTurntable, setView, toggleIsolate, viewportUi, type ViewMode } from './engine';
 import { groupList } from './hide';
 import { VIEWPORT_LIBRARIES } from './libraries';
 import { liveStore, setLiveLook } from './liveView';
@@ -67,12 +67,14 @@ function onPresentKey(e: KeyboardEvent): void {
   else if ((e.key === 'o' || e.key === 'O') && p.on) setTurntable(!p.turntable);
 }
 
-/** Item 7: R puts the roof off and back (View style > Hide > Roof off). Not while typing, and only with a model. */
+/** Item 7: R puts the roof off and back (View style > Hide > Roof off); item 8: I isolates the selection and shows
+ * everything again. Not while typing, and only with a model. */
 function onHideKey(e: KeyboardEvent): void {
   if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey || !viewportUi.get().hasModel) return;
   const t = e.target;
   if (t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return;
   if (e.key === 'r' || e.key === 'R') setRoofOff(!hideStore.get().roof);
+  else if (e.key === 'i' || e.key === 'I') toggleIsolate();
 }
 
 /** Frame model: the model's box inside four corner marks, in the toolbar's line style. */
@@ -138,7 +140,7 @@ export function Viewport() {
     window.addEventListener('keydown', onPresentKey);
     return () => window.removeEventListener('keydown', onPresentKey);
   }, []);
-  // Item 7: Roof off's key.
+  // Items 7 and 8: Roof off's and Isolate's keys.
   useEffect(() => {
     window.addEventListener('keydown', onHideKey);
     return () => window.removeEventListener('keydown', onHideKey);
@@ -289,16 +291,28 @@ export function Viewport() {
       </div>
 
       {/* Items 7 and 8: what the view leaves out, under the view bar (a long list would run under it at the top). */}
-      {ui.hasModel && hidden.roof && (
+      {ui.hasModel && (hidden.roof || hidden.isolate) && (
         <div className={`vp-hide-chips${live && step === 'simulate' ? ' under-live' : ''}`}>
-          <div className="vp-chip hidden-faces" data-part="roof-off-chip" role="status" title={hidden.roofGroups.join(', ')}>
-            <span>
-              Roof off · {hidden.roofFaces === 0 ? 'no face closes this room from above' : `${hidden.roofFaces} ${hidden.roofFaces === 1 ? 'face' : 'faces'} hidden: ${groupList(hidden.roofGroups)}`}
-            </span>
-            <button className="vp-chip-btn" data-action="roof-on" title="Put the roof back (R)" onClick={() => setRoofOff(false)}>
-              Show
-            </button>
-          </div>
+          {hidden.isolate && (
+            <div className="vp-chip hidden-faces" data-part="isolate-chip" role="status" title={hidden.isolate.groups.map(displayName).join(', ')}>
+              <span>
+                Isolated · {hidden.isolate.faces} {hidden.isolate.faces === 1 ? 'face' : 'faces'} of {groupList(hidden.isolate.groups.map(displayName))}, the rest hidden
+              </span>
+              <button className="vp-chip-btn" data-action="isolate-off" title="Show everything again (I)" onClick={() => setIsolate(false)}>
+                Show all
+              </button>
+            </div>
+          )}
+          {hidden.roof && (
+            <div className="vp-chip hidden-faces" data-part="roof-off-chip" role="status" title={hidden.roofGroups.map(displayName).join(', ')}>
+              <span>
+                Roof off · {hidden.roofFaces === 0 ? 'no face closes this room from above' : `${hidden.roofFaces} ${hidden.roofFaces === 1 ? 'face' : 'faces'} hidden: ${groupList(hidden.roofGroups.map(displayName))}`}
+              </span>
+              <button className="vp-chip-btn" data-action="roof-on" title="Put the roof back (R)" onClick={() => setRoofOff(false)}>
+                Show
+              </button>
+            </div>
+          )}
         </div>
       )}
 
