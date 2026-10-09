@@ -103,7 +103,7 @@ meshes the room, runs the solver in the background and shows the results that pa
 </div>
 
 <h2 id="start">Starting a project</h2>
-<p>With no project open, the window shows <span class="ui">Start with a room</span>:</p>
+<p>With no project open, the window shows the landing page, <span class="ui">Start with a room</span>:</p>
 <ul>
   <li><b>Examples</b>: rooms that are ready to run (I-Simpa's Elmia hall and industrial hall, and four
   rooms of the BRAS benchmark). Each opens as your own copy in
@@ -123,6 +123,10 @@ meshes the room, runs the solver in the background and shows the results that pa
 </ul>
 <p>You can also drop a project or a room model file on the window; it opens as
 <span class="ui">Open…</span> opens it.</p>
+<p>To come back to the landing page from a project, choose File › <span class="ui">Close project</span>
+(<kbd>Ctrl+W</kbd>) or the <b>Home</b> button left of the project's name in the menu bar. Unsaved changes
+are asked about first, as for New and Open, and nothing of the closed project stays on screen. While a
+run is going, cancel it first.</p>
 <h3>Importing a room model</h3>
 <p>A PLY, OBJ or STL file asks for its <span class="ui">Length unit</span> (m, cm, mm, ft, in) and its
 <span class="ui">Up axis</span> (z or y). Nothing is guessed from the model. Under
@@ -133,8 +137,8 @@ An upstream <code>.proj</code> carries its own units and opens as an unsaved pro
 
 <h2 id="window">The window</h2>
 <ul>
-  <li><b>Menu bar</b>: File, Edit, View, Simulate and Help; the project's name, with a dot while it has
-  unsaved changes; the Run button.</li>
+  <li><b>Menu bar</b>: File, Edit, View, Simulate and Help; Home (Close project, back to the
+  landing page); the project's name, with a dot while it has unsaved changes; the Run button.</li>
   <li><b>Step bar</b>: the five steps of the work, Geometry, Materials, Sources &amp; receivers, Simulate
   and Results, each with a light and a line saying where it stands. The variant switch is at its right.</li>
   <li><b>Scene list</b> (left): surfaces, sources, receivers, volumes, fitting zones, air and display,
@@ -256,14 +260,20 @@ verdict: <span class="ui">Results verified</span>, <span class="ui">Results unve
 solvers are not the verified build), <span class="ui">Results refused</span> (no value is shown, and the
 panel says why) or <span class="ui">The results could not be checked</span>.</p>
 <h3>The Acoustics tab</h3>
-<p>The parameters, per receiver and band: SPL, G, EDT, T20, T30, C50, C80, D50, Ts, STI and dB(A),
+<p>The parameters, per receiver and band: SPL, G, EDT, T15, T20, T30, C50, C80, D50, Ts, STI and dB(A),
 computed to ISO 3382-1 and IEC 60268-16. Each value comes with its range; a value that cannot be given
 says <span class="ui">REFUSED</span> with its reason, and <span class="ui">Why values are missing</span>
 lists each cause once, with a re-run that would fix it when there is one. Cards:</p>
 <ul>
   <li><b>Reverberation time</b>, against a room use of DIN 18041.</li>
   <li><b>Receivers</b>: the table of parameters by receiver, for one band or all bands summed.</li>
-  <li><b>Spectrum</b>, <b>Decay</b>, <b>Sabine / Eyring</b> and <b>Absorption by surface group</b>.</li>
+  <li><b>Chosen ranges and limits</b>: type decay ranges (how far below −5 dB each fit ends, 10 to 60 dB:
+  40 gives T40, fitted as T20 and T30 are) and clarity and definition time limits (5 to 1000 ms, split
+  as C50, C80 and D50 are), comma separated, then <span class="ui">Compute</span>. The table gives them
+  per receiver, for one band or bands summed.</li>
+  <li><b>Spectrum</b>, <b>Decay</b>, <b>Sabine / Eyring</b> and <b>Absorption by surface group</b>. On
+  the Decay card, <span class="ui">Table</span> shows the Schroeder curve as numbers: the points EDT,
+  T20 and T30 are fitted to.</li>
   <li>TCR runs add <b>Receiver levels</b>: direct, total by Sabine, total by Eyring.</li>
   <li><span class="ui">Source</span> shows one source's share, or all sources summed.</li>
 </ul>
@@ -283,13 +293,19 @@ code, anechoic but synthetic; the speech is close-miked, not anechoic.</p>
 <h3>Maps (SPPS)</h3>
 <p>The <span class="ui">Map</span> card over the 3D view draws the sound map of a surface receiver or a
 sound-level plane, for one band or all bands together. Options: <span class="ui">Difference from
-baseline</span> (this run minus an earlier run of the project, in dB: blue is quieter, red louder),
+baseline</span> (this run minus another run of the project, in dB: blue is quieter, red louder),
 <span class="ui">Cumulative</span>, a time <span class="ui">Window</span>, <span class="ui">Smooth
 colour</span>, <span class="ui">Contours</span>, a <span class="ui">Fixed colour range</span> and the
 <span class="ui">Opacity</span>. Hover a face to read its value. When particles were saved, the same
 card plays them back step by step, with trails.</p>
-<p>The difference map's baseline is the newest other run of the project that started before this one;
-it cannot be chosen by hand in this version.</p>
+<p><span class="ui">Shows</span> picks the level or <b>T30</b>, <b>EDT</b>, <b>C80</b> or <b>D50</b> on
+every face, each read from the face's own decay by the code the receivers use, one band at a time. Each
+is offered only when its test bed passed for the run (it checks the map against the point receivers, not
+against an analytical reference); a face with no value is not drawn.</p>
+<p>With the difference on, <span class="ui">Minus</span> picks the run subtracted: any other run of the
+project that ended OK, by default the newest one started before this one. A pick whose map cannot be
+subtracted (another surface, grid or time step) is refused with the reason. A difference is of levels
+and is never cumulative.</p>
 <h3>The Runs tab</h3>
 <p>Every run of the project, with its variant, solver, status and check. Select one to see its particle
 loss per band, its solver and mesh, its warnings and its folder. Give it a
@@ -306,8 +322,8 @@ active, a material chosen for a group goes into the variant. Each run records it
 <ul>
   <li><span class="ui">Save</span> (<kbd>Ctrl+S</kbd>), <span class="ui">Save as…</span>
   (<kbd>Ctrl+Shift+S</kbd>) and <span class="ui">Save a copy…</span>, which writes the project to
-  another file and leaves this window on its own. New, Open and closing the window ask first when
-  there are unsaved changes.</li>
+  another file and leaves this window on its own. New, Open, Close project and closing the window ask
+  first when there are unsaved changes.</li>
   <li>Runs are written under <code>&lt;project folder&gt;\runs\</code>, one folder per run, with the
   solver's input and output, its console text and the check's record.</li>
   <li>File › <span class="ui">Export view as PNG…</span> (the 3D view with the map's legend),
@@ -321,6 +337,7 @@ active, a material chosen for a group goes into the variant. Each run records it
 <table>
   <tr><th>Keys</th><th>Does</th></tr>
   <tr><td><kbd>Ctrl+N</kbd> / <kbd>Ctrl+O</kbd></td><td>New project / Open…</td></tr>
+  <tr><td><kbd>Ctrl+W</kbd></td><td>Close project, back to the landing page</td></tr>
   <tr><td><kbd>Ctrl+S</kbd> / <kbd>Ctrl+Shift+S</kbd></td><td>Save / Save as…</td></tr>
   <tr><td><kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd>, <kbd>Ctrl+Shift+Z</kbd></td><td>Undo / Redo</td></tr>
   <tr><td><kbd>Ctrl+C</kbd> / <kbd>Ctrl+V</kbd></td><td>Copy / paste a source or receiver; in the materials grid, cells</td></tr>
@@ -347,7 +364,8 @@ licences of everything the app carries, with the GPL-3.0 and the third-party not
 <ul>
   <li>The Model and Results menus, the command palette (<kbd>Ctrl K</kbd>), the section view, the
   section plane and the measure tool: shown, disabled.</li>
-  <li>Choosing a difference map's baseline by hand, or cumulating a difference; pausing a run.</li>
+  <li>A cumulative or time-windowed parameter map, a difference of parameter maps or a cumulative
+  difference; pausing a run.</li>
   <li>A variant that changes one of several groups an upstream project gave one material: change that group's own
   material instead.</li>
   <li>Naming a volume or making it a fitting zone from the scene list; choosing a measured directivity
