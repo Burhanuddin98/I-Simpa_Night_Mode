@@ -647,8 +647,14 @@ fn path_key(p: &Path) -> String {
         .to_lowercase()
 }
 
-/// Whether a manifest's run is of the project at `project`: its `source.path`, made absolute
-/// against the project's folder, is that path (T1).
+/// Whether a manifest's run is of the project at `project` (T1). `list` reads only the project's
+/// own runs root, `<its folder>/runs`, and a run there belongs to the project when its
+/// `source.path` names that project: the same file, or a file of the same name. The runs folder
+/// sits beside its project file, so the name is what survives a move or a copy of the project's
+/// folder; the folder `source.path` records is the run's history, a hint only, and no `run.json`
+/// is rewritten. Several projects may share a folder and so its runs root: those are told apart
+/// by their file names. Copies in separate folders each read their own runs root, so neither
+/// lists the other's runs. A project renamed keeps no claim on the runs made under its old name.
 fn belongs(m: &RunManifest, project: &Path) -> bool {
     let RunSource::Project { path, .. } = &m.source else {
         return false;
@@ -659,7 +665,16 @@ fn belongs(m: &RunManifest, project: &Path) -> bool {
     } else {
         project.parent().unwrap_or(Path::new("")).join(p)
     };
-    path_key(&p) == path_key(project)
+    if path_key(&p) == path_key(project) {
+        return true;
+    }
+    // The name of the path as `path_key` resolves it, so `..` and `/` cannot hide it.
+    let name = |q: &Path| {
+        std::path::absolute(q)
+            .ok()
+            .and_then(|a| a.file_name().map(|n| n.to_string_lossy().to_lowercase()))
+    };
+    name(&p).is_some_and(|n| Some(n) == name(project))
 }
 
 /// The runs root of the project at `project`.
@@ -2192,6 +2207,105 @@ mod tests {
         assert_eq!(st.refusal.unwrap().ui_code, "RESULTS_RUN_FAILED");
         let st = results_state(&root, "20260101-000004-000-spps").unwrap();
         assert_eq!(st.refusal.unwrap().code, "results_manifest_missing");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    fn copy_tree(from: &Path, to: &Path) {
+        std::fs::create_dir_all(to).unwrap();
+        for e in std::fs::read_dir(from).unwrap() {
+            let e = e.unwrap();
+            if e.file_type().unwrap().is_dir() {
+                copy_tree(&e.path(), &to.join(e.file_name()));
+            } else {
+                std::fs::copy(e.path(), to.join(e.file_name())).unwrap();
+            }
+        }
+    }
+
+    /// A project's runs follow it: moved or copied with its folder, it still lists them and
+    /// exports from them, though every `run.json` names the folder they were made in, and none
+    /// is rewritten. Two copies side by side each list only their own runs folder's runs, and a
+    /// second project in a shared folder claims none of the first one's.
+    #[test]
+    fn runs_follow_a_moved_or_copied_project_and_no_other_project_claims_them() {
+        let names = |v: &RunsView| v.rows.iter().map(|r| r.run.clone()).collect::<Vec<_>>();
+        let dir = scratch("follow");
+        // A run.json as an older build wrote it, naming a worktree that no longer exists.
+        let fixture = repo("tests/fixtures/results/seats_spps");
+        let old = std::fs::read_to_string(fixture.join(MANIFEST_FILE)).unwrap();
+        assert!(old.contains("worktrees\\\\m7-params\\\\tests/fixtures\\\\rooms/seats_box.simpa"));
+        let original = dir.join("made").join("seats_box.simpa");
+        std::fs::create_dir_all(original.parent().unwrap()).unwrap();
+        std::fs::write(&original, b"{}").unwrap();
+        let r1 = "20260101-000001-000-spps";
+        copy_tree(&fixture, &runs_root(&original).join(r1));
+        // A second run, recorded at the project's own (absolute) path in its first folder.
+        let r2 = "20260101-000002-000-spps";
+        let mut m = RunManifest::from_json(&old).unwrap();
+        m.source = RunSource::Project {
+            path: original.display().to_string(),
+            sha256: "0".repeat(64),
+            variant: None,
+        };
+        copy_tree(&fixture, &runs_root(&original).join(r2));
+        std::fs::write(
+            runs_root(&original).join(r2).join(MANIFEST_FILE),
+            m.to_json(),
+        )
+        .unwrap();
+        let both = vec![r1.to_string(), r2.to_string()];
+        let listed = |project: &Path| list(&runs_root(project), project, None).unwrap();
+        assert_eq!(names(&listed(&original)), both);
+
+        // Moved: the folder renamed. Its runs list, and an export and the results reach them.
+        let moved = dir.join("moved").join("seats_box.simpa");
+        std::fs::rename(original.parent().unwrap(), moved.parent().unwrap()).unwrap();
+        let v = listed(&moved);
+        assert_eq!((names(&v), v.other_projects), (both.clone(), 0));
+        for r in [r1, r2] {
+            crate::run_files::check_export_run(&runs_root(&moved), &moved, None, r).unwrap();
+            assert!(
+                results_state(&runs_root(&moved), r)
+                    .unwrap()
+                    .refusal
+                    .is_none()
+            );
+        }
+        assert_eq!(
+            std::fs::read_to_string(runs_root(&moved).join(r1).join(MANIFEST_FILE)).unwrap(),
+            old,
+            "no run.json is rewritten"
+        );
+
+        // Copied: two copies side by side, each listing only its own runs folder's runs.
+        let copy = dir.join("copy").join("seats_box.simpa");
+        copy_tree(moved.parent().unwrap(), copy.parent().unwrap());
+        let r3 = "20260101-000003-000-spps";
+        m.source = RunSource::Project {
+            path: copy.display().to_string(),
+            sha256: "0".repeat(64),
+            variant: None,
+        };
+        copy_tree(&fixture, &runs_root(&copy).join(r3));
+        std::fs::write(runs_root(&copy).join(r3).join(MANIFEST_FILE), m.to_json()).unwrap();
+        assert_eq!(names(&listed(&moved)), both);
+        let mut three = both.clone();
+        three.push(r3.to_string());
+        assert_eq!(names(&listed(&copy)), three);
+        let e = crate::run_files::check_export_run(&runs_root(&moved), &moved, None, r3);
+        assert_eq!(
+            e.unwrap_err().code,
+            "RUN_NOT_FOUND",
+            "the copy's run is not the moved one's"
+        );
+
+        // Another project in the copy's folder shares its runs root and claims none of them.
+        let other = dir.join("copy").join("seats_box - Copy.simpa");
+        std::fs::write(&other, b"{}").unwrap();
+        let v = listed(&other);
+        assert_eq!((v.rows.len(), v.other_projects), (0, 3));
+        let e = crate::run_files::check_export_run(&runs_root(&other), &other, None, r1);
+        assert_eq!(e.unwrap_err().code, "RUN_NOT_FOUND");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
