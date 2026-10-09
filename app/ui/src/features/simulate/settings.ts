@@ -195,6 +195,16 @@ export function bandPresetOf(bands: BandSet): BandPreset | null {
   );
 }
 
+/**
+ * C26+, upstream's Select all and Unselect all on the bands (`e_core_core_bfreqselection.h`,
+ * IDEVENT_BFREQ_PRESELECTION_ALL and _NONE): the bands whose computed flag changes when every band
+ * is set to `on`, in order; empty when every band already is. The editor sends one
+ * `set_band_computed` per band listed, as one batch: one undo step.
+ */
+export function bandsToSwitch(flags: readonly boolean[], on: boolean): number[] {
+  return flags.flatMap((f, i) => (f === on ? [] : [i]));
+}
+
 // ---- the settings an edit sends --------------------------------------------------------------------
 
 /** The solver settings with SPPS fields replaced; everything else as stored. */

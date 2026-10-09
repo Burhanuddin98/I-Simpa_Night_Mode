@@ -273,6 +273,18 @@ test('withPreprocess: no op when stored; otherwise meshing.preprocess only', () 
   assert.match(opText(setSolverSettings(off)), /"preprocess":false/);
 });
 
+// C26+: Select all and Unselect all on the bands.
+import { bandsToSwitch } from './settings.ts';
+
+test('bandsToSwitch: every band that is not yet so, in order; none when all already are', () => {
+  const flags = [true, false, true, false, false, true, true];
+  assert.deepEqual(bandsToSwitch(flags, true), [1, 3, 4]);
+  assert.deepEqual(bandsToSwitch(flags, false), [0, 2, 5, 6]);
+  assert.deepEqual(bandsToSwitch([true, true], true), []);
+  assert.deepEqual(bandsToSwitch([false, false], false), []);
+  assert.deepEqual(bandsToSwitch([], true), []);
+});
+
 // G32: Mesh now's report in words, and the basis it is shown on.
 import { meshNowBasis, meshNowHeadline } from './settings.ts';
 

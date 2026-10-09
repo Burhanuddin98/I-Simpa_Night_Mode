@@ -200,6 +200,12 @@
   gap: 6px;
   margin-top: 8px;
 }
+/* C26+: Select all / Unselect all, under the band boxes. */
+.sim-bands-all {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
 .sim-preset select {
   flex-grow: 1;
   min-width: 0;

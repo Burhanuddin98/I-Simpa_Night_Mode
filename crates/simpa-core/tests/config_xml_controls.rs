@@ -1128,3 +1128,99 @@ fn a_tilted_cutting_plane_moves_only_its_corner_and_turned_back_is_byte_identica
     }
     assert!(checked >= 2, "{checked}");
 }
+
+// ---- C26+: Select all / Unselect all on the bands -----------------------------------------------
+//
+// The settings editor sends one `set_band_computed` per band that changes, in one batch
+// (`settings.ts` `bandsToSwitch`). Unselect all writes every `bfreq` of that solver with
+// `docalc="0"` and moves nothing else; Select all writes every one with `docalc="1"`; the bands set
+// back as they were, config.xml is byte-identical.
+
+fn every_band_op(p: &Project, solver: &str, on: bool) -> Option<Op> {
+    let flags = &serde_json::to_value(&p.solvers).unwrap()[solver]["bands_computed"];
+    let ops: Vec<Value> = flags
+        .as_array()
+        .unwrap()
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| f.as_bool() != Some(on))
+        .map(|(i, _)| serde_json::json!({ "op": "set_band_computed", "solver": solver, "band": i, "computed": on }))
+        .collect();
+    (!ops.is_empty()).then(|| {
+        let text = serde_json::json!({ "op": "batch", "ops": ops }).to_string();
+        Op::from_json(&text).unwrap_or_else(|e| panic!("{text}: {e}"))
+    })
+}
+
+/// The `freq_enum` bands of `xml` (a material's `bfreq` carries no `docalc`).
+fn bfreq_lines(xml: &str) -> Vec<&str> {
+    xml.lines()
+        .filter(|l| l.trim_start().starts_with("<bfreq ") && l.contains(" docalc="))
+        .collect()
+}
+
+#[test]
+fn every_band_selected_or_none_and_set_back_leaves_the_solver_input_byte_identical() {
+    let mut checked = 0;
+    for (name, original) in fixtures() {
+        for (solver, kind) in [("spps", SolverKind::Spps), ("tcr", SolverKind::Tcr)] {
+            let before = config(&original, kind);
+            let other = match kind {
+                SolverKind::Spps => SolverKind::Tcr,
+                SolverKind::Tcr => SolverKind::Spps,
+            };
+            let other_before = config(&original, other);
+            let mut p = original.clone();
+            let mut undo: Vec<Op> = Vec::new();
+            if let Some(op) = every_band_op(&p, solver, false) {
+                undo.push(op.clone().apply(&mut p).unwrap());
+            }
+            let none = config(&p, kind);
+            let bands = bfreq_lines(&none);
+            assert!(
+                bands.len() == original.bands.frequencies_hz.len()
+                    && bands.iter().all(|l| l.contains(r#"docalc="0""#)),
+                "{name} {solver}: every band off"
+            );
+            let strip = |x: &str| {
+                x.lines()
+                    .filter(|l| !l.contains(" docalc="))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            };
+            same_text(
+                &strip(&none),
+                &strip(&before),
+                &format!("{name} {solver}: only the bands move"),
+            );
+            assert_eq!(
+                config(&p, other),
+                other_before,
+                "{name} {solver}: the other solver's input is untouched"
+            );
+            let op = every_band_op(&p, solver, true).expect("every band was off");
+            undo.push(op.apply(&mut p).unwrap());
+            assert!(
+                bfreq_lines(&config(&p, kind))
+                    .iter()
+                    .all(|l| l.contains(r#"docalc="1""#)),
+                "{name} {solver}: every band on"
+            );
+            assert!(
+                every_band_op(&p, solver, true).is_none(),
+                "{name} {solver}: Select all again sends nothing"
+            );
+            for u in undo.into_iter().rev() {
+                u.apply(&mut p).unwrap();
+            }
+            same_text(
+                &config(&p, kind),
+                &before,
+                &format!("{name} {solver}: set back, byte-identical"),
+            );
+            assert_eq!(p, original, "{name} {solver}: the project as it was");
+            checked += 1;
+        }
+    }
+    assert!(checked >= 20, "{checked}");
+}

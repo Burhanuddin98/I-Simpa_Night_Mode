@@ -29,7 +29,7 @@ import type { F64 } from '../../chrome/sceneModel';
 import { CommitInput, Issues } from '../../chrome/SourcesPanel';
 import { fieldKey } from '../../issues';
 import { parseStrictDecimal } from '../../numbers';
-import { setBandComputed, setEnvironment, setSolverSettings } from '../../ops';
+import { batch, setBandComputed, setEnvironment, setSolverSettings } from '../../ops';
 import { RUN_ACTIVE_TITLE } from '../../chrome/MenuBar';
 import { deviceStore, meshNowStore, meshStore, refusalStore, runStore, runsStore, selectionStore, type SolverName, useStore } from '../../store';
 import { groupNamesOf } from '../viewport/hide';
@@ -41,6 +41,7 @@ import { forecastRunTime, measuredRun, runTimeText, workNow } from './runTime';
 import {
   BAND_PRESETS,
   bandPresetOf,
+  bandsToSwitch,
   NOT_A_COUNT,
   NOT_ABOVE_ZERO,
   meshNowBasis,
@@ -257,6 +258,16 @@ function BandsEditor({ scene, s, solver }: { scene: SceneState; s: ProjectSettin
   const chosen = BAND_PRESETS.find((p) => p.key === pick) ?? null;
   const toggle = (band: number, on: boolean) =>
     actions.fire(edit(key, (now) => (now.solvers[solver].bands_computed[band] === on ? null : setBandComputed(solver, band, on))));
+  // C26+: every band on, or off (Run then waits for one: `no_band_computed`), one batch, one undo step.
+  const every = (on: boolean) =>
+    actions.fire(
+      edit(key, (now) => {
+        const change = bandsToSwitch(now.solvers[solver].bands_computed, on);
+        return change.length === 0 ? null : batch(change.map((b) => setBandComputed(solver, b, on)));
+      }),
+    );
+  const allOn = flags.length > 0 && flags.every(Boolean);
+  const allOff = flags.every((f) => !f);
   const apply = async () => {
     if (!chosen) return;
     setConfirm(false);
@@ -293,6 +304,20 @@ function BandsEditor({ scene, s, solver }: { scene: SceneState; s: ProjectSettin
             <span className="mono">{hzText(f)}</span>
           </label>
         ))}
+      </div>
+      <div className="sim-bands-all" data-part="bands-all-none">
+        <button className="small-button" data-action="bands-all" disabled={allOn} onClick={() => every(true)} title="Compute every band">
+          Select all
+        </button>
+        <button
+          className="small-button"
+          data-action="bands-none"
+          disabled={allOff}
+          onClick={() => every(false)}
+          title="Compute no band: Run waits until at least one is chosen"
+        >
+          Unselect all
+        </button>
       </div>
       <Issues refused={refusals.get(key) ?? []} current={scene.solver_issues[solver]} />
       <div className="sim-preset">
