@@ -31,6 +31,7 @@ fn main() {
         "advice_apply",
         "edit_reband",
         "edit_regroup",
+        "edit_add_group",
         "edit_undo",
         "edit_redo",
         "scene_mesh",

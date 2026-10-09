@@ -6,7 +6,9 @@ type KeyEvent = Pick<KeyboardEvent, 'key' | 'target' | 'ctrlKey' | 'altKey' | 'm
 import * as actions from '../actions';
 import { fieldKey } from '../issues';
 import { removeReceiver, removeSource } from '../ops';
-import { groupRenameStore, selectionStore, stepStore, Store } from '../store';
+import { groupRenameStore, log, sceneStore, selectionStore, stepStore, Store } from '../store';
+import { deleteGroupOps, groupDeleteProblem, inUseSentence } from './groupsModel';
+import { displayName } from './sceneModel';
 
 /** Bumped by F2 on a selected source or receiver: the Sources panel focuses its name field. */
 export const renameRequestStore = new Store<number>(0);
@@ -51,6 +53,43 @@ export async function removeEntity(kind: 'source' | 'receiver', id: string): Pro
   if (out.applied && sel.kind === kind && sel.id === id) selectionStore.set({ kind: 'none' });
 }
 
+/** The latest group edit's own problem, `{code, message}`: a rename the UI refused, a delete of a
+ * group that holds faces, a command the core rejected. Shown under the Surfaces in the scene list;
+ * the next group edit clears it. */
+export const groupProblemStore = new Store<{ code: string; message: string } | null>(null);
+
+/**
+ * Deletes the surface group `id` (parity G18, A29), only when it is empty, as upstream does: one
+ * that holds faces, or that a surface map is drawn on, is refused with a plain sentence saying why
+ * and what to do (`groupDeleteProblem`), and nothing changes. An empty group goes in one checked
+ * edit and one undo step, its variants' overrides with it. The selection clears if it was that group.
+ */
+export async function deleteGroup(id: string): Promise<void> {
+  groupProblemStore.set(null);
+  const scene = sceneStore.get();
+  if (!scene) return;
+  const view = scene.view;
+  const name = displayName(view.surface_groups.find((g) => g.id === id)?.name ?? id);
+  // The names as the scene list shows them (BRAS's `mat_CR4_concrete` reads `Concrete`).
+  const shown = { ...view, surface_groups: view.surface_groups.map((g) => ({ ...g, name: displayName(g.name) })) };
+  const problem = groupDeleteProblem(id, scene.groups.find((g) => g.id === id)?.faces ?? 0, shown);
+  if (problem) {
+    groupProblemStore.set(problem);
+    log('FAIL', `Delete group refused: ${problem.message}`);
+    return;
+  }
+  try {
+    const out = await actions.apply(deleteGroupOps(id, view), `surface_group:${id}:delete`);
+    if (!out.applied) return;
+    const sel = selectionStore.get();
+    if (sel.kind === 'group' && sel.id === id) selectionStore.set({ kind: 'none' });
+    log('OK', `Deleted group ${name}`);
+  } catch (e) {
+    const err = actions.asCmdError(e);
+    groupProblemStore.set({ code: err.code, message: err.code === 'OP_IN_USE' ? inUseSentence(name, err.message) : err.message });
+  }
+}
+
 /** Keys that belong to a text field while it has focus. */
 export function typing(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -58,7 +97,7 @@ export function typing(target: EventTarget | null): boolean {
 }
 
 /**
- * Del removes and F2 renames the selected source or receiver (PLAN.md 7.5, points 1 and 3): in the
+ * Del removes and F2 renames the selected source, receiver or surface group (PLAN.md 7.5, points 1 and 3): in the
  * scene list and the Sources panel, and, through `onWindowEntityKey`, anywhere else, the 3D view
  * included (Burhan 2026-10-06: Del did nothing after picking a source in the view). A text field
  * keeps its own keys.
@@ -66,10 +105,15 @@ export function typing(target: EventTarget | null): boolean {
 export function onEntityKey(e: KeyEvent): void {
   if (typing(e.target) || e.ctrlKey || e.altKey || e.metaKey) return;
   const sel = selectionStore.get();
-  // C1: F2 on a selected surface group edits its name in the scene list.
+  // C1: F2 on a selected surface group edits its name in the scene list; G18: Del deletes it if empty.
   if (sel.kind === 'group' && e.key === 'F2') {
     e.preventDefault();
     groupRenameStore.set(sel.id);
+    return;
+  }
+  if (sel.kind === 'group' && e.key === 'Delete') {
+    e.preventDefault();
+    actions.fire(deleteGroup(sel.id));
     return;
   }
   if (sel.kind !== 'source' && sel.kind !== 'receiver') return;

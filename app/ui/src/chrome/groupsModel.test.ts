@@ -1,7 +1,7 @@
 // groupsModel.ts under `node --test` (C1).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { groupPicked, mergePlan, moveTargets, renameProblem, renameTarget, toggleGroup } from './groupsModel.ts';
+import { deleteGroupOps, groupDeleteProblem, groupPicked, inUseSentence, mergePlan, moveTargets, renameProblem, renameTarget, toggleGroup } from './groupsModel.ts';
 
 const groups = [
   { id: 'a', name: 'floor' },
@@ -41,4 +41,45 @@ test('Move to group offers every group but the one holding all the picked faces'
   assert.deepEqual(moveTargets(groups, ['Group 1']).map((g) => g.id), ['a', 'c']);
   assert.deepEqual(moveTargets(groups, ['Group 1', 'floor']).map((g) => g.id), ['a', 'b', 'c']);
   assert.deepEqual(moveTargets(groups, []).map((g) => g.id), ['a', 'b', 'c']);
+});
+
+test('G18: a group that holds faces is refused with what to do; an empty one deletes', () => {
+  const view = { surface_groups: groups, surface_receivers: [], variants: [] };
+  const full = groupDeleteProblem('a', 12, view);
+  assert.equal(full?.code, 'GROUP_NOT_EMPTY');
+  assert.match(full?.message ?? '', /^floor still holds 12 faces, so it cannot be deleted\. Move them to another group first/);
+  assert.match(groupDeleteProblem('a', 1, view)?.message ?? '', /holds 1 face,/);
+  assert.equal(groupDeleteProblem('b', 0, view), null);
+  assert.equal(groupDeleteProblem('zz', 3, view), null, 'a group the project no longer has');
+});
+
+test('G18: an empty group a surface map is drawn on is refused, by name', () => {
+  const view = {
+    surface_groups: groups,
+    surface_receivers: [{ name: 'Floor map', shape: { kind: 'scene', groups: ['b'] } }, { name: 'Plane 1', shape: { kind: 'cutting_plane' } }],
+    variants: [],
+  };
+  assert.deepEqual(groupDeleteProblem('b', 0, view), { code: 'GROUP_IN_USE', message: 'Group 1 is part of the surface map Floor map, so it cannot be deleted.' });
+  assert.equal(groupDeleteProblem('c', 0, view), null);
+});
+
+test('G18: deleting clears each variant override on the empty group in the same undo step', () => {
+  const plain = { surface_groups: groups, surface_receivers: [], variants: [{ id: 'v1', overrides: [{ group: 'a' }] }] };
+  assert.deepEqual(deleteGroupOps('b', plain), { op: 'remove_surface_group', id: 'b' });
+  const over = { ...plain, variants: [{ id: 'v1', overrides: [{ group: 'b' }] }, { id: 'v2', overrides: [] }] };
+  assert.deepEqual(deleteGroupOps('b', over), {
+    op: 'batch',
+    ops: [
+      { op: 'set_variant_override', variant: 'v1', group: 'b', material: null },
+      { op: 'remove_surface_group', id: 'b' },
+    ],
+  });
+});
+
+test('the in-use refusal of the core reads without the id', () => {
+  assert.equal(
+    inUseSentence('Group 1', "surface group 3f2a9c1e-0000-4000-8000-000000000000 is still used by fitting zone 'Stage'"),
+    "Group 1 cannot be deleted: fitting zone 'Stage' still uses it.",
+  );
+  assert.equal(inUseSentence('Group 1', 'something else'), 'something else');
 });

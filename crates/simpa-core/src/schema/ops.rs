@@ -796,12 +796,38 @@ impl Project {
         if from.is_empty() {
             return regroup(placeholder);
         }
+        self.with_placeholder(placeholder, regroup)
+    }
+
+    /// The edit that adds an empty surface group `id` named `name` at the end of the groups
+    /// (parity G18, upstream's "add a group"), with upstream's placeholder material, as
+    /// [`Project::regrouped`] picks it: the project's own placeholder if it holds one, else a
+    /// new one with id `placeholder`, in the same [`Op::Batch`] so one undo removes both.
+    /// Upstream gives every new group material id 0, its placeholder
+    /// (`e_scene_groupesurfaces_groupe.cpp:92`). The placeholder is "no material chosen": the
+    /// run is blocked until one is, so faces moved into the group never reach a solver with
+    /// absorption 0 by accident.
+    pub fn new_group(&self, id: GroupId, name: &str, placeholder: MaterialId) -> Op {
+        let add = |material| Op::AddSurfaceGroup {
+            index: self.surface_groups.len(),
+            group: SurfaceGroup {
+                id,
+                name: name.to_string(),
+                material,
+            },
+        };
+        self.with_placeholder(placeholder, add)
+    }
+
+    /// `make` with the project's placeholder material, or with a new placeholder `placeholder`
+    /// added first in one [`Op::Batch`].
+    fn with_placeholder(&self, placeholder: MaterialId, make: impl Fn(MaterialId) -> Op) -> Op {
         if let Some(m) = self
             .materials
             .iter()
             .find(|m| crate::validate::is_placeholder_material(m))
         {
-            return regroup(m.id);
+            return make(m.id);
         }
         Op::Batch {
             ops: vec![
@@ -812,7 +838,7 @@ impl Project {
                         self.bands.len(),
                     ),
                 },
-                regroup(placeholder),
+                make(placeholder),
             ],
         }
     }

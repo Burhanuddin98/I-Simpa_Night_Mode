@@ -19,17 +19,21 @@
 // several groups, and the bar under the Surfaces head merges them into the first picked
 // (`[data-action="merge-groups"]`). Each is one checked edit and one undo step; a refusal is shown
 // under the surfaces.
-import { useEffect, useRef, useState } from 'react';
+//
+// G18: "+ Group" in the Surfaces head (`[data-action="add-group"]`) adds an empty group with the
+// placeholder material; each group row's remove button (`[data-part="group-remove"]`, or Del on a
+// selected group) deletes it when it is empty, and otherwise says why not and what to do.
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import * as actions from '../actions';
 import type { Source, UiIssue } from '../bindings/ipc';
 import { issuesByEntity, projectIssues } from '../issues';
 import { groupRenameStore, refusalStore, sceneStore, selectionStore, useStore } from '../store';
-import { groupPicked, mergePlan, renameProblem, toggleGroup } from './groupsModel';
+import { ADD_GROUP_LABEL, groupPicked, mergePlan, renameProblem, toggleGroup } from './groupsModel';
 import { FoldButton, useFold } from './fold';
 import { usePanelWidth } from './panelWidth';
 import { Search, Trash2 } from './icons';
 import { coord, displayName, effectiveMaterial, matchesFilter, receiverFolder, sentence, uniqueIssues, worstSeverity } from './sceneModel';
-import { onEntityKey, removeEntity, selectGroup, selectPoint } from './sceneUi';
+import { deleteGroup, groupProblemStore, onEntityKey, removeEntity, selectGroup, selectPoint } from './sceneUi';
 
 // ---- the source switch (M26) -------------------------------------------------------------------
 
@@ -178,11 +182,33 @@ function GroupNameInput({ id, name, onProblem }: { id: string; name: string; onP
   );
 }
 
-function Head({ title, shown, total }: { title: string; shown: number; total: number }) {
+/** A group row's remove button (G18): an empty group goes; one that holds faces says why not. */
+function GroupRemoveButton({ id, name, faces }: { id: string; name: string; faces: number }) {
+  return (
+    <button
+      className="row-remove"
+      data-part="group-remove"
+      aria-label={`Delete ${name}`}
+      title={
+        faces > 0
+          ? `${name} holds ${faces} ${faces === 1 ? 'face' : 'faces'}: only an empty group can be deleted`
+          : `Delete ${name} (Del; Ctrl+Z brings it back)`
+      }
+      onClick={() => actions.fire(deleteGroup(id))}
+    >
+      <Trash2 size={12} />
+    </button>
+  );
+}
+
+function Head({ title, shown, total, children }: { title: string; shown: number; total: number; children?: ReactNode }) {
   return (
     <div className="scene-head label">
       <span>{title}</span>
-      <span className="count">{shown === total ? total : `${shown} of ${total}`}</span>
+      <span className="scene-head-end">
+        {children}
+        <span className="count">{shown === total ? total : `${shown} of ${total}`}</span>
+      </span>
     </div>
   );
 }
@@ -193,7 +219,8 @@ export function ScenePanel() {
   const refusals = useStore(refusalStore);
   const [query, setQuery] = useState('');
   const renaming = useStore(groupRenameStore);
-  const [groupProblem, setGroupProblem] = useState<{ code: string; message: string } | null>(null);
+  const groupProblem = useStore(groupProblemStore);
+  const setGroupProblem = (p: { code: string; message: string } | null) => groupProblemStore.set(p);
   const view = scene?.view ?? null;
   const byEntity = issuesByEntity(scene?.issues ?? []);
   const issuesOf = (kind: string, id: string) => byEntity.get(`${kind}:${id}`) ?? [];
@@ -211,7 +238,7 @@ export function ScenePanel() {
   const merge = view ? mergePlan(selection, view.surface_groups) : null;
   // The latest group edit's refusals (rename, merge, move), from the checked apply.
   const groupRefusals = uniqueIssues(
-    ...[...refusals].filter(([k]) => k.startsWith('surface_group:') && /:(name|merge|faces)$/.test(k)).map(([, v]) => v),
+    ...[...refusals].filter(([k]) => k.startsWith('surface_group:') && /:(name|merge|faces|delete)$/.test(k)).map(([, v]) => v),
   );
   const folded = useFold('scene');
   const sized = usePanelWidth('nm-scene-width', 248, 'right');
@@ -238,7 +265,19 @@ export function ScenePanel() {
           <div className="scene-empty empty">No project. File, then Open…</div>
         ) : (
           <>
-            <Head title="Surfaces" shown={shownSurfaces.length} total={surfaces.length} />
+            <Head title="Surfaces" shown={shownSurfaces.length} total={surfaces.length}>
+              <button
+                className="scene-head-add"
+                data-action="add-group"
+                title={`${ADD_GROUP_LABEL}: an empty group, its material to choose; move faces into it from the 3D view (right-click, Move to group)`}
+                onClick={() => {
+                  setGroupProblem(null);
+                  actions.addEmptyGroup().catch((e: unknown) => setGroupProblem(actions.asCmdError(e)));
+                }}
+              >
+                + Group
+              </button>
+            </Head>
             {merge && (
               <div className="group-merge" data-part="group-merge">
                 <span className="grow">{merge.from.length + 1} groups picked</span>
@@ -267,8 +306,8 @@ export function ScenePanel() {
                 );
               }
               return (
+                <div key={g.id} className="scene-line">
                 <button
-                  key={g.id}
                   className="scene-row group-row"
                   data-entity={`surface_group:${g.id}`}
                   aria-pressed={on}
@@ -311,6 +350,8 @@ export function ScenePanel() {
                   </span>
                   <IssueTag issues={issuesOf('surface_group', g.id)} />
                 </button>
+                <GroupRemoveButton id={g.id} name={displayName(g.name)} faces={faces} />
+                </div>
               );
             })}
             {!surfaces.length && <div className="scene-empty empty">No surfaces</div>}

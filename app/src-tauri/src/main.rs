@@ -260,6 +260,7 @@ fn run(args: GuiArgs) -> ExitCode {
             commands::advice_apply,
             commands::edit_reband,
             commands::edit_regroup,
+            commands::edit_add_group,
             commands::edit_undo,
             commands::edit_redo,
             commands::scene_mesh,

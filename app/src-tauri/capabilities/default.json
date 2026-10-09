@@ -36,6 +36,7 @@
     "allow-advice-apply",
     "allow-edit-reband",
     "allow-edit-regroup",
+    "allow-edit-add-group",
     "allow-edit-undo",
     "allow-edit-redo",
     "allow-scene-mesh",

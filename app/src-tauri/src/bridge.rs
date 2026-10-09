@@ -711,16 +711,7 @@ impl Session {
     /// that op's own code, not the batch's.
     pub fn edit_regroup(&mut self, faces: &[u32]) -> CmdResult<EditOutcome> {
         let project = self.project.as_ref().ok_or_else(no_project)?;
-        let name = (1u32..)
-            .map(|n| format!("Group {n}"))
-            .find(|n| {
-                let key = validate::group_name_key(n);
-                !project
-                    .surface_groups
-                    .iter()
-                    .any(|g| validate::group_name_key(&g.name) == key)
-            })
-            .expect("some n is free");
+        let name = free_group_name(project);
         let op = project.regrouped(faces, GroupId::random(), &name, MaterialId::random());
         if let Err(mut e) = op.clone().apply(&mut project.clone()) {
             while let OpError::Batch { error, .. } = e {
@@ -728,6 +719,17 @@ impl Session {
             }
             return Err(op_error(&e));
         }
+        self.edit_apply(&op.to_json())
+    }
+
+    /// "Add surface group" (parity G18): an empty group named `Group <n>` (the first free n, as
+    /// [`Session::edit_regroup`] names one), with upstream's placeholder material
+    /// ([`Project::new_group`]), through the checked apply as one undoable edit. Faces join it
+    /// with Move to group; the run is blocked until it has a material.
+    pub fn edit_add_group(&mut self) -> CmdResult<EditOutcome> {
+        let project = self.project.as_ref().ok_or_else(no_project)?;
+        let name = free_group_name(project);
+        let op = project.new_group(GroupId::random(), &name, MaterialId::random());
         self.edit_apply(&op.to_json())
     }
 
@@ -750,6 +752,21 @@ impl Session {
         let p = self.project.as_ref().ok_or_else(no_project)?;
         Ok(scene::mesh_bytes(p, self.geometry_rev))
     }
+}
+
+/// `Group <n>` with the first n no surface group's name takes, compared as the core compares
+/// group names (`validate::group_name_key`).
+fn free_group_name(project: &Project) -> String {
+    (1u32..)
+        .map(|n| format!("Group {n}"))
+        .find(|n| {
+            let key = validate::group_name_key(n);
+            !project
+                .surface_groups
+                .iter()
+                .any(|g| validate::group_name_key(&g.name) == key)
+        })
+        .expect("some n is free")
 }
 
 /// What each reader made of a JSON array of numbers: the bits as `0x` + 16 hex digits.
@@ -1663,6 +1680,56 @@ mod row15_tests {
             .unwrap();
         assert!(!out.applied);
         assert_eq!(out.refusals[0].rule, "material_placeholder");
+    }
+
+    /// G18: Add surface group is one edit, an empty `Group 1` with the placeholder (added with
+    /// it, the box having none), which blocks the run; one undo gives the project back. The
+    /// empty group deletes; a group that holds faces does not, and nothing changes.
+    #[test]
+    fn an_empty_group_is_added_with_the_placeholder_and_deletes() {
+        let mut s = opened(BOX);
+        let before = s.json().unwrap();
+        let materials = project(&s).materials.len();
+        let out = s.edit_add_group().unwrap();
+        assert!(out.applied, "{:?}", out.refusals);
+        let st = out.state;
+        let g = st.view.surface_groups.last().unwrap().clone();
+        assert_eq!(
+            (g.name.as_str(), st.view.surface_groups.len()),
+            ("Group 1", 4)
+        );
+        assert_eq!(st.groups.iter().find(|x| x.id == g.id).unwrap().faces, 0);
+        assert!(!st.groups.iter().find(|x| x.id == g.id).unwrap().assigned);
+        assert_eq!(st.view.materials.len(), materials + 1);
+        assert!(st.run_blockers.iter().any(|b| b == MATERIALS_UNASSIGNED));
+        assert_eq!(st.info.undo_depth, 1);
+        s.edit_undo().unwrap();
+        assert_eq!(s.json().unwrap(), before);
+
+        // Two in a row: the second is `Group 2` and takes the placeholder the first added.
+        s.edit_add_group().unwrap();
+        let out = s.edit_add_group().unwrap();
+        let groups = &out.state.view.surface_groups;
+        assert_eq!(groups.last().unwrap().name, "Group 2");
+        assert_eq!(groups[3].material, groups[4].material);
+        assert_eq!(out.state.view.materials.len(), materials + 1);
+
+        // The empty one deletes, one undo step.
+        let id = groups[4].id;
+        let out = s
+            .edit_apply(&Op::RemoveSurfaceGroup { id }.to_json())
+            .unwrap();
+        assert!(out.applied, "{:?}", out.refusals);
+        assert_eq!(out.state.view.surface_groups.len(), 4);
+
+        // Walls holds faces: refused by the core, the project unchanged.
+        let walls = project(&s).surface_groups[2].id;
+        let now = s.json().unwrap();
+        let err = s
+            .edit_apply(&Op::RemoveSurfaceGroup { id: walls }.to_json())
+            .unwrap_err();
+        assert_eq!(err.code, "OP_IN_USE", "{}", err.message);
+        assert_eq!(s.json().unwrap(), now);
     }
 
     /// A selection with faces in and out of the scene receiver is refused by its own reason,

@@ -13,7 +13,7 @@
 //   the Simulate step's Cancel.
 // - Edit › New group from selection (scope row 15 (1), G19), the viewport's context menu entry.
 // - Edit › Rename group (F2) and Merge groups (C1): one picked group, and two or more Ctrl+clicked
-//   in the scene list.
+//   in the scene list. Edit › Add surface group and Delete group (Del, an empty group only) (G18).
 // - File › Export view as PNG…, Export parameters as CSV… and as JSON… (wow list W9,
 //   features/export/), each disabled with the reason where there is nothing to export.
 import { blockersWithSize, settingsStore } from '../features/simulate/runSize';
@@ -23,7 +23,8 @@ import { exportParams, exportView, paramsRefusal, viewRefusal } from '../feature
 import { frameModel, setView } from '../features/viewport/engine';
 import { joinBlockers } from '../flow';
 import { groupRenameStore, reportStore, runStore, sceneStore, selectedRunStore, selectionStore, solversStatusStore, solverStore, stepStore, useStore, viewportStore } from '../store';
-import { MERGE_LABEL, mergePlan, RENAME_GROUP_LABEL, renameTarget } from './groupsModel';
+import { ADD_GROUP_LABEL, DELETE_GROUP_LABEL, MERGE_LABEL, mergePlan, RENAME_GROUP_LABEL, renameTarget } from './groupsModel';
+import { deleteGroup } from './sceneUi';
 import { Search } from './icons';
 import { RunButton } from './RunButton';
 import { closingProps, usePresence } from './usePresence';
@@ -131,6 +132,24 @@ export function MenuBar() {
         title: regroupFaces(selection)
           ? 'Send the faces picked in the 3D view to a new surface group'
           : 'Pick faces in the 3D view first: click a face, or double-click for its flat surface',
+      },
+      {
+        id: 'add-group',
+        label: ADD_GROUP_LABEL,
+        run: () => actions.fire(actions.addEmptyGroup()),
+        disabled: !scene,
+        title: scene ? 'An empty surface group; choose its material, then move faces into it' : 'Open a project first',
+      },
+      {
+        id: 'delete-group',
+        label: DELETE_GROUP_LABEL,
+        keys: 'Del',
+        run: () => {
+          const id = renameTarget(selection);
+          if (id) actions.fire(deleteGroup(id));
+        },
+        disabled: !renameTarget(selection),
+        title: renameTarget(selection) ? 'Delete the picked surface group if it holds no faces' : 'Pick one surface group in the scene list first',
       },
       {
         id: 'rename-group',

@@ -324,6 +324,28 @@ export async function regroupSelection(): Promise<EditOutcome | null> {
 }
 
 /**
+ * Add surface group (parity G18, upstream's "add a group"): an empty group, `Group <n>`, with
+ * upstream's placeholder material, which the core picks (the project's own, or a new one in the
+ * same edit). One checked edit, one undo step; the new group is then selected, so its material
+ * can be set. Run stays blocked until it has one; faces join it with Move to group. `null` with
+ * no project.
+ */
+export async function addEmptyGroup(): Promise<EditOutcome | null> {
+  if (!sceneStore.get()) return null;
+  return run('Add surface group', async () => {
+    const before = new Set((sceneStore.get()?.view.surface_groups ?? []).map((g) => g.id));
+    const outcome = await backend.editAddGroup();
+    await accept(outcome.state);
+    const added = outcome.state.view.surface_groups.find((g) => !before.has(g.id));
+    if (outcome.applied && added) {
+      selectionStore.set({ kind: 'group', id: added.id });
+      log('OK', `New group ${added.name}, empty: choose its material (Run waits for one), then move faces into it with Move to group`);
+    }
+    return outcome;
+  });
+}
+
+/**
  * C1, "Move selection to group": the faces picked in the 3D view into the existing surface group
  * `group`, where they take its material. One checked edit, one undo step; the group is then
  * selected. A move the core refuses (one that would add faces to a surface receiver or zone, or

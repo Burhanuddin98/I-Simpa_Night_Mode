@@ -460,6 +460,17 @@ pub async fn edit_regroup(state: State<'_, AppState>, faces: Vec<u32>) -> CmdRes
     .await
 }
 
+/// Add surface group (parity G18): an empty group with upstream's placeholder material, as one
+/// undoable checked apply (`Session::edit_add_group`).
+#[tauri::command(rename_all = "snake_case")]
+pub async fn edit_add_group(state: State<'_, AppState>) -> CmdResult<EditOutcome> {
+    let session = state.session.clone();
+    guard::blocking("edit_add_group", move || {
+        lock(&session, "project")?.edit_add_group()
+    })
+    .await
+}
+
 #[tauri::command(rename_all = "snake_case")]
 pub async fn edit_undo(state: State<'_, AppState>) -> CmdResult<SceneState> {
     let session = state.session.clone();

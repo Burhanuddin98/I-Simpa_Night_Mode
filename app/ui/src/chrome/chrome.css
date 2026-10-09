@@ -912,6 +912,16 @@
 .scene-list .toggle-issues {
   margin: 6px 8px 0;
 }
+/* The scene list is narrow: a refusal's code above its sentence, the sentence the panel's whole width
+   and wrapping anywhere, so a long group name never runs out of the panel (G18). */
+.scene-list .toggle-issues .issue {
+  flex-direction: column;
+  gap: 2px;
+}
+.scene-list .toggle-issues .issue .msg {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 
 /* Folding a floating panel away (chrome/fold.tsx, decision-log row 50). */
 .fold {
@@ -1348,4 +1358,25 @@ html[data-resizing] * {
 html[data-resizing] .scene,
 html[data-resizing] .props {
   transition: none !important;
+}
+
+/* G18: "+ Group" in the Surfaces head, in the head's own type (never smaller than its label). */
+.scene-head-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.scene-head-add {
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: var(--text-2);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.scene-head-add:hover,
+.scene-head-add:focus-visible {
+  color: var(--red);
 }

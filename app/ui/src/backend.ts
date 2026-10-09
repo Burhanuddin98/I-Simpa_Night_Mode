@@ -143,6 +143,8 @@ export const backend = {
   /** New group from selection (row 15, G19): the core picks the material and applies it as one
    * checked edit. */
   editRegroup: (faces: number[]) => invoke<EditOutcome>('edit_regroup', { faces }),
+  /** Add surface group (G18): an empty group with upstream's placeholder material, one checked edit. */
+  editAddGroup: () => invoke<EditOutcome>('edit_add_group'),
   editUndo: () => invoke<SceneState>('edit_undo'),
   editRedo: () => invoke<SceneState>('edit_redo'),
   /** The geometry as raw bytes (mesh.ts decodes them). */
