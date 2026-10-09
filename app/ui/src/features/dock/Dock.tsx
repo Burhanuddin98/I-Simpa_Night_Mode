@@ -49,17 +49,33 @@ type DockKey = (typeof DOCK_TABS)[number]['key'];
 // ---- the height ----------------------------------------------------------------------------------
 
 const HEIGHT_KEY = 'nm-dock-height';
+/** The Results step keeps a height of its own (GUI audit 2026-10-09 A2, Burhan 03:13 "Taller on Results"): its tables
+ * started at the cards' foot in 250 px. */
+const RESULTS_HEIGHT_KEY = 'nm-dock-height-results';
+/** What the 3D view keeps above a Results dock that has no stored height: its cards (map options, legend, playback)
+ * need it, and m12.export holds them apart. */
+const RESULTS_VIEW_KEEP = 640;
 
-function loadHeight(): number {
-  try {
-    return parseDockHeight(localStorage.getItem(HEIGHT_KEY));
-  } catch {
-    return parseDockHeight(null);
-  }
+function keyFor(step: string): string {
+  return step === 'results' ? RESULTS_HEIGHT_KEY : HEIGHT_KEY;
 }
 
-/** The dock's size: its height (kept in this browser profile, as the fold is) and maximised (this session). */
-const sizeStore = new Store<DockSize>({ height: loadHeight(), max: false });
+function loadHeight(step: string): number {
+  let text: string | null = null;
+  try {
+    text = localStorage.getItem(keyFor(step));
+  } catch {
+    // Storage refused: the defaults below.
+  }
+  if (step === 'results' && text === null) {
+    const h = window.innerHeight;
+    return Math.round(Math.max(parseDockHeight(null), Math.min(h * 0.45, h - RESULTS_VIEW_KEEP)));
+  }
+  return parseDockHeight(text);
+}
+
+/** The dock's size: its height (kept in this browser profile per step kind, as the fold is) and maximised (this session). */
+const sizeStore = new Store<DockSize>({ height: loadHeight(stepStore.get()), max: false });
 
 function placeNow(): DockPlace {
   return { size: sizeStore.get(), folded: foldStore.get().dock };
@@ -72,7 +88,7 @@ function place(p: DockPlace, store = true): void {
   if (p.folded !== foldStore.get().dock) setFold('dock', p.folded);
   if (!store) return;
   try {
-    localStorage.setItem(HEIGHT_KEY, dockHeightText(p.size.height));
+    localStorage.setItem(keyFor(stepStore.get()), dockHeightText(p.size.height));
   } catch {
     // Storage refused: the height still holds for this session.
   }
@@ -170,7 +186,12 @@ export function Dock() {
   const folded = useFold('dock');
   // A folded dock opens itself on the Results step (the Acoustics tab) and when an error is logged.
   useEffect(() => {
-    const offStep = stepStore.subscribe(() => openDockFor({ step: stepStore.get() }));
+    const offStep = stepStore.subscribe(() => {
+      // Into or out of Results, the dock takes that step kind's own height.
+      const h = loadHeight(stepStore.get());
+      if (h !== sizeStore.get().height) sizeStore.set({ ...sizeStore.get(), height: h });
+      openDockFor({ step: stepStore.get() });
+    });
     const offLog = consoleStore.subscribe(() => openDockFor({ tag: consoleStore.get().at(-1)?.tag }));
     openDockFor({ step: stepStore.get() });
     return () => {

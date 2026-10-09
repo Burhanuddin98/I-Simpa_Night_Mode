@@ -271,7 +271,7 @@ export interface PreflightRow {
  */
 export const PREFLIGHT: readonly { key: string; label: string; codes: readonly string[] }[] = [
   { key: 'materials', label: 'Every surface has a material', codes: ['MATERIALS_UNASSIGNED', 'MATERIAL_UNASSIGNED'] },
-  { key: 'model', label: 'Model closed, no self-intersections', codes: ['GEOMETRY_REFUSED'] },
+  { key: 'model', label: 'Model watertight, no self-intersections', codes: ['GEOMETRY_REFUSED'] },
   { key: 'source', label: 'Source inside the room', codes: ['SOURCE_NONE', 'SOURCE_OUTSIDE', 'SOURCE_NEAR_SURFACE'] },
   {
     key: 'receivers',

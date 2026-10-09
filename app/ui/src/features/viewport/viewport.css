@@ -643,3 +643,43 @@ html.present .viewport > :not(.viewport-host) {
   max-height: 360px;
   overflow-y: auto;
 }
+
+/* GUI audit 2026-10-09 A3: the map options and the playback card fold to one line (ResultsOverlay.tsx CardFold);
+   folded playback keeps its controls row and its time, and the "no particles saved" note folds with it. */
+.vp-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.vp-card-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.vp-card-fold {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.vp-card-fold:hover {
+  color: var(--text);
+  border-color: var(--glass-edge);
+}
+.vp-map-panel[data-folded='true'] > :not(.vp-card-head) {
+  display: none;
+}
+.vp-transport[data-folded='true'] > :not(.vp-transport-main):not(.vp-readout):not(.vp-particles-none) {
+  display: none;
+}
+.vp-dock[data-play-folded='true'] .vp-particles-none.float-panel {
+  display: none;
+}

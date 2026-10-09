@@ -166,7 +166,7 @@ describe('M10 scene', () => {
 
   it('scene: the step subs read the project (closed, refused, no model; assigned; sources · receivers)', async () => {
     await m10.openProject(TEACHING_ROOM());
-    assert.deepEqual(await subs(), { geometry: 'room closed', materials: '6 of 6 set', sources: '1 source · 3 receivers', simulate: '', results: '' });
+    assert.deepEqual(await subs(), { geometry: 'room watertight', materials: '6 of 6 set', sources: '1 source · 3 receivers', simulate: '', results: '' });
     const r4: Op = {
       op: 'add_point_receiver',
       index: 3,
@@ -176,7 +176,7 @@ describe('M10 scene', () => {
     assert.equal((await subs()).sources, '1 source · 4 receivers');
 
     await m10.importModel(env('M10_ELMIA_RAW'), 'm', 'z');
-    assert.equal((await subs()).geometry, 'not closed');
+    assert.equal((await subs()).geometry, 'not watertight');
 
     // File › New project, through the menu.
     await clickSelector('[data-menu="File"]');
@@ -342,7 +342,7 @@ describe('M10 scene', () => {
     await m10.idle();
     await $('[data-part="import-dialog"]').waitForExist({ reverse: true, timeout: 30_000 });
     const s = await subs();
-    assert.equal(s.geometry, 'room closed');
+    assert.equal(s.geometry, 'room watertight');
     assert.equal(s.materials, '0 of 10 set');
   });
 });

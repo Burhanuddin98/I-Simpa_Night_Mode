@@ -312,7 +312,39 @@ function RangeFields({ lo, hi }: { lo: number; hi: number }) {
   );
 }
 
+/** A view card folded to its first line (GUI audit 2026-10-09 A3, Burhan 03:13 "Foldable, open by default"): the map
+ * options and the playback card covered the middle of the room. Kept in this profile, open until folded. */
+function useCardFold(key: string): [boolean, () => void] {
+  const [folded, setFolded] = useState(() => {
+    try {
+      return localStorage.getItem(key) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const toggle = () =>
+    setFolded((f) => {
+      try {
+        localStorage.setItem(key, f ? '0' : '1');
+      } catch {
+        // Storage refused: the fold holds for this session.
+      }
+      return !f;
+    });
+  return [folded, toggle];
+}
+
+function CardFold({ folded, onToggle, what }: { folded: boolean; onToggle: () => void; what: string }) {
+  return (
+    <button type="button" className="vp-card-fold" data-action={`fold-${what}`} aria-expanded={!folded} title={folded ? 'Show' : 'Fold to one line'} onClick={onToggle}>
+      {folded ? '▸' : '▾'}
+    </button>
+  );
+}
+
 export function ResultsOverlay() {
+  const [mapFolded, toggleMap] = useCardFold('nm-fold-map-options');
+  const [playFolded, togglePlay] = useCardFold('nm-fold-playback');
   const step = useStore(stepStore);
   const v = useStore(resultsViewStore);
   const replicas = useStore(replicaStore);
@@ -340,7 +372,11 @@ export function ResultsOverlay() {
   const p = v.particles;
   return (
     <>
-      <div className="vp-map-panel float-panel" data-part="results-viewport" data-results-region data-results-view={v.status}>
+      <div className="vp-map-panel float-panel" data-part="results-viewport" data-results-region data-results-view={v.status} data-folded={mapFolded}>
+        <div className="vp-card-head">
+          <span className="vp-card-title">Map</span>
+          <CardFold folded={mapFolded} onToggle={toggleMap} what="map-options" />
+        </div>
         {v.groups.length > 1 && (
           <div className="vp-row" role="radiogroup" aria-label="Map">
             {v.groups.map((g) => (
@@ -481,7 +517,7 @@ export function ResultsOverlay() {
         {v.fixed && <RangeFields lo={v.fixed.lo} hi={v.fixed.hi} />}
       </div>
 
-      <div className="vp-dock" data-part="results-dock">
+      <div className="vp-dock" data-part="results-dock" data-play-folded={playFolded}>
         <div className="vp-dock-row">
           <Probe />
           {p.state === 'none' && (
@@ -515,9 +551,9 @@ export function ResultsOverlay() {
               )}
             </div>
           )}
-          <div className="vp-transport float-panel" data-part="animator" data-results-region>
+          <div className="vp-transport float-panel" data-part="animator" data-results-region data-folded={playFolded}>
             {p.state === 'error' && <div className="vp-particles-none">{p.message}</div>}
-            <div className="vp-row">
+            <div className="vp-row vp-transport-main">
               <button className="tool" data-part="anim-start" aria-label="Back to the emission" title="Back to where the sources emit" disabled={anim.steps <= 1} onClick={() => Animator.toStart()}>
                 <StartIcon />
               </button>
@@ -555,6 +591,7 @@ export function ResultsOverlay() {
                 value={anim.step}
                 onChange={(e) => Animator.setStep(Number(e.target.value))}
               />
+              <CardFold folded={playFolded} onToggle={togglePlay} what="playback" />
             </div>
             <Readout step={anim.step} steps={anim.steps} dt={dt} band={p.state === 'shown' ? p.bandHz : null} spps={v.data?.solver === 'spps'} />
             <div className="vp-row" role="radiogroup" aria-label="Playback speed" data-part="anim-speeds">

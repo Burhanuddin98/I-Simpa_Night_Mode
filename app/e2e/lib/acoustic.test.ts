@@ -106,7 +106,7 @@ test('rule 2: a parameter name followed by a number, whatever the unit, nothing 
     assert.deepEqual(rules(snap({ wholeText: t })), ['2'], t);
   }
   // Names with no number after them, and the app's own text, stay clean.
-  for (const t of ['Live · Sabine and Eyring, 1/1 octave', 'Run 3 · Baseline', 'Model closed · 6 surfaces', 'rt 3 g 2', 'Start 3']) {
+  for (const t of ['Live · Sabine and Eyring, 1/1 octave', 'Run 3 · Baseline', 'Model watertight · 6 surfaces', 'rt 3 g 2', 'Start 3']) {
     assert.deepEqual(rules(snap({ wholeText: t })), [], t);
   }
 });

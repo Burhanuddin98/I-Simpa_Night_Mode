@@ -43,8 +43,9 @@ export function stepsDone(scene: SceneState | null): Record<'geometry' | 'materi
 
 export function stepSubs(scene: SceneState | null): Record<SubKey, string> {
   const check = scene?.check;
-  // In words (the UI study's increment 2): "room closed", "6 of 10 set", "2 sources · 5 receivers".
-  const geometry = !check ? 'no model' : check.verdict === 'ok' ? 'room closed' : 'not closed';
+  // In words (the UI study's increment 2): "room watertight", "6 of 10 set", "2 sources · 5 receivers". "Watertight", not
+  // "closed", since the GUI audit of 2026-10-09 (C5, Burhan's word): "closed" read as "the file is closed".
+  const geometry = !check ? 'no model' : check.verdict === 'ok' ? 'room watertight' : 'not watertight';
   if (!scene) return { geometry, materials: '', sources: '', simulate: '', results: '' };
   const enabled = scene.view.sources.filter((s) => s.enabled).length;
   const receivers = scene.view.point_receivers.length;
@@ -105,7 +106,7 @@ export function isClosed(check: CheckSummary): boolean {
 const NAMED_REASONS = ['open_boundary', 'no_enclosed_volume', 'self_intersections', 'inverted_faces'];
 
 /**
- * The Geometry panel's model check list, as text: Closed volume, Self-intersections, Flipped
+ * The Geometry panel's model check list, as text: Watertight, Self-intersections, Flipped
  * normals, Open edges and Units, then one row per other reason the check refused with.
  * `units` is the Units row's text.
  */
@@ -116,7 +117,7 @@ export function checkRows(check: CheckSummary, units: string): CheckRow[] {
   const flipped = has(check, 'inverted_faces') || c.inverted_faces > 0;
   const open = has(check, 'open_boundary') || c.open_edges > 0;
   const rows: CheckRow[] = [
-    { key: 'closed', label: 'Closed volume', value: closed ? 'yes' : 'no', state: closed ? 'OK' : 'FAIL' },
+    { key: 'closed', label: 'Watertight', value: closed ? 'yes' : 'no', state: closed ? 'OK' : 'FAIL' },
     {
       key: 'self_intersections',
       label: 'Self-intersections',

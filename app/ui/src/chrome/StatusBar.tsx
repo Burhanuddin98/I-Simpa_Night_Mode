@@ -1,4 +1,4 @@
-// The status bar (design:474-481): the app's status, the model as a geometry fact ("Model closed
+// The status bar (design:474-481): the app's status, the model as a geometry fact ("Model watertight
 // · 6 surfaces · air 180 m³", inside `[data-geometry]`), the active variant, the solvers, the units.
 // The volume is the air's (backlog 85): the inside of a closed obstacle, a radiator or a stage
 // panel, is not in it (BRAS CR4: air 8656.6 m³, where the faces enclose 8695.7).
@@ -45,7 +45,7 @@ export function StatusBar() {
         (check ? (
           <span data-geometry data-part="model-fact">
             {check.verdict === 'ok'
-              ? `Model closed · ${groups} surfaces · ${check.air_volume_m3 == null ? '' : `air ${fact(check.air_volume_m3, 1)} m³`}`
+              ? `Model watertight · ${groups} surfaces · ${check.air_volume_m3 == null ? '' : `air ${fact(check.air_volume_m3, 1)} m³`}`
               : `Model refused · ${groups} surfaces`}
           </span>
         ) : (
