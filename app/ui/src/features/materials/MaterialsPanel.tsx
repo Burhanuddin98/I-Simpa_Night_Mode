@@ -1,6 +1,7 @@
 // The Materials step's properties (design:312-350): the selected surface group, its material as
 // a radio list with α mini-bars, and the library grid in its own window (TSV paste and copy, row fill, natural
-// sort, inline validator messages). PLAN.md 2.3 and 6.2. It reads the stores and writes only
+// sort, inline validator messages). PLAN.md 2.3 and 6.2. Parity M45: the checked material's display
+// colour, chosen with the system picker (ColourInput.tsx). It reads the stores and writes only
 // through `actions.apply` with `ops`.
 import { useState } from 'react';
 import * as actions from '../../actions';
@@ -10,6 +11,7 @@ import { assignMaterial, batch } from '../../ops';
 import { STEPS } from '../../steps';
 import { refusalStore, sceneStore, selectionStore, useStore } from '../../store';
 import { dismiss, errorOf, IssueLines, lineOf, visibleRefusals, type Line } from './inline';
+import { ColourInput } from './ColourInput';
 import { MaterialsSheet } from './MaterialsSheet';
 import { activeVariant, alphaBars, effectiveMaterial, formatArea, selectedGroupIds, transmissionText } from './model';
 import './materials.css';
@@ -167,6 +169,15 @@ function GroupSection() {
           <span>Transmission</span>
           <span className="mono">{checkedMaterial ? transmissionText(checkedMaterial) : 'mixed'}</span>
         </div>
+        {checkedMaterial && (
+          <label className="mat-row" data-part="material-colour">
+            <span>Colour</span>
+            <span className="mat-colour-cell">
+              <ColourInput material={checkedMaterial} where="panel" />
+              <span className="mono">{checkedMaterial.color}</span>
+            </span>
+          </label>
+        )}
         <IssueLines lines={lines} part="group-issues" />
       </section>
     </>

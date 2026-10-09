@@ -22,8 +22,11 @@
 // groups; a rename to a blank name, another material's name, or of the placeholder is refused in
 // words. The core refuses the delete too, by the material's id.
 //
-// It writes only through `actions.apply` with `ops`, and `actions.setLaw` and
-// `actions.addFromLibrary`, which do the same.
+// Parity M45: each row's swatch is its colour picker (ColourInput.tsx), outside the cell cursor as the
+// Law select is.
+//
+// It writes only through `actions.apply` with `ops`, and `actions.setLaw`, `actions.setMaterialColor`
+// and `actions.addFromLibrary`, which do the same.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import * as actions from '../../actions';
 import { displayName } from '../../chrome/sceneModel';
@@ -37,6 +40,7 @@ import { bandColumns, type BandColumn, type F64 } from './bands';
 import { boundsOf, clampCell, inRect, planFill, rectOf, type Cell } from './fill';
 import { dismiss, errorOf, IssueLines, lineOf, visibleRefusals, type Line } from './inline';
 import { changesLaw, LAWS, lawOf, lawState, lawTitle, lawValue, PER_BAND, SEMI_DIFFUSE_NOTE, usesLaw } from './law';
+import { ColourInput } from './ColourInput';
 import { LibraryMenu } from './LibraryMenu';
 import {
   bandValue,
@@ -672,7 +676,7 @@ export function MaterialsGrid() {
                         renderEditor(editing)
                       ) : (
                         <span className="mg-namecell">
-                          <span className="mat-swatch" style={{ background: m.color }} />
+                          <ColourInput material={m} where="grid" />
                           <span className="mg-label">
                             <span className="mg-text" title={m.name}>
                               {displayName(m.name)}

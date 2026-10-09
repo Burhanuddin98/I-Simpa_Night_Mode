@@ -876,3 +876,48 @@ fn a_zone_band_edited_and_turned_back_changes_only_that_band() {
     assert_eq!(p, original, "{name}: moved back");
     assert_eq!(mesh_input(&p), mesh, "{name}: moved back, TetGen's input");
 }
+
+// ---- M45: a material's display colour is the project's own; it reaches no solver -----------------
+//
+// The Materials step sends the material back whole with its colour changed (`replace_material`,
+// `actions.setMaterialColor`). No solver file carries a colour: config.xml's `type_surface` and the
+// TetGen input are byte-identical with every material recoloured.
+
+#[test]
+fn a_material_colour_never_reaches_the_solver_input() {
+    let mut checked = 0;
+    for (name, original) in fixtures() {
+        let configs = both_configs(&original);
+        let mesh = mesh_input(&original);
+        let mut p = original.clone();
+        for (i, m) in original.materials.iter().enumerate() {
+            let mut item = serde_json::to_value(m).unwrap();
+            let color = format!("#{:02x}{:02x}{:02x}", 255 - (i * 37 % 256), (i * 91) % 256, 17);
+            assert_ne!(item["color"], Value::from(color.clone()), "{name}");
+            item["color"] = Value::from(color);
+            replace_op("replace_material", "material", item)
+                .apply(&mut p)
+                .unwrap();
+            checked += 1;
+        }
+        assert!(
+            p.materials
+                .iter()
+                .zip(&original.materials)
+                .all(|(a, b)| a.color != b.color),
+            "{name}: every material recoloured"
+        );
+        assert_eq!(
+            both_configs(&p),
+            configs,
+            "{name}: config.xml is byte-identical"
+        );
+        assert_eq!(
+            mesh_input(&p),
+            mesh,
+            "{name}: TetGen's input is byte-identical"
+        );
+    }
+    assert!(checked >= 10, "{checked}");
+    println!("{checked} materials recoloured, solver input unchanged");
+}

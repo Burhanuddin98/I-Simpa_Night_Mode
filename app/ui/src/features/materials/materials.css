@@ -114,6 +114,34 @@
   flex-shrink: 0;
   border-radius: 2px;
 }
+/* M45: the swatch as the system colour picker's input, drawn as the swatch it replaces. */
+input.mat-colour {
+  padding: 0;
+  border: 1px solid #34343c;
+  background: none;
+  cursor: pointer;
+  appearance: none;
+}
+input.mat-colour.panel {
+  width: 16px;
+  height: 16px;
+}
+input.mat-colour::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+input.mat-colour::-webkit-color-swatch {
+  border: none;
+  border-radius: 1px;
+}
+input.mat-colour:focus-visible {
+  outline: 1px solid var(--red);
+  outline-offset: 1px;
+}
+.mat-colour-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 .mat-bars {
   height: 24px;
   flex-shrink: 0;

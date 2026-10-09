@@ -1082,6 +1082,17 @@ export async function setLaw(materialId: string, law: ReflectionLaw): Promise<Ed
   return apply(replaceMaterial(withLaw(m, law)), `material:${materialId}:reflection_law`);
 }
 
+/**
+ * Parity M45: a material's display colour, `#rrggbb` (upstream's material render colour). One undo step
+ * through the checked apply; null when the colour is already that, or the material is gone. The colour
+ * is the project's own: it tints the 3D view and the swatches and reaches no solver.
+ */
+export async function setMaterialColor(materialId: string, color: string): Promise<EditOutcome | null> {
+  const m = sceneStore.get()?.view.materials.find((x) => x.id === materialId);
+  if (!m || m.color.toLowerCase() === color.toLowerCase()) return null;
+  return apply(replaceMaterial({ ...m, color: color.toLowerCase() }), `material:${materialId}:color`);
+}
+
 /** The close request (the window's close button, Alt+F4, WM_CLOSE): the save prompt, then quit,
  * unless the answer is Cancel. The backend cancels an active run before it exits (PQ4). */
 async function onCloseRequested(): Promise<void> {
