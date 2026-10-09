@@ -1,7 +1,6 @@
 // G28/G29: the Geometry step's fitting zones, upstream's encombrements: a volume of the room filled
 // with scattering objects (seats, a stage set, machinery), which SPPS treats as a scattering and
-// absorbing medium. `+ Box zone` adds upstream's box, 1 m on a side, 10 cm above the floor (so its faces
-// never cross a nearly flat floor's) at the middle of the plan (zones.ts); each zone's name, its box (From and To, each axis), its absorption and mean
+// absorbing medium. `+ Box zone` adds upstream's box, 1 m on a side, centred in the room's box (zones.ts); each zone's name, its box (From and To, each axis), its absorption and mean
 // free path in every band at once or band by band, and its diffusion law are edited here, each
 // through the checked apply as one undo step (the core's `fitting_parameters_invalid` refuses a
 // value, inline, the project unchanged). A box with no volume, or reaching out of the room's box,
@@ -242,7 +241,7 @@ export function ZonesSection({ scene }: { scene: SceneState }) {
           className="small-button"
           data-part="add-zone"
           disabled={!room}
-          title={room ? 'Add a box fitting zone, 1 m on a side, 10 cm above the floor at the middle of the room; then set its corners' : 'Import a room model first'}
+          title={room ? 'Add a box fitting zone, 1 m on a side, in the middle of the room; then set its corners' : 'Import a room model first'}
           onClick={() => actions.fire(actions.addBoxZone())}
         >
           + Box zone

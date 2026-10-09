@@ -976,7 +976,7 @@ export async function setSurfaceReceiverEnabled(id: string, enabled: boolean): P
 }
 
 /**
- * G29: a new box fitting zone, 1 m on a side, 10 cm above the room's floor at the middle of its plan, with
+ * G29: a new box fitting zone, 1 m on a side, centred in the room's box, with
  * upstream's values (zones.ts `newBoxZone`), named `Fitting zone <n>`, at the end of the zones:
  * one checked edit, refusals under `fitting_zone:new:shape`. Null without a checked model.
  */
@@ -988,7 +988,7 @@ export async function addBoxZone(): Promise<EditOutcome | null> {
   const name = nextName('Fitting zone ', zones.map((z) => z.name));
   const zone = newBoxZone(crypto.randomUUID(), name, box, state.view.bands.frequencies_hz.length);
   const outcome = await apply(addFittingZone(zones.length, zone), 'fitting_zone:new:shape');
-  if (outcome.applied) log('OK', `Added ${name}: a 1 m box 10 cm above the floor; set its corners and values in the Geometry step`);
+  if (outcome.applied) log('OK', `Added ${name}: a 1 m box in the middle of the room; set its corners and values in the Geometry step`);
   return outcome;
 }
 

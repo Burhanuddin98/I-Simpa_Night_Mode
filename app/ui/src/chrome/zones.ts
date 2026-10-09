@@ -14,14 +14,6 @@ export const ZONE_DEFAULTS = { absorption: 0, mean_free_path_m: 1, diffusion_law
 /** The side of a new box zone, metres: upstream's new box is (0, 0, 0) to (1, 1, 1). */
 export const NEW_BOX_SIDE_M = 1;
 
-/**
- * How far a new box zone stands above the room's lowest point, metres. A box face lying on a floor
- * that is only nearly flat (BRAS CR4's: vertices at z = -1.25 and -1.249999) crosses the floor's
- * own faces, and TetGen stops on the self-intersection (bed v1q-p1b, the run 20261009-094510-515-tcr);
- * clear of the floor its faces touch nothing of the room.
- */
-export const NEW_BOX_LIFT_M = 0.1;
-
 /** The diffusion laws, as upstream lists them (coreTypes.h:108-113), with their words. */
 export const DIFFUSION_LAWS: readonly { key: DiffusionLaw; label: string }[] = [
   { key: 'uniform', label: 'Uniform' },
@@ -37,19 +29,21 @@ const finite = (v: F64): v is number => typeof v === 'number' && Number.isFinite
 const mm = (v: number) => Math.round(v * 1000) / 1000 + 0;
 
 /**
- * A new enabled box zone, `NEW_BOX_SIDE_M` on a side, `NEW_BOX_LIFT_M` above the room's floor at the middle
- * of its plan (upstream puts its new box at the origin, which in most models is a corner or
- * outside the room), upstream's values in each of `bands` bands, nothing pinned.
+ * A new enabled box zone, `NEW_BOX_SIDE_M` on a side, centred in the room's box, upstream's values
+ * in each of `bands` bands, nothing pinned. Upstream puts its new box at the origin, a corner or
+ * outside most models; the bottom of the room's box is no better, since a raked floor rises above
+ * it (BRAS CR4's: a box there crossed the floor and TetGen stopped on the self-intersection, bed
+ * v1q-p1b, runs 20261009-094510-515-tcr and 20261009-094807-290-tcr). The middle of the box is in
+ * the air of most rooms; the user then moves it where the fittings are.
  */
 export function newBoxZone(id: string, name: string, room: Box3, bands: number): BoxZone {
-  const c = [0, 1].map((i) => (room.min[i] + room.max[i]) / 2);
+  const c = [0, 1, 2].map((i) => (room.min[i] + room.max[i]) / 2);
   const h = NEW_BOX_SIDE_M / 2;
-  const z0 = room.min[2] + NEW_BOX_LIFT_M;
   return {
     id,
     name,
     enabled: true,
-    shape: { kind: 'box', min: [mm(c[0] - h), mm(c[1] - h), mm(z0)], max: [mm(c[0] + h), mm(c[1] + h), mm(z0 + NEW_BOX_SIDE_M)], destination: null },
+    shape: { kind: 'box', min: [mm(c[0] - h), mm(c[1] - h), mm(c[2] - h)], max: [mm(c[0] + h), mm(c[1] + h), mm(c[2] + h)], destination: null },
     absorption: Array.from({ length: bands }, () => ZONE_DEFAULTS.absorption),
     mean_free_path_m: Array.from({ length: bands }, () => ZONE_DEFAULTS.mean_free_path_m),
     diffusion_law: Array.from({ length: bands }, () => ZONE_DEFAULTS.diffusion_law),

@@ -5,9 +5,9 @@ import { boxProblem, isBoxZone, newBoxZone, parseZoneValue, sameInEveryBand, wit
 
 const ROOM = { min: [0, 0, 0] as [number, number, number], max: [10, 6, 3] as [number, number, number] };
 
-test('G29: a new box zone is 1 m, just clear of the floor at the middle of the plan, with upstream values in every band', () => {
+test('G29: a new box zone is 1 m, centred in the box of the room, with upstream values in every band', () => {
   const z = newBoxZone('z1', 'Fitting zone 1', ROOM, 3);
-  assert.deepEqual(z.shape, { kind: 'box', min: [4.5, 2.5, 0.1], max: [5.5, 3.5, 1.1], destination: null });
+  assert.deepEqual(z.shape, { kind: 'box', min: [4.5, 2.5, 1], max: [5.5, 3.5, 2], destination: null });
   assert.deepEqual(z.absorption, [0, 0, 0]);
   assert.deepEqual(z.mean_free_path_m, [1, 1, 1]);
   assert.deepEqual(z.diffusion_law, ['uniform', 'uniform', 'uniform']);
