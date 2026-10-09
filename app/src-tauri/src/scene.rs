@@ -241,8 +241,9 @@ pub struct EditOutcome {
 pub struct RepairReport {
     /// False when repair found nothing to change: no file is written and the project is as it was.
     pub changed: bool,
-    /// The repaired mesh written beside the original (OBJ, metres, Z up), never over it; `None`
-    /// when nothing changed.
+    /// The repaired mesh written as a new file (OBJ, metres, Z up), never over another: beside
+    /// [`Self::original`], or beside the project file when that is `None`; `None` when nothing
+    /// changed.
     pub file: Option<String>,
     /// The file the model came from, left untouched; `None` for a project not imported this session.
     pub original: Option<String>,

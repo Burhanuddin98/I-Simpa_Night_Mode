@@ -451,7 +451,12 @@ export function repairSummary(r: {
   ].join(', ');
   const file = r.file ? r.file.split(/[\\/]/).pop() : null;
   const original = r.original ? r.original.split(/[\\/]/).pop() : null;
-  const wrote = file ? ` Written to ${file}${original ? ` beside ${original}, which is unchanged` : ''}.` : '';
+  // A model not imported this session has no known original: the file went beside the project file.
+  const wrote = file
+    ? original
+      ? ` Written to ${file} beside ${original}, which is unchanged.`
+      : ` Written to ${file} beside the project file: the model was not imported this session, so the file it came from is not known.`
+    : '';
   const turn = r.oriented ? '' : ' Faces intersect, so which way faces should face was not decided and none was turned.';
   return `Repaired: ${fixes}.${wrote}${turn}`;
 }

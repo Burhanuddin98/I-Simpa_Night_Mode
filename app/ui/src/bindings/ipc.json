@@ -2328,7 +2328,7 @@
           "type": "string"
         },
         "mesh_input_hash": {
-          "description": "The mesh input hash of the project meshed: the UI shows the report only while the\nproject still has it.",
+          "description": "The mesh input hash of the project as meshed, as a run's `mesh.json` records it.",
           "type": [
             "string",
             "null"
@@ -4688,7 +4688,7 @@
           "type": "integer"
         },
         "file": {
-          "description": "The repaired mesh written beside the original (OBJ, metres, Z up), never over it; `None`\nwhen nothing changed.",
+          "description": "The repaired mesh written as a new file (OBJ, metres, Z up), never over another: beside\n[`Self::original`], or beside the project file when that is `None`; `None` when nothing\nchanged.",
           "type": [
             "string",
             "null"

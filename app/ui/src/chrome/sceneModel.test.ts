@@ -394,6 +394,10 @@ test('G8: a repair in words names each fix, the new file and the untouched origi
     'Repaired: 1 vertex welded, 0 faces of zero area removed, 2 repeated faces removed, 3 faces turned out. Written to hall_repaired.obj beside hall.ply, which is unchanged.',
   );
   assert.ok(repairSummary({ ...base, changed: true, file: 'x_repaired.obj', original: 'x.ply', oriented: false }).endsWith('none was turned.'));
+  assert.ok(
+    repairSummary({ ...base, changed: true, file: 'C:\\p\\hall_repaired.obj', original: null }).includes('Written to hall_repaired.obj beside the project file: the model was not imported this session'),
+    'not imported this session: said where it went, never "beside the original"',
+  );
   assert.ok(repairSummary({ ...base, changed: false }).startsWith('Repair found nothing to change'));
   const check = { reasons: [{ code: 'self_intersections', message: 'Faces intersect', repairable: false, count: 1, faces: 2 }, { code: 'duplicate_faces', message: 'Repeated', repairable: true, count: 1, faces: 1 }] } as unknown as CheckSummary;
   assert.deepEqual(unrepairable(check), ['Faces intersect']);

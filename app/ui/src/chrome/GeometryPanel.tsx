@@ -56,7 +56,8 @@ function RepairBlock({ ok }: { ok: boolean }) {
           <div className="hint">
             Repair welds vertices closer than 1 µm, removes faces of zero area and repeated faces, and turns faces that point
             into the room outward. It never closes a hole or separates faces that intersect. The repaired model is written to
-            a new file beside the original (name_repaired.obj, metres, Z up); the original is not touched. One undo step.
+            a new file beside the model's original (name_repaired.obj, metres, Z up), or beside the project file when the model was not
+            imported this session; no file is written over. One undo step.
           </div>
           {not.length > 0 && (
             <div className="hint" data-part="repair-cannot">
@@ -67,7 +68,7 @@ function RepairBlock({ ok }: { ok: boolean }) {
             className="wide-button"
             data-part="repair-model"
             disabled={running || busy}
-            title={running ? RUN_ACTIVE_TITLE : 'Repair, write the new file beside the original, and check the model again'}
+            title={running ? RUN_ACTIVE_TITLE : 'Repair, write the new file beside the original (or the project file), and check the model again'}
             onClick={() => {
               setBusy(true);
               actions

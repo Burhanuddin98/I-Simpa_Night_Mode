@@ -545,8 +545,11 @@ impl Session {
             count("remove_duplicate_face"),
             count("flip_face"),
         );
-        let base = self.import_source.clone().or_else(|| self.path.clone());
-        let original = base.as_deref().map(|p| p.display().to_string());
+        // Beside the file the model came from; a model not imported this session has none known,
+        // and its repair goes beside the project file instead (said so, never "the original").
+        let imported = self.import_source.clone();
+        let base = imported.clone().or_else(|| self.path.clone());
+        let original = imported.as_deref().map(|p| p.display().to_string());
         let what = format!(
             "{}, {}, {}, {}",
             plural_n(welded, "vertex welded", "vertices welded"),
@@ -607,18 +610,28 @@ impl Session {
         })?;
         let mut repaired = project.clone();
         repaired.geometry = outcome.geometry.clone();
-        let header = [format!(
-            "{} repaired by I-Simpa Night Mode: {what}",
+        let from = if imported.is_some() {
             file_name(&base)
-        )];
+        } else {
+            format!("the model of {}", file_name(&base))
+        };
+        let header = [format!("{from} repaired by I-Simpa Night Mode: {what}")];
         let text = export::obj_text(&repaired, &header);
         let target = write_new_beside(&base, "_repaired", "obj", text.as_bytes())?;
+        let beside = if imported.is_some() {
+            format!("{} is unchanged", file_name(&base))
+        } else {
+            format!(
+                "beside the project file {}, since the model was not imported this session and \
+                 the file it came from is not known",
+                file_name(&base)
+            )
+        };
         self.lines.push(LogLine::new(
             LineClass::Ok,
             format!(
-                "Repair: {what}; wrote {} (metres, Z up); {} is unchanged",
-                target.display(),
-                file_name(&base)
+                "Repair: {what}; wrote {} (metres, Z up); {beside}",
+                target.display()
             ),
         ));
         if !outcome.oriented {
@@ -1573,6 +1586,7 @@ mod m10_tests {
         );
         assert!(st.run_blockers.contains(&GEOMETRY_REFUSED.to_string()));
         let rev = st.info.geometry_rev;
+        let imported = project(&s).geometry.clone();
 
         let r = s.model_repair().unwrap();
         assert!(r.changed && r.passes && r.oriented, "{r:?}");
@@ -1628,9 +1642,50 @@ mod m10_tests {
         assert!(!r2.changed && r2.file.is_none() && !r2.outcome.applied);
         assert_eq!(std::fs::read_dir(&dir).unwrap().count(), before);
 
-        // Undo puts the imported (refused) geometry back.
+        // Undo puts the imported (refused) geometry back, face for face.
         let st = s.edit_undo().unwrap();
         assert_eq!(st.check.unwrap().verdict, scene::CheckVerdict::Refused);
+        assert_eq!(project(&s).geometry.faces, imported.faces);
+        assert_eq!(project(&s).geometry.vertices, imported.vertices);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A model not imported this session (a saved project opened) has no known original: the
+    /// repair goes beside the project file, and the report and the log say so.
+    #[test]
+    fn repair_of_a_model_not_imported_this_session_goes_beside_the_project_file() {
+        let dir = scratch("repair-opened");
+        let model = dir.join("box.obj");
+        std::fs::write(&model, damaged_box_obj()).unwrap();
+        let saved = dir.join("room.simpa");
+        let mut first = Session::default();
+        first.model_import(&model, "m", "z").unwrap();
+        first.save(Some(&saved)).unwrap();
+
+        let mut s = Session::default();
+        s.scene_open(&saved).unwrap();
+        let r = s.model_repair().unwrap();
+        assert!(r.changed, "{r:?}");
+        assert_eq!(
+            r.original, None,
+            "the file the model came from is not known"
+        );
+        assert_eq!(
+            PathBuf::from(r.file.as_deref().unwrap()),
+            dir.join("room_repaired.obj")
+        );
+        let line = r
+            .outcome
+            .state
+            .lines
+            .iter()
+            .find(|l| l.text.starts_with("Repair: "))
+            .map(|l| l.text.clone())
+            .unwrap_or_default();
+        assert!(
+            line.contains("beside the project file room.simpa"),
+            "{line}"
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

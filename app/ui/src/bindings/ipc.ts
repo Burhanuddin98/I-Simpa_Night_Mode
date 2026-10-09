@@ -3530,8 +3530,7 @@ export interface MeshNowReport {
    */
   folder: string;
   /**
-   * The mesh input hash of the project meshed: the UI shows the report only while the
-   * project still has it.
+   * The mesh input hash of the project as meshed, as a run's `mesh.json` records it.
    */
   mesh_input_hash?: string | null;
   /**
@@ -3634,8 +3633,9 @@ export interface RepairReport {
    */
   duplicate_faces: number;
   /**
-   * The repaired mesh written beside the original (OBJ, metres, Z up), never over it; `None`
-   * when nothing changed.
+   * The repaired mesh written as a new file (OBJ, metres, Z up), never over another: beside
+   * [`Self::original`], or beside the project file when that is `None`; `None` when nothing
+   * changed.
    */
   file?: string | null;
   /**
