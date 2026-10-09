@@ -303,6 +303,7 @@ fn surfaces_zone(p: &Project, groups: Vec<GroupId>) -> FittingZone {
         mean_free_path_m: vec![F64::new(1.0); n],
         diffusion_law: vec![DiffusionLaw::Uniform; n],
         solver_id: None,
+        display: None,
     }
 }
 

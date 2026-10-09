@@ -419,7 +419,22 @@ fn source(rng: &mut Rng, p: &Project) -> Source {
         delay_s: rng.f64(0.0, 1.0),
         group: None,
         solver_id: None,
+        display: marker_display(rng),
     }
+}
+
+/// G50: no display (the view's defaults) or one with a colour, the name hidden, or both.
+fn marker_display(rng: &mut Rng) -> Option<MarkerDisplay> {
+    rng.chance(3).then(|| MarkerDisplay {
+        color: rng.chance(2).then(|| {
+            Rgb(
+                rng.below(256) as u8,
+                rng.below(256) as u8,
+                rng.below(256) as u8,
+            )
+        }),
+        show_name: rng.chance(2).then(|| rng.chance(2)),
+    })
 }
 
 fn point_receiver(rng: &mut Rng, p: &Project) -> PointReceiver {
@@ -432,6 +447,7 @@ fn point_receiver(rng: &mut Rng, p: &Project) -> PointReceiver {
         background_noise: rng.chance(2).then(|| spectrum(rng, n)),
         solver_id: None,
         group: rng.chance(3).then(|| rng.string()),
+        display: marker_display(rng),
     }
 }
 
@@ -502,6 +518,7 @@ fn fitting_zone(rng: &mut Rng, p: &Project) -> FittingZone {
         mean_free_path_m: values(rng, km, 0.1, 10.0),
         diffusion_law: (0..kl).map(|_| DiffusionLaw::ALL[rng.below(3)]).collect(),
         solver_id: None,
+        display: marker_display(rng),
     }
 }
 
@@ -1433,6 +1450,7 @@ fn every_kind_project() -> Project {
         mean_free_path_m: vec![F64::new(2.0); n],
         diffusion_law: vec![DiffusionLaw::LambertReflection; n],
         solver_id: None,
+        display: None,
     });
     p.check_integrity().unwrap();
     p
@@ -1691,6 +1709,7 @@ fn cube_project() -> Project {
             delay_s: F64::ZERO,
             group: None,
             solver_id: None,
+            display: None,
         }],
         point_receivers: vec![PointReceiver {
             id: PointReceiverId::from_u128(id(0x400)),
@@ -1700,6 +1719,7 @@ fn cube_project() -> Project {
             background_noise: None,
             solver_id: None,
             group: None,
+            display: None,
         }],
         surface_receivers: Vec::new(),
         fitting_zones: Vec::new(),

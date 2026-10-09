@@ -220,6 +220,7 @@ fn teaching_room() -> Project {
         delay_s: F64::ZERO,
         group: None,
         solver_id: None,
+        display: None,
     }];
     p.point_receivers = [
         ("R1", [5.0, 2.0, 1.2]),
@@ -236,6 +237,7 @@ fn teaching_room() -> Project {
         background_noise: None,
         solver_id: None,
         group: None,
+        display: None,
     })
     .collect();
     p.check_integrity()

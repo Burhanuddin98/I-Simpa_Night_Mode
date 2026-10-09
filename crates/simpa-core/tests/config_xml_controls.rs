@@ -892,7 +892,12 @@ fn a_material_colour_never_reaches_the_solver_input() {
         let mut p = original.clone();
         for (i, m) in original.materials.iter().enumerate() {
             let mut item = serde_json::to_value(m).unwrap();
-            let color = format!("#{:02x}{:02x}{:02x}", 255 - (i * 37 % 256), (i * 91) % 256, 17);
+            let color = format!(
+                "#{:02x}{:02x}{:02x}",
+                255 - (i * 37 % 256),
+                (i * 91) % 256,
+                17
+            );
             assert_ne!(item["color"], Value::from(color.clone()), "{name}");
             item["color"] = Value::from(color);
             replace_op("replace_material", "material", item)
@@ -938,13 +943,20 @@ fn a_receiver_group_never_reaches_the_solver_input() {
         let mut p = original.clone();
         for (i, r) in original.point_receivers.iter().enumerate() {
             let mut item = serde_json::to_value(r).unwrap();
-            item["group"] = Value::from(if i % 2 == 0 { "Stalls / Front" } else { "Balcony" });
+            item["group"] = Value::from(if i % 2 == 0 {
+                "Stalls / Front"
+            } else {
+                "Balcony"
+            });
             replace_op("replace_point_receiver", "receiver", item)
                 .apply(&mut p)
                 .unwrap();
             checked += 1;
         }
-        assert!(p.point_receivers.iter().all(|r| r.group.is_some()), "{name}");
+        assert!(
+            p.point_receivers.iter().all(|r| r.group.is_some()),
+            "{name}"
+        );
         assert_eq!(
             both_configs(&p),
             configs,
@@ -965,4 +977,69 @@ fn a_receiver_group_never_reaches_the_solver_input() {
     }
     assert!(checked >= 10, "{checked}");
     println!("{checked} receivers grouped, solver input unchanged");
+}
+
+// ---- G50: a marker's colour and its name shown or not are the project's own -----------------------
+//
+// The Sources step and the Fitting zones section send the element back whole with its `display`
+// set (`replace_source`, `replace_point_receiver`, `replace_fitting_zone`). Upstream's render
+// properties reach no solver, and neither does this: every source, receiver and zone of every
+// fixture coloured and its name hidden, both solvers' config.xml and TetGen's input are
+// byte-identical; set back to the defaults, the project is the one it was.
+
+#[test]
+fn a_marker_display_never_reaches_the_solver_input() {
+    let display = serde_json::json!({ "color": "#3fa7d6", "show_name": false });
+    let mut checked = 0;
+    for (name, original) in fixtures() {
+        let configs = both_configs(&original);
+        let mesh = mesh_input(&original);
+        let mut p = original.clone();
+        let mut items: Vec<(&str, &str, Value)> = Vec::new();
+        for s in &original.sources {
+            items.push(("replace_source", "source", serde_json::to_value(s).unwrap()));
+        }
+        for r in &original.point_receivers {
+            items.push((
+                "replace_point_receiver",
+                "receiver",
+                serde_json::to_value(r).unwrap(),
+            ));
+        }
+        for z in &original.fitting_zones {
+            items.push((
+                "replace_fitting_zone",
+                "zone",
+                serde_json::to_value(z).unwrap(),
+            ));
+        }
+        for (op, field, item) in &items {
+            let mut changed = item.clone();
+            changed["display"] = display.clone();
+            replace_op(op, field, changed).apply(&mut p).unwrap();
+            checked += 1;
+        }
+        assert!(
+            p.sources.iter().all(|s| s.display.is_some())
+                && p.point_receivers.iter().all(|r| r.display.is_some())
+                && p.fitting_zones.iter().all(|z| z.display.is_some()),
+            "{name}"
+        );
+        assert_eq!(
+            both_configs(&p),
+            configs,
+            "{name}: config.xml is byte-identical"
+        );
+        assert_eq!(
+            mesh_input(&p),
+            mesh,
+            "{name}: TetGen's input is byte-identical"
+        );
+        for (op, field, item) in items {
+            replace_op(op, field, item).apply(&mut p).unwrap();
+        }
+        assert_eq!(p, original, "{name}: every display set back");
+    }
+    assert!(checked >= 20, "{checked}");
+    println!("{checked} markers coloured and named off, solver input unchanged");
 }

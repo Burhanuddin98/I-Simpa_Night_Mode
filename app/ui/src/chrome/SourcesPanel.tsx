@@ -19,6 +19,9 @@
 // M37: a point receiver's group the same way (`data-field="receiver.group"`, `replace_point_receiver`),
 // so receiver groups are made and changed here, not only kept from a `.proj` import; the Receivers list
 // shows it beside the name (`[data-receiver-group]`). It reaches no solver either.
+//
+// G50: a source's or a receiver's Display, its marker's colour and Show name (MarkerDisplayFields.tsx),
+// sent back whole (`replace_source`, `replace_point_receiver`); display only.
 import { useEffect, useRef, useState, type Ref } from 'react';
 import * as actions from '../actions';
 import type { PointReceiver, SceneState, Source, UiIssue } from '../bindings/ipc';
@@ -27,6 +30,7 @@ import { NOT_A_NUMBER, parseStrictDecimal } from '../numbers';
 import { moveReceiver, moveSource, rename, replaceReceiver, replaceSource, type Vec3 } from '../ops';
 import { refusalStore, sceneStore, selectionStore, toolStore, useStore } from '../store';
 import { EmissionEditor } from './EmissionEditor';
+import { MarkerDisplayFields } from './MarkerDisplayFields';
 import { PlanesSection } from './PlanesSection';
 import { IssueTag, SourceSwitch, toggleRefusals } from './ScenePanel';
 import {
@@ -358,6 +362,9 @@ function PointEditor({ scene, kind, point }: { scene: SceneState; kind: Kind; po
           </div>
         )}
       </div>
+
+      {source && <MarkerDisplayFields kind="source" element={source} send={(next) => actions.apply(replaceSource(next), keyOf('display'))} />}
+      {receiver && <MarkerDisplayFields kind="receiver" element={receiver} send={(next) => actions.apply(replaceReceiver(next), keyOf('display'))} />}
 
       {receiver && <OrientationSection scene={scene} receiver={receiver} />}
 

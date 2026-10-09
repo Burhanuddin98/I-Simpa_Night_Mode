@@ -251,6 +251,7 @@ fn negative_projects() -> Vec<(&'static str, Project)> {
             background_noise: None,
             solver_id: None,
             group: None,
+            display: None,
         });
     });
     add("group_name_duplicate", &|p| {
@@ -304,6 +305,7 @@ fn negative_projects() -> Vec<(&'static str, Project)> {
             mean_free_path_m: f64s(&[2.0, 2.0, 0.0, 2.0, 2.0, 2.0]),
             diffusion_law: vec![DiffusionLaw::Uniform; 6],
             solver_id: None,
+            display: None,
         });
     });
     add("variant_reference_invalid", &|p| {
@@ -449,6 +451,7 @@ fn negative_exports() -> Vec<(&'static str, String, Option<Project>)> {
         mean_free_path_m: [2.0; 6].map(F64::new).to_vec(),
         diffusion_law: vec![DiffusionLaw::Uniform; 6],
         solver_id: None,
+        display: None,
     });
     vec![
         (

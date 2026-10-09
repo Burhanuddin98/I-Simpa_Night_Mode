@@ -118,6 +118,7 @@ pub fn generate(seed: u64) -> Project {
                 .map(|_| DiffusionLaw::ALL[r.below(3) as usize])
                 .collect(),
             solver_id: pinned.then_some(2083),
+            display: None,
         });
     }
 
@@ -161,6 +162,7 @@ pub fn generate(seed: u64) -> Project {
                 },
                 group: (pinned && i > 0).then(|| "Group 1".to_string()),
                 solver_id: pinned.then_some(974 + i as u32),
+                display: None,
             }
         })
         .collect();
@@ -174,6 +176,7 @@ pub fn generate(seed: u64) -> Project {
             background_noise: (r.below(3) == 0).then(|| random_spectrum(&mut r, 0.0, 40.0, n)),
             solver_id: pinned.then_some(155 + i as u32),
             group: None,
+            display: None,
         })
         .collect();
 

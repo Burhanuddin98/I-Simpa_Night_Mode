@@ -6,6 +6,7 @@
 import type { DiffusionLaw, FittingZone } from '../bindings/schema.ts';
 import { parseStrictDecimal } from '../numbers.ts';
 import type { F64 } from '../ops.ts';
+import { markerColor, nameShown } from './markerDisplay.ts';
 import type { Box3, XYZ } from './planes.ts';
 
 /** Upstream's new zone: absorption 0, mean free path 1 m, uniform diffusion in every band (e_gammeabsorption.cpp:109-113). */
@@ -99,8 +100,8 @@ export function parseZoneValue(text: string, quantity: 'absorption' | 'mean_free
  * The 12 edges of every enabled box zone, as segment end points (x, y, z, x, y, z per edge), for
  * the 3D view; a zone of surfaces is drawn by its own faces, and a disabled zone not at all.
  */
-export function zoneEdges(zones: readonly FittingZone[]): { name: string; min: XYZ; max: XYZ; segments: number[] }[] {
-  const out: { name: string; min: XYZ; max: XYZ; segments: number[] }[] = [];
+export function zoneEdges(zones: readonly FittingZone[]): { name: string; min: XYZ; max: XYZ; segments: number[]; color: string; named: boolean }[] {
+  const out: { name: string; min: XYZ; max: XYZ; segments: number[]; color: string; named: boolean }[] = [];
   for (const z of zones) {
     if (!z.enabled || !isBoxZone(z) || ![...z.shape.min, ...z.shape.max].every(finite)) continue;
     const lo = z.shape.min as XYZ;
@@ -110,7 +111,8 @@ export function zoneEdges(zones: readonly FittingZone[]): { name: string; min: X
     for (let i = 0; i < 8; i++) {
       for (const bit of [1, 2, 4]) if (!(i & bit)) segments.push(...p(i), ...p(i | bit));
     }
-    out.push({ name: z.name, min: [...lo] as XYZ, max: [...hi] as XYZ, segments });
+    // G50: its outline in its own colour, and its name over it when Show name is on.
+    out.push({ name: z.name, min: [...lo] as XYZ, max: [...hi] as XYZ, segments, color: markerColor(z, 'zone'), named: nameShown(z, 'zone') });
   }
   return out;
 }

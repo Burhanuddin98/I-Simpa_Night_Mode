@@ -311,6 +311,34 @@ impl JsonSchema for Rgb {
     }
 }
 
+/// How the 3D view draws a source, a point receiver or a fitting zone (parity G50): upstream's render
+/// properties of each (`e_scene_sources_source_rendu.h:46,48`, `e_scene_recepteursp_recepteur_rendu.h:46,48`,
+/// `e_scene_encombrements_encombrement_rendu.h:57,59`, "Color" and "Show name"). Display only: no
+/// solver file carries it.
+///
+/// In JSON: `{"color": "#rrggbb", "show_name": false}`, each key left out at its default: the view's
+/// own colour for the kind, and the name as upstream defaults it (shown beside a source or a
+/// receiver, not beside a fitting zone). The element's `display` is left out when both are defaults
+/// ([`MarkerDisplay::normalized`]), so a project saved before it existed loads and saves unchanged.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MarkerDisplay {
+    /// The marker's colour; `None` draws the view's own for the kind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<Rgb>,
+    /// Upstream's "Show name": the name beside it in the 3D view; `None` is upstream's default for
+    /// the kind (on for sources and receivers, off for fitting zones).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub show_name: Option<bool>,
+}
+
+impl MarkerDisplay {
+    /// `None` when every property is its default, so the element writes no `display` key.
+    pub fn normalized(self) -> Option<MarkerDisplay> {
+        (self != MarkerDisplay::default()).then_some(self)
+    }
+}
+
 /// How a surface reflects the diffuse part of the energy: `type_surface/bfreq@loi`, the solver's
 /// `REFLECTION_LAW` (`lib_interface/coreTypes.h:83-92`). The discriminant is the solver code.
 ///
@@ -567,6 +595,9 @@ pub struct Source {
     #[serde(deserialize_with = "required")]
     #[schemars(with = "Nullable<u32>", range(max = 2_147_483_647))]
     pub solver_id: Option<u32>,
+    /// How the 3D view draws it (parity G50); `None` is the view's default. Display only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display: Option<MarkerDisplay>,
 }
 
 /// A point receiver: `recepteursp/recepteur_ponctuel`.
@@ -599,6 +630,9 @@ pub struct PointReceiver {
     /// loads and saves unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
+    /// How the 3D view draws it (parity G50); `None` is the view's default. Display only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display: Option<MarkerDisplay>,
 }
 
 /// A surface receiver (sound map): `recepteurss/recepteur_surfacique` or
@@ -690,6 +724,10 @@ pub struct FittingZone {
     #[serde(deserialize_with = "required")]
     #[schemars(with = "Nullable<u32>", range(max = 2_147_483_647))]
     pub solver_id: Option<u32>,
+    /// How the 3D view draws it (parity G50): its outline's colour and its name; `None` is the
+    /// view's default. Display only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display: Option<MarkerDisplay>,
 }
 
 /// The volume of a fitting zone. Export marks it as a TetGen region whose attribute is the zone's

@@ -283,6 +283,7 @@ fn merge_refusals_change_nothing() {
             mean_free_path_m: vec![F64::new(1.0); n],
             diffusion_law: vec![DiffusionLaw::Uniform; n],
             solver_id: None,
+            display: None,
         },
     }
     .apply(&mut original)

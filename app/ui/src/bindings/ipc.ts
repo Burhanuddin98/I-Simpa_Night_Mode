@@ -3239,6 +3239,10 @@ export interface PointReceiver {
    */
   background_noise: Spectrum | null;
   /**
+   * How the 3D view draws it (parity G50); `None` is the view's default. Display only.
+   */
+  display?: MarkerDisplay | null;
+  /**
    * The receiver group it sits in, as upstream's GUI groups point receivers (a receiver
    * list's element of type 7, `e_scene_recepteursp.h:66-70`): the groups' names from the
    * outermost, joined by ` / `, as [`Source::group`]. `None` at the top level. It reaches no
@@ -3294,6 +3298,31 @@ export interface Spectrum {
   shape: SpectrumShape;
 }
 /**
+ * How the 3D view draws a source, a point receiver or a fitting zone (parity G50): upstream's render
+ * properties of each (`e_scene_sources_source_rendu.h:46,48`, `e_scene_recepteursp_recepteur_rendu.h:46,48`,
+ * `e_scene_encombrements_encombrement_rendu.h:57,59`, "Color" and "Show name"). Display only: no
+ * solver file carries it.
+ *
+ * In JSON: `{"color": "#rrggbb", "show_name": false}`, each key left out at its default: the view's
+ * own colour for the kind, and the name as upstream defaults it (shown beside a source or a
+ * receiver, not beside a fitting zone). The element's `display` is left out when both are defaults
+ * ([`MarkerDisplay::normalized`]), so a project saved before it existed loads and saves unchanged.
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "MarkerDisplay".
+ */
+export interface MarkerDisplay {
+  /**
+   * The marker's colour; `None` draws the view's own for the kind.
+   */
+  color?: string | null;
+  /**
+   * Upstream's "Show name": the name beside it in the 3D view; `None` is upstream's default for
+   * the kind (on for sources and receivers, off for fitting zones).
+   */
+  show_name?: boolean | null;
+}
+/**
  * A point sound source: `sources/source`.
  *
  * This interface was referenced by `IpcBindings`'s JSON-Schema
@@ -3305,6 +3334,10 @@ export interface Source {
    */
   delay_s: number | string;
   directivity: Directivity;
+  /**
+   * How the 3D view draws it (parity G50); `None` is the view's default. Display only.
+   */
+  display?: MarkerDisplay | null;
   /**
    * A disabled source is left out of config.xml.
    */

@@ -111,6 +111,8 @@ import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import type { ParticleLook } from './rays';
 import { planeCells, roomBox } from '../../chrome/planes';
 import { zoneEdges } from '../../chrome/zones';
+import { DEFAULT_MARKER_COLOR, hasOwnColor, markerColor, nameShown } from '../../chrome/markerDisplay';
+import type { MarkerDisplay } from '../../bindings/schema';
 import { dimensionLines } from './dims';
 
 const { acesFilmicToneMapping, attribute, clamp, Fn, max, screenUV, texture, float, instancedBufferAttribute, materialOpacity, mix, output, positionGeometry, sRGBTransferOETF, uniform, uniformArray, vec3, vec4 } = T;
@@ -261,6 +263,9 @@ const WARN = 0xf2a93b;
 const SELECT = 0xe0202e;
 
 const SOURCE_PX = 64;
+/** G50: the colours the source and receiver sprites are made in (sprites.ts RED, WHITE), which a marker's own colour is tinted from. */
+const SOURCE_SPRITE = DEFAULT_MARKER_COLOR.source;
+const RECEIVER_SPRITE = DEFAULT_MARKER_COLOR.receiver;
 const RECEIVER_PX = 14;
 const HALO_PX = 28;
 /** Markers in the inset are drawn at this fraction of their size. */
@@ -279,6 +284,9 @@ interface Marker {
   name: string;
   p: Vector3;
   label: HTMLDivElement;
+  /** G50: its name written beside it (upstream's Show name), and the colour it is drawn in. */
+  named: boolean;
+  color: string;
 }
 
 type Pick =
@@ -340,30 +348,58 @@ class MarkerSprites {
   readonly sprite: Sprite;
   readonly material: PointsNodeMaterial;
   private positions = new InstancedBufferAttribute(new Float32Array(3 * 16), 3);
+  /** G50: each marker's tint, multiplying the sprite's texels (1, 1, 1 draws the sprite as made). */
+  private tints = new InstancedBufferAttribute(new Float32Array(3 * 16).fill(1), 3);
+  private readonly map: DataTexture;
 
   constructor(pixels: Uint8Array, texSize: number, px: number) {
-    this.material = inSrgb(new PointsNodeMaterial({ size: px, sizeAttenuation: false, map: dataTexture(pixels, texSize), transparent: true, depthWrite: false, alphaTest: 0.01 }));
+    this.map = dataTexture(pixels, texSize);
+    this.material = inSrgb(new PointsNodeMaterial({ size: px, sizeAttenuation: false, map: this.map, transparent: true, depthWrite: false, alphaTest: 0.01 }));
     this.material.alphaToCoverage = false;
-    this.material.positionNode = instancedBufferAttribute(this.positions);
+    this.bind();
     this.sprite = new Sprite(this.material);
     this.sprite.frustumCulled = false;
     this.sprite.count = 0;
     this.sprite.visible = false;
   }
 
-  /** The markers at `xyz` (three numbers each). */
-  set(xyz: number[]): void {
+  private bind(): void {
+    this.material.positionNode = instancedBufferAttribute(this.positions);
+    this.material.colorNode = texture(this.map).mul(vec4(instancedBufferAttribute(this.tints), float(1)));
+  }
+
+  /** The markers at `xyz` (three numbers each), each tinted by `tints` (three linear factors each; none: 1). */
+  set(xyz: number[], tints?: number[]): void {
     const n = xyz.length / 3;
     if (n > this.positions.count) {
-      this.positions = new InstancedBufferAttribute(new Float32Array(3 * Math.max(n, 2 * this.positions.count)), 3);
-      this.material.positionNode = instancedBufferAttribute(this.positions);
+      const size = Math.max(n, 2 * this.positions.count);
+      this.positions = new InstancedBufferAttribute(new Float32Array(3 * size), 3);
+      this.tints = new InstancedBufferAttribute(new Float32Array(3 * size).fill(1), 3);
+      this.bind();
       this.material.needsUpdate = true;
     }
     (this.positions.array as Float32Array).set(xyz);
     this.positions.needsUpdate = true;
+    const t = this.tints.array as Float32Array;
+    t.fill(1);
+    if (tints) t.set(tints.slice(0, t.length));
+    this.tints.needsUpdate = true;
     this.sprite.count = n;
     this.sprite.visible = n > 0;
   }
+}
+
+/**
+ * G50: the tint that turns a sprite drawn in `base` into `color` (both `#rrggbb`), per channel in linear
+ * light, since the sprites' texels are one colour throughout (their alpha makes the shape): 1, 1, 1 when
+ * the colour is the base, so a marker without its own colour draws exactly as before.
+ */
+function tintFor(color: string, base: string): [number, number, number] {
+  if (color.toLowerCase() === base.toLowerCase()) return [1, 1, 1];
+  const c = new Color(color);
+  const b = new Color(base);
+  const ratio = (x: number, y: number) => (y > 1e-6 ? x / y : 1);
+  return [ratio(c.r, b.r), ratio(c.g, b.g), ratio(c.b, b.b)];
 }
 
 /** The surface and edge materials' shared uniforms: corner shading (ao.ts), the build-up (build.ts), the distance fade (fade.ts) and the sources' glow (glow.ts). */
@@ -619,7 +655,9 @@ class ViewportEngine {
   private planeSummary: { name: string; corners: Vec[]; u: number; v: number; gridLines: number }[] = [];
   /** G28: every enabled box fitting zone's 12 edges (zones.ts `zoneEdges`). */
   private readonly zoneOutline: LineSegments2;
-  private zoneSummary: { name: string; min: Vec; max: Vec; edges: number }[] = [];
+  private zoneSummary: { name: string; min: Vec; max: Vec; edges: number; color: string; named: boolean }[] = [];
+  /** G50: the names over the zones whose Show name is on. */
+  private zoneLabels: { p: Vector3; label: HTMLDivElement }[] = [];
   /**
    * The surface and edge materials' shared uniforms: the corner shading's switch (ao.ts), the
    * distance fade (fade.ts, set before each render) and the sources' glow (glow.ts).
@@ -743,7 +781,9 @@ class ViewportEngine {
     this.planeOutline = new LineSegments2(emptyFat(), new FatLineMaterial({ color: SELECT, linewidth: 3.5, opacity: 0.95, depthWrite: false }));
     this.planeGrid = new LineSegments2(emptyFat(), new FatLineMaterial({ color: SELECT, linewidth: 1.5, opacity: 0.45, depthWrite: false }));
     // G28: a fitting zone's box, in the line colour (the planes and the selection are red), dashed by its opacity.
-    this.zoneOutline = new LineSegments2(emptyFat(), new FatLineMaterial({ color: LINE, linewidth: 2.5, opacity: 0.8, depthWrite: false }));
+    // G50: white, times each zone's colour per vertex (the line grey when it has none of its own).
+    this.zoneOutline = new LineSegments2(emptyFat(), new FatLineMaterial({ color: 0xffffff, linewidth: 2.5, opacity: 0.8, depthWrite: false }));
+    (this.zoneOutline.material as FatLineMaterial).vertexColors = true;
     // The ground (ground.ts) writes its colour raw, as its WebGL ShaderMaterial did.
     const groundMaterial = new MeshBasicNodeMaterial({ transparent: true, depthWrite: false, side: DoubleSide });
     groundMaterial.fragmentNode = groundColour(this.groundU);
@@ -996,6 +1036,7 @@ class ViewportEngine {
     this.shared.nmBuildZ.value = NO_CUT;
     if (this.dom) this.dom.labels.replaceChildren();
     this.markers = [];
+    this.zoneLabels = [];
     this.dom = null;
     viewportStore.set({ live: false, drawnRev: null });
   }
@@ -1673,10 +1714,25 @@ class ViewportEngine {
       const left = x + (m.kind === 'source' ? 12 : 10);
       const top = y - 8;
       const size = labelSize(m.label);
-      const visible = v.z > -1 && v.z < 1 && Math.abs(v.x) <= 1.02 && Math.abs(v.y) <= 1.02 && !underPanel(left, top, size.w, size.h, covers);
+      const visible = m.named && v.z > -1 && v.z < 1 && Math.abs(v.x) <= 1.02 && Math.abs(v.y) <= 1.02 && !underPanel(left, top, size.w, size.h, covers);
       m.label.style.display = visible ? '' : 'none';
       if (visible) m.label.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`;
     }
+    // G50: a fitting zone with Show name on has its name over the middle of its top face.
+    for (const z of this.zoneLabels) {
+      v.copy(z.p).project(camera);
+      const x = ((v.x + 1) / 2) * w;
+      const y = ((1 - v.y) / 2) * h;
+      const size = labelSize(z.label);
+      const visible = v.z > -1 && v.z < 1 && Math.abs(v.x) <= 1.02 && Math.abs(v.y) <= 1.02 && !underPanel(x - size.w / 2, y - size.h, size.w, size.h, covers);
+      z.label.style.display = visible ? '' : 'none';
+      if (visible) z.label.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px) translate(-50%, -120%)`;
+    }
+  }
+
+  /** Every DOM label in the view's label layer: the markers', the zones' (G50) and the dimensions'. */
+  private syncLabels(): void {
+    this.dom?.labels.replaceChildren(...this.markers.map((m) => m.label), ...this.zoneLabels.map((z) => z.label), ...this.dimLabels);
   }
 
   /**
@@ -2274,23 +2330,27 @@ class ViewportEngine {
     const labels = this.dom?.labels;
     const sel = selectionStore.get();
     const list: Marker[] = [];
-    const make = (kind: MarkerKind, id: string, name: string, pos: readonly (number | string)[], off: boolean) => {
+    const make = (kind: MarkerKind, el: { id: string; name: string; display?: MarkerDisplay | null }, pos: readonly (number | string)[], off: boolean) => {
       const [x, y, z] = pos;
       if (!finite(x) || !finite(y) || !finite(z)) return;
       const label = document.createElement('div');
-      const selected = (sel.kind === 'source' || sel.kind === 'receiver') && sel.kind === kind && sel.id === id;
-      label.className = `vp-label ${kind}${selected ? ' selected' : ''}${off ? ' off' : ''}`;
-      label.textContent = name;
-      list.push({ kind, id, name, p: new Vector3(x, y, z), label });
+      const selected = (sel.kind === 'source' || sel.kind === 'receiver') && sel.kind === kind && sel.id === el.id;
+      const own = hasOwnColor(el);
+      label.className = `vp-label ${kind}${selected ? ' selected' : ''}${off ? ' off' : ''}${own ? ' own' : ''}`;
+      // G50: a marker of its own colour writes its name in it.
+      if (own) label.style.setProperty('--marker', markerColor(el, kind));
+      label.textContent = el.name;
+      list.push({ kind, id: el.id, name: el.name, p: new Vector3(x, y, z), label, named: nameShown(el, kind), color: markerColor(el, kind) });
     };
-    for (const s of view?.sources ?? []) make('source', s.id, s.name, s.position, !s.enabled);
-    for (const r of view?.point_receivers ?? []) make('receiver', r.id, r.name, r.position, false);
+    for (const s of view?.sources ?? []) make('source', s, s.position, !s.enabled);
+    for (const r of view?.point_receivers ?? []) make('receiver', r, r.position, false);
     this.markers = list;
-    labels?.replaceChildren(...list.map((m) => m.label), ...this.dimLabels);
+    if (labels) this.syncLabels();
 
     const points = (kind: MarkerKind) => {
       const ms = list.filter((m) => m.kind === kind);
-      return { xyz: ms.flatMap((m) => [m.p.x, m.p.y, m.p.z]), ms };
+      const base = kind === 'source' ? SOURCE_SPRITE : RECEIVER_SPRITE;
+      return { xyz: ms.flatMap((m) => [m.p.x, m.p.y, m.p.z]), tints: ms.flatMap((m) => tintFor(m.color, base)), ms };
     };
     const stems = (ms: Marker[]) => {
       const g = emptyGeometry();
@@ -2308,8 +2368,8 @@ class ViewportEngine {
     const src = points('source');
     const rcv = points('receiver');
     for (const o of [this.sourceStems, this.receiverStems]) o.geometry.dispose();
-    this.sourcePoints.set(src.xyz);
-    this.receiverPoints.set(rcv.xyz);
+    this.sourcePoints.set(src.xyz, src.tints);
+    this.receiverPoints.set(rcv.xyz, rcv.tints);
     this.sourceStems.geometry = stems(src.ms);
     this.receiverStems.geometry = stems(rcv.ms);
     const picked = list.find((m) => (sel.kind === 'source' || sel.kind === 'receiver') && m.kind === sel.kind && m.id === sel.id);
@@ -2410,9 +2470,29 @@ class ViewportEngine {
     this.zoneOutline.geometry.dispose();
     const g = emptyFat();
     const all = drawn.flatMap((z) => z.segments);
-    if (all.length > 0) g.setPositions(all);
+    if (all.length > 0) {
+      g.setPositions(all);
+      // G50: each zone's edges in its own colour (linear, times the material's white), the view's grey by default.
+      const colors: number[] = [];
+      for (const z of drawn) {
+        const c = new Color(z.color);
+        for (let k = 0; k < z.segments.length / 3; k++) colors.push(c.r, c.g, c.b);
+      }
+      g.setColors(colors);
+    }
     this.zoneOutline.geometry = g;
-    this.zoneSummary = drawn.map((z) => ({ name: z.name, min: z.min as Vec, max: z.max as Vec, edges: z.segments.length / 6 }));
+    this.zoneSummary = drawn.map((z) => ({ name: z.name, min: z.min as Vec, max: z.max as Vec, edges: z.segments.length / 6, color: z.color, named: z.named }));
+    this.zoneLabels = drawn
+      .filter((z) => z.named)
+      .map((z) => {
+        const label = document.createElement('div');
+        const own = z.color !== DEFAULT_MARKER_COLOR.zone;
+        label.className = `vp-label zone${own ? ' own' : ''}`;
+        if (own) label.style.setProperty('--marker', z.color);
+        label.textContent = z.name;
+        return { p: new Vector3((z.min[0] + z.max[0]) / 2, (z.min[1] + z.max[1]) / 2, z.max[2]), label };
+      });
+    this.syncLabels();
   }
 
   // ---- cameras --------------------------------------------------------------------------

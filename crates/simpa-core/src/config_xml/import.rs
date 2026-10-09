@@ -350,6 +350,7 @@ fn import(xml: &str, mesh: Option<&cbin::Model>) -> Result<Project> {
                     mean_free_path_m,
                     diffusion_law,
                     solver_id: None,
+                    display: None,
                 },
             ));
         }
@@ -754,6 +755,7 @@ fn read_source(
         delay_s: F64::new(real_attr(s, "delay", &what)?),
         group: None,
         solver_id: None,
+        display: None,
     })
 }
 
@@ -790,6 +792,7 @@ fn read_point_receiver(
         background_noise,
         solver_id: None,
         group: None,
+        display: None,
     })
 }
 

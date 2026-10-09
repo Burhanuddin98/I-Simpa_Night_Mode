@@ -1443,3 +1443,38 @@ html[data-resizing] .props {
 .scene-head-add:focus-visible {
   color: var(--red);
 }
+
+/* G50: a marker's Display (MarkerDisplayFields.tsx): the colour picker drawn as a swatch, Show name at 16 px. */
+[data-part='marker-display'] .field-row + .field-row {
+  margin-top: 8px;
+}
+.marker-colour-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+input.marker-colour {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid #34343c;
+  border-radius: 2px;
+  background: none;
+  cursor: pointer;
+}
+input.marker-colour::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+input.marker-colour::-webkit-color-swatch {
+  border: none;
+  border-radius: 1px;
+}
+input.marker-colour:focus-visible {
+  outline: 1px solid var(--red);
+  outline-offset: 1px;
+}
+[data-part='marker-display'] input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}

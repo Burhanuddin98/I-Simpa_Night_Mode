@@ -67,4 +67,8 @@ test('G28: the view draws each enabled box zone as its 12 edges; a disabled zone
     assert.equal(d.filter((x) => x > 0).length, 1);
     assert.equal(Math.max(...d), 1);
   }
+  // G50: the view's own grey and no name by default; a zone's own colour and Show name as set.
+  assert.deepEqual([drawn[0].color, drawn[0].named], ['#ededef', false]);
+  const own = zoneEdges([{ ...box, display: { color: '#33aa55', show_name: true } }]);
+  assert.deepEqual([own[0].color, own[0].named], ['#33aa55', true]);
 });

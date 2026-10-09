@@ -906,6 +906,7 @@ fn import(bytes: &[u8], projet_config: Option<&[u8]>) -> Result<ProjImport> {
             absorption: z.bands.absorption,
             mean_free_path_m: z.bands.mean_free_path_m,
             diffusion_law: z.bands.diffusion_law,
+            display: None,
         });
     }
 
@@ -2455,6 +2456,7 @@ fn read_source(s: Node<'_, '_>, bands: &BandSet, id: SourceId) -> Result<Source>
         group: None,
         solver_id: pin(element_id(s), &what)?,
         name,
+        display: None,
     })
 }
 
@@ -2482,6 +2484,7 @@ fn read_point_receiver(
         solver_id: pin(element_id(r), &what)?,
         group: None,
         name,
+        display: None,
     })
 }
 

@@ -138,6 +138,7 @@ pub fn rich_cube() -> Project {
         delay_s: F64::new(0.01),
         group: None,
         solver_id: None,
+        display: None,
     };
     p.sources.push(src(
         21,
@@ -176,6 +177,7 @@ pub fn rich_cube() -> Project {
         background_noise: Some(Spectrum::new(20.0, SpectrumShape::White)),
         solver_id: None,
         group: None,
+        display: None,
     });
     p.surface_receivers = vec![
         SurfaceReceiver {
@@ -222,6 +224,7 @@ pub fn rich_cube() -> Project {
         mean_free_path_m: vec![F64::new(1.5); n],
         diffusion_law: (0..n).map(|i| DiffusionLaw::ALL[i % 3]).collect(),
         solver_id: None,
+        display: None,
     });
     let mut v = Variant {
         id: VariantId::from_u128(id(61)),

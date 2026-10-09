@@ -260,6 +260,14 @@
 .vp-label.off {
   opacity: 0.5;
 }
+/* G50: a fitting zone's name over its box (Show name), and a marker of its own colour named in it. */
+.vp-label.zone {
+  font-size: 10.5px;
+  color: var(--text-2, var(--text));
+}
+.vp-label.own:not(.selected) {
+  color: var(--marker);
+}
 /* The dimensions overlay's sizes (dims.ts), on a dark plate so they read over the room. */
 .vp-label.dim {
   padding: 2px 5px;

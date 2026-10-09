@@ -242,6 +242,7 @@ fn with_named_box_zone(p: &mut Project, name: &str, k: u128, min: [f64; 3], max:
         mean_free_path_m: vec![F64::new(2.0); n],
         diffusion_law: vec![DiffusionLaw::Uniform; n],
         solver_id: None,
+        display: None,
     });
 }
 
@@ -1215,6 +1216,7 @@ fn a_surfaces_zone_marks_its_internal_facets_on_both_sides() {
         mean_free_path_m: vec![F64::new(2.0); n],
         diffusion_law: vec![DiffusionLaw::Uniform; n],
         solver_id: None,
+        display: None,
     });
     let dir = scratch("surfaces-zone");
     let m = run(&p, &dir);

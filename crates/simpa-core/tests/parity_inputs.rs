@@ -918,6 +918,7 @@ fn a_box_zone_flush_with_a_wall_lies_in_the_walls_plane() {
         mean_free_path_m: vec![F64::new(2.0); n],
         diffusion_law: vec![DiffusionLaw::Uniform; n],
         solver_id: None,
+        display: None,
     });
     let input = simpa_core::mesh::project_input(&project).unwrap();
     let scene = project.geometry.vertices.len();

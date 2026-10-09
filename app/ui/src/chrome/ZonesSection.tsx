@@ -7,6 +7,8 @@
 // is refused here first, in words. A zone of surfaces (only a `.proj` import makes one) shows its
 // surfaces and its seed point, not edited. Each zone has its on/off switch (M43) and a remove
 // button. The 3D view draws every enabled box zone's edges (engine.ts, zones.ts `zoneEdges`).
+// G50: each zone's Display, its outline's colour and Show name (its name over the box in the view, off
+// by default as upstream has it), display only (MarkerDisplayFields.tsx).
 import { useState } from 'react';
 import * as actions from '../actions';
 import type { SceneState, UiIssue } from '../bindings/ipc';
@@ -18,6 +20,7 @@ import { removeFittingZone, rename, replaceFittingZone, setFittingBand } from '.
 import { fittingZonesStore, refusalStore, useStore } from '../store';
 import { roomBox, type Box3 } from './planes';
 import { EnabledRefusals, EnabledSwitch, IssueTag } from './ScenePanel';
+import { MarkerDisplayFields } from './MarkerDisplayFields';
 import { CommitInput, Issues } from './SourcesPanel';
 import { exact } from './sceneModel';
 import { boxProblem, DIFFUSION_LAWS, isBoxZone, parseZoneValue, sameInEveryBand, withBound, withEveryBand, type BoxZone } from './zones';
@@ -122,6 +125,7 @@ function ZoneEditor({ scene, zone, room }: { scene: SceneState; zone: FittingZon
         <CommitInput field="zone.name" label={`${zone.name} name`} className="name-input" value={zone.name} invalid={refusedOf('name').length > 0} commit={commitName} onRevert={() => {}} />
       </label>
       <Issues refused={refusedOf('name')} current={[]} />
+      <MarkerDisplayFields kind="zone" element={zone} send={(next) => actions.apply(replaceFittingZone(next), key('display'))} />
 
       {box ? (
         <div className="fact-grid zone-box" data-input data-part="zone-box">
