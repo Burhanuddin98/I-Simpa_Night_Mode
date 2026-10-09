@@ -56,6 +56,7 @@ $files = @(Get-ChildItem $payload -Recurse -File | Sort-Object FullName)
 $sizeKb = [int][Math]::Ceiling((($files | Measure-Object Length -Sum).Sum) / 1KB)
 
 # --- the explicit lists: one File and one Delete per file, folders removed deepest first and only if empty
+# A '$' in a file or folder name is escaped as NSIS's '$$'; the $INSTDIR prefix is the variable, never escaped.
 $q = { param($s) $s.Replace('$', '$$') }
 $inst = New-Object System.Collections.Generic.List[string]
 $uninst = New-Object System.Collections.Generic.List[string]
@@ -64,15 +65,15 @@ $uninst.Add('!macro PAYLOAD_UNINSTALL')
 $dirs = @{}
 foreach ($g in $files | Group-Object { $_.DirectoryName }) {
   $rel = $g.Name.Substring($payload.Length).TrimStart('\')
-  $target = if ($rel) { "`$INSTDIR\$rel" } else { '$INSTDIR' }
+  $target = '$INSTDIR' + $(if ($rel) { '\' + (& $q $rel) } else { '' })
   if ($rel) { $dirs[$rel] = $true }
-  $inst.Add("  SetOutPath `"$(& $q $target)`"")
+  $inst.Add("  SetOutPath `"$target`"")
   foreach ($f in $g.Group) {
     $inst.Add("  File `"$(& $q $f.FullName)`"")
-    $uninst.Add("  Delete `"$(& $q "$target\$($f.Name)")`"")
+    $uninst.Add("  Delete `"$target\$(& $q $f.Name)`"")
   }
 }
-foreach ($d in $dirs.Keys | Sort-Object { $_.Split('\').Count } -Descending) { $uninst.Add("  RMDir `"$(& $q "`$INSTDIR\$d")`"") }
+foreach ($d in $dirs.Keys | Sort-Object { $_.Split('\').Count } -Descending) { $uninst.Add("  RMDir `"`$INSTDIR\$(& $q $d)`"") }
 $inst.Add('!macroend')
 $uninst.Add('!macroend')
 $nsh = "$build\payload-files.nsh"
