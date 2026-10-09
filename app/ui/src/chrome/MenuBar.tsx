@@ -24,7 +24,7 @@ import { focusSelection, frameModel, hideStore, isolateWhyNot, setRoofOff, setVi
 import { joinBlockers } from '../flow';
 import { boxRoomRequestStore, groupRenameStore, reportStore, runStore, sceneStore, selectedRunStore, selectionStore, solversStatusStore, solverStore, stepStore, useStore, viewportStore } from '../store';
 import { ADD_GROUP_LABEL, DELETE_GROUP_LABEL, MERGE_LABEL, mergePlan, RENAME_GROUP_LABEL, renameTarget } from './groupsModel';
-import { deleteGroup } from './sceneUi';
+import { clipboardStore, copySelected, deleteGroup, pasteCopied } from './sceneUi';
 import { Search } from './icons';
 import { RunButton } from './RunButton';
 import { closingProps, usePresence } from './usePresence';
@@ -49,6 +49,7 @@ export function MenuBar() {
   const solver = useStore(solverStore);
   const selection = useStore(selectionStore);
   const hidden = useStore(hideStore);
+  const copied = useStore(clipboardStore);
   // W9: what the export items say depends on the step, the run and its report, and the view.
   useStore(stepStore);
   useStore(selectedRunStore);
@@ -86,6 +87,7 @@ export function MenuBar() {
       {
         id: 'new-project',
         label: 'New project',
+        keys: 'Ctrl+N',
         run: () => actions.fire(actions.newProject()),
         disabled: running,
         title: running ? RUN_ACTIVE_TITLE : undefined,
@@ -139,6 +141,23 @@ export function MenuBar() {
     Edit: [
       { id: 'undo', label: 'Undo', keys: 'Ctrl+Z', run: () => actions.fire(actions.undo()), disabled: !info?.can_undo },
       { id: 'redo', label: 'Redo', keys: 'Ctrl+Y', run: () => actions.fire(actions.redo()), disabled: !info?.can_redo },
+      // A39: upstream's copy and paste of an element, here a source or a receiver.
+      {
+        id: 'copy',
+        label: 'Copy source or receiver',
+        keys: 'Ctrl+C',
+        run: () => copySelected(),
+        disabled: selection.kind !== 'source' && selection.kind !== 'receiver',
+        title: selection.kind === 'source' || selection.kind === 'receiver' ? 'Copy the picked source or receiver' : 'Pick a source or receiver first',
+      },
+      {
+        id: 'paste',
+        label: copied ? `Paste a copy of ${copied.item.name}` : 'Paste',
+        keys: 'Ctrl+V',
+        run: () => actions.fire(pasteCopied()),
+        disabled: !copied || !scene,
+        title: copied ? 'Add a copy at the same position, named "… copy"' : 'Copy a source or receiver first (Ctrl+C)',
+      },
       {
         id: 'new-group-from-selection',
         label: REGROUP_LABEL,

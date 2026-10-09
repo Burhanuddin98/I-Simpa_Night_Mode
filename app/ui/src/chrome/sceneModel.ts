@@ -379,6 +379,13 @@ export function powerText(globalDb: F64): string {
   return `${exact(globalDb)} dB`;
 }
 
+/** A39: the name a pasted copy of `name` takes: `<name> copy`, then `<name> copy 2`, … the first free. */
+export function copyName(name: string, taken: readonly string[]): string {
+  const used = new Set(taken);
+  if (!used.has(`${name} copy`)) return `${name} copy`;
+  for (let n = 2; ; n++) if (!used.has(`${name} copy ${n}`)) return `${name} copy ${n}`;
+}
+
 /**
  * A surface group's or material's name as the scene list shows it (Burhan 2026-10-06): the import
  * prefix `mat_<room>_` dropped, underscores and camelCase split into words, sentence case

@@ -20,6 +20,7 @@ import { MenuBar } from './chrome/MenuBar';
 import { PropertiesPanel } from './chrome/PropertiesPanel';
 import { SavePrompt } from './chrome/SavePrompt';
 import { ScenePanel } from './chrome/ScenePanel';
+import { clipboardStore, copySelected, pasteCopied } from './chrome/sceneUi';
 import { StatusBar } from './chrome/StatusBar';
 import { StepBar } from './chrome/StepBar';
 import { Dock } from './features/dock/Dock';
@@ -121,8 +122,11 @@ function onContextMenu(e: MouseEvent): void {
   if (!typing(e.target)) e.preventDefault();
 }
 
-/** The named verbs' keys (PLAN.md 7.5, point 3): undo, redo, save, save as, open. The
- * webview's reload keys never reload the page, in a text field or not. */
+/** The named verbs' keys (PLAN.md 7.5, point 3): undo, redo, save, save as, open; A39, upstream's
+ * Ctrl+N (new project) and Ctrl+C / Ctrl+V on a source or receiver (copy, paste a copy). The
+ * webview's reload keys never reload the page, in a text field or not; a text field keeps its own
+ * Ctrl+C and Ctrl+V, and Ctrl+C with no source or receiver picked copies what the page has
+ * selected, as it always did. */
 function onKey(e: KeyboardEvent): void {
   if (isReloadKey(e)) e.preventDefault();
   if (onPlainKey(e)) return;
@@ -134,6 +138,11 @@ function onKey(e: KeyboardEvent): void {
   else if (key === 's' && !e.shiftKey) action = actions.save;
   else if (key === 's' && e.shiftKey) action = () => actions.saveAs();
   else if (key === 'o' && !e.shiftKey) action = actions.openDialog;
+  else if (key === 'n' && !e.shiftKey) action = () => actions.newProject();
+  else if (key === 'c' && !e.shiftKey) {
+    if (copySelected()) e.preventDefault();
+    return;
+  } else if (key === 'v' && !e.shiftKey && clipboardStore.get()) action = pasteCopied;
   if (!action) return;
   e.preventDefault();
   actions.fire(action());

@@ -5,10 +5,11 @@
 type KeyEvent = Pick<KeyboardEvent, 'key' | 'target' | 'ctrlKey' | 'altKey' | 'metaKey' | 'preventDefault'>;
 import * as actions from '../actions';
 import { fieldKey } from '../issues';
-import { removeReceiver, removeSource } from '../ops';
+import type { PointReceiver, Source } from '../bindings/schema';
+import { addReceiver, addSource, removeReceiver, removeSource } from '../ops';
 import { groupRenameStore, log, sceneStore, selectionStore, stepStore, Store } from '../store';
 import { deleteGroupOps, groupDeleteProblem, inUseSentence } from './groupsModel';
-import { displayName } from './sceneModel';
+import { copyName, displayName } from './sceneModel';
 
 /** Bumped by F2 on a selected source or receiver: the Sources panel focuses its name field. */
 export const renameRequestStore = new Store<number>(0);
@@ -51,6 +52,60 @@ export async function removeEntity(kind: 'source' | 'receiver', id: string): Pro
       : await actions.apply(removeReceiver(id), entityKey('point_receiver', id));
   const sel = selectionStore.get();
   if (out.applied && sel.kind === kind && sel.id === id) selectionStore.set({ kind: 'none' });
+}
+
+/** A39: what Ctrl+C copied, a source or a receiver as it was then: an in-app clipboard of elements,
+ * never text (a text field keeps its own Ctrl+C and Ctrl+V). Kept for the session, across projects. */
+export type Copied = { kind: 'source'; item: Source } | { kind: 'receiver'; item: PointReceiver };
+export const clipboardStore = new Store<Copied | null>(null);
+
+/** A39, Ctrl+C: copies the selected source or receiver. False when neither is selected (the key then
+ * does what it does anyway). */
+export function copySelected(): boolean {
+  const sel = selectionStore.get();
+  const view = sceneStore.get()?.view;
+  if (!view || (sel.kind !== 'source' && sel.kind !== 'receiver')) return false;
+  const copied: Copied | null =
+    sel.kind === 'source'
+      ? ((s) => (s ? { kind: 'source', item: s } : null))(view.sources.find((s) => s.id === sel.id))
+      : ((r) => (r ? { kind: 'receiver', item: r } : null))(view.point_receivers.find((r) => r.id === sel.id));
+  if (!copied) return false;
+  clipboardStore.set(copied);
+  log('INFO', `Copied ${copied.kind} ${copied.item.name}: Ctrl+V pastes a copy at the same position`);
+  return true;
+}
+
+/**
+ * A39, Ctrl+V: a copy of what Ctrl+C copied, at the end of its list, with a new id, no solver id
+ * (the core numbers it) and the name `<name> copy`; everything else as copied, its position too.
+ * One checked edit, one undo step, refused like any added source or receiver (outside this room,
+ * say: the Console says why), and the copy is then selected. False when nothing is copied, no
+ * project is open, or the paste was refused.
+ */
+export async function pasteCopied(): Promise<boolean> {
+  const c = clipboardStore.get();
+  const view = sceneStore.get()?.view;
+  if (!c || !view) return false;
+  const id = crypto.randomUUID();
+  const out =
+    c.kind === 'source'
+      ? await actions.apply(
+          addSource(view.sources.length, { ...c.item, id, solver_id: null, name: copyName(c.item.name, view.sources.map((s) => s.name)) }),
+          'source:new:paste',
+        )
+      : await actions.apply(
+          addReceiver(view.point_receivers.length, {
+            ...c.item,
+            id,
+            solver_id: null,
+            name: copyName(c.item.name, view.point_receivers.map((r) => r.name)),
+          }),
+          'point_receiver:new:paste',
+        );
+  if (!out.applied) return false;
+  selectPoint(c.kind, id);
+  log('OK', `Pasted a copy of ${c.kind} ${c.item.name}, at the same position: move it in its properties`);
+  return true;
 }
 
 /** The latest group edit's own problem, `{code, message}`: a rename the UI refused, a delete of a

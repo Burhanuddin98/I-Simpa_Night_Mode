@@ -436,3 +436,13 @@ test('descriptionEdit: unchanged is no op; any other text, empty included, is se
   assert.equal(opTextA31(op), '{"op":"set_description","description":"Measured 2026-10-09.\\nSeats empty."}');
   assert.equal(opTextA31(descriptionEdit('x', '')!), '{"op":"set_description","description":""}');
 });
+
+// A39: the name a pasted source or receiver takes.
+import { copyName } from './sceneModel.ts';
+
+test('copyName: <name> copy, then the first free <name> copy n', () => {
+  assert.equal(copyName('S1', ['S1']), 'S1 copy');
+  assert.equal(copyName('S1', ['S1', 'S1 copy']), 'S1 copy 2');
+  assert.equal(copyName('S1', ['S1', 'S1 copy', 'S1 copy 2', 'S1 copy 4']), 'S1 copy 3');
+  assert.equal(copyName('MP1 copy', ['MP1 copy']), 'MP1 copy copy');
+});
