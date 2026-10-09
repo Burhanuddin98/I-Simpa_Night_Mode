@@ -21,7 +21,7 @@ import { displayName, REGROUP_LABEL, regroupFaces } from '../../chrome/sceneMode
 import { onWindowEntityKey } from '../../chrome/sceneUi';
 import { sceneStore, selectionStore, stepStore, toolStore, useStore, type Tool } from '../../store';
 import { parseStrictDecimal } from '../../numbers';
-import { attachViewport, frameModel, hideStore, presentStore, setIsolate, setPresent, setRoofOff, setTurntable, setView, toggleIsolate, viewportUi, type ViewMode } from './engine';
+import { attachViewport, focusSelection, frameModel, hideStore, isolateWhyNot, presentStore, setIsolate, setPresent, setRoofOff, setTurntable, setView, toggleIsolate, viewportUi, type ViewMode } from './engine';
 import { groupList } from './hide';
 import { VIEWPORT_LIBRARIES } from './libraries';
 import { liveStore, setLiveLook } from './liveView';
@@ -76,6 +76,11 @@ function onHideKey(e: KeyboardEvent): void {
   if (t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return;
   if (e.key === 'r' || e.key === 'R') setRoofOff(!hideStore.get().roof);
   else if (e.key === 'i' || e.key === 'I') toggleIsolate();
+}
+
+/** The view's right-click menu opens with something picked (Focus, Isolate; New group and Move to group on faces) or while isolated (Show everything). */
+function menuOffered(kind: string, isolated: boolean): boolean {
+  return kind !== 'none' || isolated;
 }
 
 /** Frame model: the model's box inside four corner marks, in the toolbar's line style. */
@@ -199,10 +204,10 @@ export function Viewport() {
     window.addEventListener('keydown', onWindowEntityKey);
     return () => window.removeEventListener('keydown', onWindowEntityKey);
   }, []);
-  // The picked faces went away (a new mesh, another pick): so does the menu.
+  // What the menu acts on went away (a new mesh, nothing picked, Isolate ended): so does the menu.
   useEffect(() => {
-    if (!regroupFaces(selection)) setMenu(null);
-  }, [selection]);
+    if (!menuOffered(selection.kind, hidden.isolate !== null)) setMenu(null);
+  }, [selection, hidden.isolate]);
 
   useEffect(() => {
     const [root, host, inset, labels, gizmo] = [rootRef.current, hostRef.current, insetRef.current, labelsRef.current, gizmoRef.current];
@@ -230,7 +235,7 @@ export function Viewport() {
         rightDown.current = null;
         const still = !down || Math.hypot(e.clientX - down.x, e.clientY - down.y) <= 4;
         const box = rootRef.current?.getBoundingClientRect();
-        if (!still || !box || (e.target as HTMLElement).tagName !== 'CANVAS' || !regroupFaces(selectionStore.get())) return;
+        if (!still || !box || (e.target as HTMLElement).tagName !== 'CANVAS' || !menuOffered(selectionStore.get().kind, hideStore.get().isolate !== null)) return;
         setMenu({ x: e.clientX - box.left, y: e.clientY - box.top });
       }}
     >
@@ -245,19 +250,50 @@ export function Viewport() {
           {...closingProps(menuGoing)}
           onMouseDown={(e) => e.stopPropagation()}
         >
+          {/* Focus and Isolate, as View › Focus on selection (F) and View style › Hide › Isolate (I). */}
           <button
             role="menuitem"
-            data-menu-item="new-group-from-selection"
+            data-menu-item="focus"
+            title="Frame what is picked from where you look now; with nothing picked, the model"
             onClick={() => {
               setMenu(null);
-              actions.fire(actions.regroupSelection());
+              focusSelection();
             }}
           >
-            <span className="grow">{REGROUP_LABEL}</span>
-            <span className="menu-keys">
-              {regroupFaces(selection)?.length ?? 0} {regroupFaces(selection)?.length === 1 ? 'face' : 'faces'}
-            </span>
+            <span className="grow">Focus on selection</span>
+            <span className="menu-keys">F</span>
           </button>
+          <button
+            role="menuitem"
+            data-menu-item="isolate"
+            disabled={!hidden.isolate && isolateWhyNot() !== null}
+            title={hidden.isolate ? 'Show the faces Isolate hid' : (isolateWhyNot() ?? 'Show only the picked faces or surface groups')}
+            onClick={() => {
+              setMenu(null);
+              toggleIsolate();
+            }}
+          >
+            <span className="grow">{hidden.isolate ? 'Show everything' : 'Isolate selection'}</span>
+            <span className="menu-keys">I</span>
+          </button>
+          {regroupFaces(selection) && (
+            <>
+              <div className="vp-menu-sep" role="separator" />
+              <button
+                role="menuitem"
+                data-menu-item="new-group-from-selection"
+                onClick={() => {
+                  setMenu(null);
+                  actions.fire(actions.regroupSelection());
+                }}
+              >
+                <span className="grow">{REGROUP_LABEL}</span>
+                <span className="menu-keys">
+                  {regroupFaces(selection)?.length ?? 0} {regroupFaces(selection)?.length === 1 ? 'face' : 'faces'}
+                </span>
+              </button>
+            </>
+          )}
           {/* C1: Move selection to group, one entry per group that would change. */}
           {targets.length > 0 && (
             <div className="vp-menu-head" role="presentation">

@@ -747,3 +747,10 @@ html.present .viewport > :not(.viewport-host) {
 .vp-chip.place-offset input[aria-invalid='true'] {
   border-color: var(--red-hi);
 }
+
+/* Focus and Isolate above, the face actions below. */
+.vp-menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--edge);
+}
