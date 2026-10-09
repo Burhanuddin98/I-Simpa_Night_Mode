@@ -72,6 +72,8 @@ import './acoustics.css';
 import { CopyTable } from './CopyTable';
 import { AxesEditor } from './AxesEditor';
 import { type HandAxes, stepTicks } from './chartAxes';
+import { exportChart } from '../export/exportActions';
+import type { ChartHeading } from '../viewport/snapshot';
 import { N, S } from './Marked';
 import { auralHookOpen, auralHookSave, auralHookView, AuralWindow } from './AuralWindow';
 import { responseHookView, ResponseWindow } from './ResponseWindow';
@@ -287,6 +289,28 @@ function Chart({ opts: own, data, part, hidden = [], hand }: { opts: Omit<uPlot.
   return <div className="ac-chart" data-part={part} ref={box} title={ZOOM_HINT} />;
 }
 
+/** R63: each chart's heading for its image, by its `data-part`, as the pane last drew it, and its
+ * name in words (the file's and the Console's). */
+const chartHeadings = new Map<string, () => ChartHeading>();
+const CHART_NAMES: Record<string, string> = { 'rt-chart': 'reverberation time', 'spectrum-chart': 'spectrum', 'decay-chart': 'decay' };
+
+/** R63: writes chart `part` (on the page now) as a PNG to `path`, or where the dialog says. */
+function saveChart(part: string, path?: string) {
+  const canvas = document.querySelector<HTMLCanvasElement>(`[data-acoustics] [data-part="${part}"] canvas`);
+  const heading = chartHeadings.get(part);
+  if (!canvas || !heading) return Promise.reject({ code: 'EXPORT_NOTHING', message: `no ${CHART_NAMES[part] ?? part} chart is shown` });
+  return exportChart(canvas, heading(), CHART_NAMES[part] ?? part, path);
+}
+
+/** R63: "Image…" on a chart's card: the chart as a PNG, saved where the person picks. */
+function ChartImage({ part }: { part: string }) {
+  return (
+    <button type="button" className="small-button ac-copy" data-action="chart-image" data-chart={part} title="Save this chart as a PNG image, as it is drawn now (zoom, axes and the series shown)" onClick={() => actions.fire(saveChart(part))}>
+      Image…
+    </button>
+  );
+}
+
 /** R72: the charts whose axes can be set by hand. */
 type ChartKey = 'rt' | 'spectrum' | 'decay';
 
@@ -471,6 +495,7 @@ let paneView: HookView | null = null;
  */
 export function useAcousticsDock(): void {
   useEffect(() => registerHook('acousticsView', () => paneView), []);
+  useEffect(() => registerHook('chartImage', ((part: string, path: string) => saveChart(part, path)) as never), []);
   useEffect(() => registerHook('responseView', () => responseHookView()), []);
   useEffect(() => registerHook('auralView', () => auralHookView()), []);
   useEffect(() => registerHook('auralSave', ((what: 'ir' | 'aural', path: string) => auralHookSave(what, path)) as never), []);
@@ -619,6 +644,25 @@ export function AcousticsPane() {
   const label = row ? `Run ${row.number}${row.label ? ` · ${row.label}` : ''} · ${runVariantName(row.variant, variants)}` : selected;
   // EDT's row 37 marks, T30's row 46 mark, STI's MQ3 note: each only while its parameter is shown.
   const marks = paramMarks(report);
+  // R63: what each chart's image says above it: the chart, the run, the receiver, and the key shown.
+  const project = scene?.info.name ?? null;
+  const srcWords = srcNames.length ? (src === null ? 'all sources summed' : src) : null;
+  const top = (chart: string) => [project, label, chart].filter((x): x is string => !!x).join(' · ');
+  const subOf = (...parts: (string | null | undefined)[]) => parts.filter((x): x is string => !!x).join(' · ');
+  chartHeadings.set('rt-chart', () => ({
+    title: top('Reverberation time against DIN 18041'),
+    sub: subOf(names[r], srcWords, `DIN 18041 ${group}`),
+    keys: [
+      ...series.filter((x) => !rtOff.has(x.param)).map((x) => ({ label: x.label, colour: SERIES_COLOURS[x.param] ?? '#a1a1aa' })),
+      ...(rtOff.has(TARGET_KEY) ? [] : [{ label: 'target, shaded a fifth either side', colour: css('--text-2', '#a1a1aa'), dash: true }]),
+    ],
+  }));
+  chartHeadings.set('spectrum-chart', () => ({ title: top('Spectrum'), sub: subOf(names[r], srcWords), keys: spectrum.map((x) => ({ label: x.label, colour: SPECTRUM_COLOUR })) }));
+  chartHeadings.set('decay-chart', () => ({
+    title: top('Decay'),
+    sub: subOf(names[r], b === 'sum' ? 'bands summed' : bandText(report.bands_hz[b]), srcWords),
+    keys: [{ label: 'Decay', colour: '#e0202e' }],
+  }));
 
   return (
     <div data-acoustics data-acoustics-state="ready" data-run={selected} className="ac">
@@ -669,6 +713,7 @@ export function AcousticsPane() {
             </label>
             {series.length ? <CopyTable part="rt-table" what="reverberation time" /> : null}
             {series.length ? axesButton('rt') : null}
+            {series.length ? <ChartImage part="rt-chart" /> : null}
           </div>
           <div className="ac-legend">
             {series.map((s) => (
@@ -808,6 +853,7 @@ export function AcousticsPane() {
               </select>
             </label>
             {spectrumShown ? axesButton('spectrum') : null}
+            {spectrumShown ? <ChartImage part="spectrum-chart" /> : null}
           </div>
           {spectrumShown ? (
             <>
@@ -893,6 +939,7 @@ export function AcousticsPane() {
               </button>
             ) : null}
             {curve ? axesButton('decay') : null}
+            {curve ? <ChartImage part="decay-chart" /> : null}
             <span className="ac-sub">
               {names[r] !== undefined ? <S s={{ path: `${report.solver === 'tcr' ? 'tcr' : 'spps'}.point_receivers.${r}.label`, text: names[r] }} /> : null}
               {' · '}

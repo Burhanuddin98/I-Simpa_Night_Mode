@@ -186,3 +186,10 @@ export function exportName(project: string | null, runNumber: number | null, kin
   if (!project || runNumber === null) return `${what}.${kind}`;
   return `${safe(project)} - run ${runNumber} - ${what}.${kind}`;
 }
+
+/** R63: a chart image's file name: the project and run, then the chart (`reverberation time`). */
+export function chartFileName(project: string | null, runNumber: number | null, chart: string): string {
+  const safe = (s: string) => s.replace(/[\\/:*?"<>|]/g, '_');
+  if (!project || runNumber === null) return `${safe(chart)} chart.png`;
+  return `${safe(project)} - run ${runNumber} - ${safe(chart)} chart.png`;
+}

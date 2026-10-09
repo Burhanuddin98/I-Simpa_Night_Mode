@@ -5,7 +5,7 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import type { Report, ReportView } from '../../bindings/ipc';
 import { at, PARAM_SPECS, T30_MARK } from '../acoustics/model.ts';
-import { csvField, exportName, EXPORT_KINDS, exportRefusal, paramRows, paramsCsv, paramsJson, parseCsv } from './exportModel.ts';
+import { chartFileName, csvField, exportName, EXPORT_KINDS, exportRefusal, paramRows, paramsCsv, paramsJson, parseCsv } from './exportModel.ts';
 
 const value = (v: number, status = 'ok', d = 0.01) => ({ value: v, mc_sd: d, status, lo: v - d, hi: v + d });
 const refused = (why: string) => ({ not_evaluable: { code: 'params_not_evaluable', message: 'm', error: { kind: 'not_evaluable', why: { why } } } });
@@ -155,4 +155,10 @@ test('names and kinds: the extension the core will check, a name a person can re
   assert.equal(exportName('Outputs box', 3, 'csv'), 'Outputs box - run 3 - parameters.csv');
   assert.equal(exportName('a/b:c', 1, 'png'), 'a_b_c - run 1 - view.png');
   assert.equal(exportName(null, null, 'json'), 'parameters.json');
+});
+
+test('R63: a chart image is named by the project, the run and the chart, safe for Windows', () => {
+  assert.equal(chartFileName('Outputs box', 3, 'reverberation time'), 'Outputs box - run 3 - reverberation time chart.png');
+  assert.equal(chartFileName('a/b:c', 1, 'decay'), 'a_b_c - run 1 - decay chart.png');
+  assert.equal(chartFileName(null, null, 'spectrum'), 'spectrum chart.png');
 });

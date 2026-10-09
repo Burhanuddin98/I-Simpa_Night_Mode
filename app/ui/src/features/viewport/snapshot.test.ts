@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { bgraToRgba, composite, flipRows, hexRgb, STRIP_PX, stripLines, unpadRows } from './snapshot.ts';
+import { bgraToRgba, composite, flipRows, hexRgb, over, STRIP_PX, stripLines, unpadRows } from './snapshot.ts';
 
 test('the frame over the window background: a premultiplied pixel plus the background behind what it leaves', () => {
   const bg: [number, number, number] = [9, 9, 11];
@@ -57,4 +57,17 @@ test("WebGPU's padded copy rows packed tight, and its BGRA turned RGBA", () => {
   assert.throws(() => unpadRows(new Uint8Array(8), 3, 1, 8), RangeError);
   assert.throws(() => unpadRows(new Uint8Array(20), 3, 2, 16), RangeError);
   assert.deepEqual([...bgraToRgba(new Uint8Array([10, 20, 30, 40, 1, 2, 3, 4]))], [30, 20, 10, 40, 3, 2, 1, 4]);
+});
+
+test('R63: a chart canvas (straight alpha) over the panel background: c·a + bg·(1 − a), opaque', () => {
+  const bg: [number, number, number] = [9, 9, 11];
+  // Opaque red, nothing, white at half alpha (straight: the colour is not scaled by its alpha).
+  const px = new Uint8ClampedArray([224, 32, 46, 255, 0, 0, 0, 0, 255, 255, 255, 128]);
+  const out = over(px, bg);
+  assert.deepEqual([...out.subarray(0, 4)], [224, 32, 46, 255]);
+  assert.deepEqual([...out.subarray(4, 8)], [9, 9, 11, 255], 'an empty pixel is the background');
+  const k = (v: number, b: number) => Math.round((v * 128 + b * 127) / 255);
+  assert.deepEqual([...out.subarray(8, 12)], [k(255, 9), k(255, 9), k(255, 11), 255]);
+  // say NO: composite (premultiplied) would add the background to a full white and clip it.
+  assert.notDeepEqual([...composite(px, bg).subarray(8, 12)], [...out.subarray(8, 12)]);
 });

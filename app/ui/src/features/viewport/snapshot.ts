@@ -8,6 +8,11 @@
 // the colour bar and the three labels the screen's legend shows, the project, run and step time.
 // The strip draws only those texts, each one the on-screen legend's, so the PNG holds no number the
 // screen's results regions do not (gate (a)); `lastStrip` keeps what was drawn for the e2e.
+//
+// R63 (parity): a chart of the Acoustics tab as a PNG, `encodeChartPng`, here for the same reason:
+// the chart's own canvas read back (its axes and labels as drawn, the series the legend shows),
+// over the panel's background (`over`), with a heading above it naming the chart, the run and the
+// key. The heading holds only words and the chart's own key: no number is added to the chart.
 
 /** The strip's height below the frame, px. */
 export const STRIP_PX = 64;
@@ -103,6 +108,70 @@ export async function encodeViewPng(frame: { width: number; height: number; rgba
     g.fillText(strip.hi, barX + 200, y0 + 26);
     g.textAlign = 'left';
     if (strip.note) g.fillText(strip.note, 16, y0 + 44);
+  }
+  const blob = await new Promise<Blob | null>((res) => c.toBlob(res, 'image/png'));
+  if (!blob) throw new Error('the image could not be encoded as PNG');
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
+/** Straight (not premultiplied) RGBA, a 2D canvas's pixels, over an opaque background: each
+ * channel `c·a + bg·(1 − a)`, then opaque. */
+export function over(px: Uint8ClampedArray, bg: [number, number, number]): Uint8ClampedArray {
+  const out = new Uint8ClampedArray(px.length);
+  for (let i = 0; i < px.length; i += 4) {
+    const a = px[i + 3];
+    for (let c = 0; c < 3; c++) out[i + c] = Math.round((px[i + c] * a + bg[c] * (255 - a)) / 255);
+    out[i + 3] = 255;
+  }
+  return out;
+}
+
+/** R63: what a chart image says above the chart: what it is and of what run, and its key. */
+export interface ChartHeading {
+  /** `project · Run n · Reverberation time`. */
+  title: string;
+  /** `R1 · all sources summed`. */
+  sub: string;
+  keys: { label: string; colour: string; dash?: boolean }[];
+}
+
+/** The heading's height above the chart, in the chart's pixels per CSS pixel. */
+export const CHART_HEADING_PX = 52;
+
+/**
+ * R63: a chart (its canvas's pixels, top first, already over the background) with its heading
+ * above it, as PNG bytes. The same unattached encoder canvas as the view's image (one canvas on
+ * the page, M10 rule 3): it is never put in the document.
+ */
+export async function encodeChartPng(chart: { width: number; height: number; rgba: Uint8ClampedArray }, heading: ChartHeading, scale: number, colours: { bg: string; text: string; dim: string; font: string }): Promise<Uint8Array> {
+  const k = Math.max(1, scale);
+  const extra = Math.round(CHART_HEADING_PX * k);
+  const c = document.createElement('canvas');
+  c.width = chart.width;
+  c.height = chart.height + extra;
+  const g = c.getContext('2d');
+  if (!g) throw new Error('no 2D canvas to encode the image');
+  g.fillStyle = colours.bg;
+  g.fillRect(0, 0, c.width, extra);
+  g.putImageData(new ImageData(new Uint8ClampedArray(chart.rgba), chart.width, chart.height), 0, extra);
+  g.textBaseline = 'top';
+  g.fillStyle = colours.text;
+  g.font = `${Math.round(13 * k)}px ${colours.font}`;
+  g.fillText(heading.title, Math.round(12 * k), Math.round(8 * k));
+  g.fillStyle = colours.dim;
+  g.font = `${Math.round(11.5 * k)}px ${colours.font}`;
+  g.fillText(heading.sub, Math.round(12 * k), Math.round(28 * k));
+  // The key, right of the sub line: a swatch and its label each.
+  let x = Math.round(12 * k) + g.measureText(heading.sub).width + Math.round(24 * k);
+  for (const key of heading.keys) {
+    g.fillStyle = key.colour;
+    if (key.dash) {
+      for (let d = 0; d < 14; d += 6) g.fillRect(x + Math.round(d * k), Math.round(34 * k), Math.round(3 * k), Math.max(1, Math.round(2 * k)));
+    } else g.fillRect(x, Math.round(33 * k), Math.round(14 * k), Math.max(2, Math.round(3 * k)));
+    x += Math.round(20 * k);
+    g.fillStyle = colours.dim;
+    g.fillText(key.label, x, Math.round(28 * k));
+    x += g.measureText(key.label).width + Math.round(16 * k);
   }
   const blob = await new Promise<Blob | null>((res) => c.toBlob(res, 'image/png'));
   if (!blob) throw new Error('the image could not be encoded as PNG');

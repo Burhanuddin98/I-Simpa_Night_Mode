@@ -2,6 +2,7 @@
 // File › Export view as PNG..., Export parameters as CSV... and as JSON.... Each asks the save
 // dialog for a path (the e2e passes one, as its save-as hook does) and hands the bytes to the core's
 // `export_write` through actions.ts, which checks the path's extension and the bytes' kind.
+// R63: a chart of the Acoustics tab as a PNG ("Image…" on the chart's card), `exportChart`.
 //
 // The parameters are exportModel.ts's rows of the report the Acoustics tab shows; the image is the
 // frame as drawn, with the shown map's legend in a strip below it (snapshot.ts).
@@ -11,8 +12,8 @@ import { animatorStore } from '../viewport/animator';
 import { frameRgba } from '../viewport/engine';
 import { stepTime } from '../viewport/mapView';
 import { resultsViewStore } from '../viewport/resultsView';
-import { exportName, exportRefusal, paramRows, paramsCsv, paramsJson } from './exportModel';
-import { composite, encodeViewPng, hexRgb, stripLines, type StripLines } from '../viewport/snapshot';
+import { chartFileName, exportName, exportRefusal, paramRows, paramsCsv, paramsJson } from './exportModel';
+import { type ChartHeading, composite, encodeChartPng, encodeViewPng, hexRgb, over, stripLines, type StripLines } from '../viewport/snapshot';
 
 export interface ExportDone {
   kind: 'csv' | 'json' | 'png';
@@ -72,6 +73,34 @@ export async function exportParams(kind: 'csv' | 'json', path?: string): Promise
 }
 
 const cssVar = (name: string, fallback: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+
+/**
+ * R63: writes a chart of the Acoustics tab as a PNG to `path`, or where the dialog says; null when
+ * cancelled. The chart is its own canvas as drawn (its axes, labels and the series the legend
+ * shows) over the window's background, under `heading`; it is noted beside the run it shows.
+ */
+export async function exportChart(canvas: HTMLCanvasElement, heading: ChartHeading, chart: string, path?: string): Promise<ExportDone | null> {
+  const { run, number } = runInfo();
+  if (!run || stepStore.get() !== 'results') return nothing('A chart is shown on the Results step only');
+  const project = sceneStore.get()?.info.name ?? null;
+  const target = await actions.exportPath('png', chartFileName(project, number, chart), path);
+  if (target === null) return null;
+  const g = canvas.getContext('2d');
+  if (!g || canvas.width === 0 || canvas.height === 0) return nothing('The chart is not drawn');
+  const px = g.getImageData(0, 0, canvas.width, canvas.height).data;
+  const bgText = cssVar('--bg', '#09090b');
+  const bg = hexRgb(bgText) ?? [9, 9, 11];
+  const png = await encodeChartPng(
+    { width: canvas.width, height: canvas.height, rgba: over(px, bg) },
+    heading,
+    canvas.clientWidth > 0 ? canvas.width / canvas.clientWidth : 1,
+    { bg: bgText, text: cssVar('--text', '#ececee'), dim: cssVar('--text-2', '#a1a1aa'), font: cssVar('--sans', 'Inter Variable') },
+  );
+  const bytes = await actions.exportWrite('png', target, png, `the ${chart} chart`, run);
+  const done: ExportDone = { kind: 'png', path: target, bytes, width: canvas.width, height: canvas.height };
+  lastExportStore.set(done);
+  return done;
+}
 
 /** Why the view cannot be exported, or null. */
 export function viewRefusal(): string | null {
