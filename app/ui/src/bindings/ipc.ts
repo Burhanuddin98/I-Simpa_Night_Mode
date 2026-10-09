@@ -5372,6 +5372,11 @@ export interface RunRow {
   exe?: FileRefUi | null;
   exit_code?: number | null;
   /**
+   * Parity R3: the files exported from this run (`export_write` with the run named), from
+   * `notes.json`: the reports that cite it, which a delete's confirm names.
+   */
+  exports: RunExport[];
+  /**
    * SPPS on the GPU (decision 70): `run.json`'s `gpu_device`, the device line `spps-gpu
    * --probe` printed before the run; `None` for a run on the CPU.
    */
@@ -5450,6 +5455,23 @@ export interface RunRow {
 export interface FileRefUi {
   path: string;
   sha256: string;
+}
+/**
+ * R3: a file exported from a run (`export_write` with the run named): a report that cites it.
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "RunExport".
+ */
+export interface RunExport {
+  /**
+   * When it was written, RFC 3339 in local time.
+   */
+  at: string;
+  /**
+   * `csv`, `json`, `png` or `wav`.
+   */
+  kind: string;
+  path: string;
 }
 /**
  * `run.json`'s `lines`: the solver's lines per class.

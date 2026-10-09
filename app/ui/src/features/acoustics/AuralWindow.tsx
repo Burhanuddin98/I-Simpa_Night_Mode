@@ -170,11 +170,11 @@ export function AuralWindow({
       const clip = dry.startsWith('clip:') ? dry.slice(5) : 'own WAV';
       const target = await actions.exportPath('wav', wavName(project, runNumber, label, source, what, what === 'aural' ? clip : null), path);
       if (target === null) return null;
-      const bytes = await actions.exportWrite('wav', target, new Uint8Array(loaded.bytes), what === 'ir' ? `the impulse response of ${label}` : `the auralization at ${label}`);
+      const bytes = await actions.exportWrite('wav', target, new Uint8Array(loaded.bytes), what === 'ir' ? `the impulse response of ${label}` : `the auralization at ${label}`, run);
       setSaved((s) => [...s, { what, path: target, bytes }]);
       return { path: target, bytes };
     },
-    [fetchWav, dry, project, runNumber, label, source],
+    [fetchWav, dry, project, runNumber, label, source, run],
   );
 
   const openOwn = useCallback(async (path?: string) => {

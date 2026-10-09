@@ -113,6 +113,7 @@ const row = (over: Partial<RunRow>): RunRow => ({
   status: 'OK',
   reasons: [],
   warnings: [],
+  exports: [],
   solver: 'spps',
   ...over,
 });

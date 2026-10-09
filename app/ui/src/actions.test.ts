@@ -53,6 +53,7 @@ function row(run: string, status: RunRow['status']): RunRow {
     variant: null,
     reasons: [],
     warnings: [],
+    exports: [],
   } as unknown as RunRow;
 }
 

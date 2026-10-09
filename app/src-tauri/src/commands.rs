@@ -665,6 +665,19 @@ pub async fn run_open_folder(state: State<'_, AppState>, run: String) -> CmdResu
     .await
 }
 
+/// Parity R3: moves `run`, one of the open project's runs and not the active one, to the Recycle
+/// Bin (`run_files::delete`), after the Runs tab's confirm; answers the runs listed after it.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn run_delete(state: State<'_, AppState>, run: String) -> CmdResult<RunsView> {
+    let (session, slot) = (state.session.clone(), state.run.clone());
+    guard::blocking("run_delete", move || {
+        let (path, root) = project_and_root(&session, &run)?;
+        let active = lock(&slot, "run")?.active_run().map(str::to_string);
+        run_files::delete(&root, &path, active.as_deref(), &run)
+    })
+    .await
+}
+
 /// Whether the run `run` (a bare run-folder name) has results that verify. Never a value.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn run_results(state: State<'_, AppState>, run: String) -> CmdResult<ResultsState> {
@@ -907,8 +920,15 @@ pub async fn selftest_report(
 /// (`encodeURIComponent`) and the kind (`csv`, `json`, `png`, `wav`) ride in the `x-export-path` and
 /// `x-export-kind` headers; `export::write` refuses a path without the kind's extension and
 /// bytes that are not the kind, and writes the file whole or not at all. Returns the bytes written.
+///
+/// R3: an export made from a run names it in `x-export-run`; once the file is written, it is noted
+/// beside that run (`run_files::record_export`), so deleting the run says what cites it. A note
+/// that cannot be written is an error after the file exists, never dropped silently.
 #[tauri::command(rename_all = "snake_case")]
-pub async fn export_write(request: tauri::ipc::Request<'_>) -> CmdResult<u64> {
+pub async fn export_write(
+    state: State<'_, AppState>,
+    request: tauri::ipc::Request<'_>,
+) -> CmdResult<u64> {
     let header = |name: &str| -> CmdResult<String> {
         let v = request
             .headers()
@@ -929,8 +949,28 @@ pub async fn export_write(request: tauri::ipc::Request<'_>) -> CmdResult<u64> {
             ));
         }
     };
+    let run = match request.headers().get("x-export-run") {
+        None => None,
+        Some(_) => Some(crate::export::percent_decode(&header("x-export-run")?)?),
+    };
+    let (session, slot) = (state.session.clone(), state.run.clone());
     guard::blocking("export_write", move || {
-        crate::export::write(&kind, &path, &bytes)
+        let n = crate::export::write(&kind, &path, &bytes)?;
+        if let Some(run) = run {
+            let (project, root) = project_and_root(&session, &run)?;
+            let active = lock(&slot, "run")?.active_run().map(str::to_string);
+            run_files::record_export(&root, &project, active.as_deref(), &run, &path, &kind)
+                .map_err(|e| {
+                    CmdError::new(
+                        "EXPORT_UNNOTED",
+                        format!(
+                            "{path} is written, but not noted beside run '{run}': {}",
+                            e.message
+                        ),
+                    )
+                })?;
+        }
+        Ok(n)
     })
     .await
 }

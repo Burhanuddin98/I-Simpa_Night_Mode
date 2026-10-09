@@ -5141,6 +5141,28 @@
       ],
       "type": "object"
     },
+    "RunExport": {
+      "description": "R3: a file exported from a run (`export_write` with the run named): a report that cites it.",
+      "properties": {
+        "at": {
+          "description": "When it was written, RFC 3339 in local time.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "`csv`, `json`, `png` or `wav`.",
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "kind",
+        "at"
+      ],
+      "type": "object"
+    },
     "RunLineClass": {
       "description": "The core's line classes (`docs/solver-contract.md` Part B), as the Console labels them.",
       "enum": [
@@ -5236,6 +5258,13 @@
             "integer",
             "null"
           ]
+        },
+        "exports": {
+          "description": "Parity R3: the files exported from this run (`export_write` with the run named), from\n`notes.json`: the reports that cite it, which a delete's confirm names.",
+          "items": {
+            "$ref": "#/$defs/RunExport"
+          },
+          "type": "array"
         },
         "gpu_device": {
           "description": "SPPS on the GPU (decision 70): `run.json`'s `gpu_device`, the device line `spps-gpu\n--probe` printed before the run; `None` for a run on the CPU.",
@@ -5384,7 +5413,8 @@
         "number",
         "status",
         "reasons",
-        "warnings"
+        "warnings",
+        "exports"
       ],
       "type": "object"
     },

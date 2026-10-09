@@ -5,6 +5,10 @@
 //!   `is_run_name` is what keeps a path from climbing out of the runs root).
 //! - **R4, open the folder**: Explorer on the run's folder, started from here, so the webview keeps
 //!   no shell permission (capabilities/default.json: "No shell").
+//! - **R3, delete**: the folder moved to the Recycle Bin, so a delete can be undone there, after
+//!   the Runs tab's confirm. The files exported from the run (`export_write` with the run named)
+//!   are noted beside it, so the confirm says which exported reports cite the run before it goes.
+//!   A drive with no Recycle Bin (a network or removable one) is refused, never deleted outright.
 //!
 //! `notes.json` is the person's, not the run's: `results::load` re-checks `run.json` and `solve/`
 //! only, so a note never changes whether a run's results verify. A run is acted on only when it is
@@ -13,6 +17,7 @@
 
 use std::path::{Path, PathBuf};
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::guard::{CmdError, CmdResult};
@@ -23,10 +28,22 @@ pub const NOTES_FILE: &str = "notes.json";
 /// The longest label, in characters.
 pub const LABEL_MAX_CHARS: usize = 80;
 
+/// R3: a file exported from a run (`export_write` with the run named): a report that cites it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct RunExport {
+    pub path: String,
+    /// `csv`, `json`, `png` or `wav`.
+    pub kind: String,
+    /// When it was written, RFC 3339 in local time.
+    pub at: String,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 struct Notes {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     label: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    exports: Vec<RunExport>,
 }
 
 /// The notes in run folder `dir`: none when there is no `notes.json`, an error when it does not
@@ -57,11 +74,120 @@ fn write_notes(dir: &Path, notes: &Notes) -> CmdResult<()> {
         })
 }
 
-/// A row's label from its folder's notes (`runs::list` calls this for every row it lists).
+/// A row's label and exports from its folder's notes (`runs::list` calls this for every row).
 pub fn annotate(row: &mut RunRow, dir: &Path) {
     match read_notes(dir) {
-        Ok(n) => row.label = n.label,
+        Ok(n) => {
+            row.label = n.label;
+            row.exports = n.exports;
+        }
         Err(e) => row.notes_error = Some(e),
+    }
+}
+
+/// R3: notes that `path` (of `kind`) was exported from `run`, one of the open project's runs: the
+/// export a delete's confirm names. A file exported again replaces its older note.
+pub fn record_export(
+    root: &Path,
+    project: &Path,
+    active: Option<&str>,
+    run: &str,
+    path: &str,
+    kind: &str,
+) -> CmdResult<()> {
+    let view = runs::list(root, project, active)?;
+    row_of(&view, run, "Note the export")?;
+    let dir = root.join(run);
+    let mut notes = read_notes(&dir).map_err(|e| {
+        CmdError::new(
+            "RUN_NOTES_INVALID",
+            format!("the run's notes do not read, so they are not overwritten: {e}"),
+        )
+    })?;
+    notes.exports.retain(|x| !x.path.eq_ignore_ascii_case(path));
+    notes.exports.push(RunExport {
+        path: path.to_string(),
+        kind: kind.to_string(),
+        at: simpa_core::run::clock::rfc3339(std::time::SystemTime::now()),
+    });
+    write_notes(&dir, &notes)
+}
+
+/// R3: moves `run`, one of the open project's runs and not the active one, to the Recycle Bin, and
+/// answers the runs as listed after it. The Runs tab asks first and names what cites the run.
+pub fn delete(root: &Path, project: &Path, active: Option<&str>, run: &str) -> CmdResult<RunsView> {
+    let view = runs::list(root, project, active)?;
+    listed(&view, run, "Delete")?;
+    let dir = root.join(run);
+    recycle(&std::path::absolute(&dir).unwrap_or(dir))?;
+    runs::list(root, project, active)
+}
+
+/// The script that moves the folder in `SIMPA_RECYCLE` to the Recycle Bin, or exits 3 (the drive
+/// has none) or 4 (the folder is still there). The path rides in the environment, never in the
+/// script's text, so no path can be read as PowerShell.
+const RECYCLE_PS: &str = "$ErrorActionPreference = 'Stop'; \
+$p = $env:SIMPA_RECYCLE; \
+$d = [System.IO.DriveInfo]::new([System.IO.Path]::GetPathRoot($p)); \
+if ($d.DriveType -ne 'Fixed') { [Console]::Error.WriteLine(\"the drive is $($d.DriveType), with no Recycle Bin\"); exit 3 }; \
+Add-Type -AssemblyName Microsoft.VisualBasic; \
+[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($p, 'OnlyErrorDialogs', 'SendToRecycleBin'); \
+if (Test-Path -LiteralPath $p) { exit 4 }";
+
+/// Moves the folder `dir` to the Recycle Bin (the shell's own move, through PowerShell, so no
+/// unsafe code and no new dependency); refused on a drive with no Recycle Bin.
+fn recycle(dir: &Path) -> CmdResult<()> {
+    if !cfg!(windows) {
+        return Err(CmdError::new(
+            "RUN_DELETE_UNSUPPORTED",
+            "a run is moved to the Recycle Bin, on Windows only",
+        ));
+    }
+    let mut cmd = std::process::Command::new("powershell.exe");
+    cmd.args([
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        RECYCLE_PS,
+    ])
+    .env("SIMPA_RECYCLE", dir);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    let out = cmd.output().map_err(|e| {
+        CmdError::new(
+            "RUN_DELETE_FAILED",
+            format!("PowerShell did not start to move {}: {e}", dir.display()),
+        )
+    })?;
+    let why = String::from_utf8_lossy(&out.stderr).trim().to_string();
+    match out.status.code() {
+        Some(0) => Ok(()),
+        Some(3) => Err(CmdError::new(
+            "RUN_NO_RECYCLE_BIN",
+            format!(
+                "nothing deleted: {} is on a drive with no Recycle Bin ({why}); delete it by hand if it should go",
+                dir.display()
+            ),
+        )),
+        code => Err(CmdError::new(
+            "RUN_DELETE_FAILED",
+            format!(
+                "{} was not moved to the Recycle Bin (exit {}){}",
+                dir.display(),
+                code.map_or_else(|| "none".to_string(), |c| c.to_string()),
+                if why.is_empty() {
+                    String::new()
+                } else {
+                    format!(": {why}")
+                }
+            ),
+        )),
     }
 }
 
@@ -287,6 +413,58 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(root.join(run).join(NOTES_FILE)).unwrap(),
             "{"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn r3_an_export_is_noted_beside_its_run_once_per_file_and_listed() {
+        let (dir, project, root) = bed("exports");
+        let run = "20260101-000001-000-spps";
+        set_label(&root, &project, None, run, "Hall").unwrap();
+        record_export(&root, &project, None, run, "C:\\out\\a.csv", "csv").unwrap();
+        record_export(&root, &project, None, run, "C:\\out\\b.png", "png").unwrap();
+        // The same file again (another case): one note, the newer.
+        record_export(&root, &project, None, run, "c:\\OUT\\A.csv", "csv").unwrap();
+        let view = runs::list(&root, &project, None).unwrap();
+        let row = view.rows.iter().find(|r| r.run == run).unwrap();
+        let paths: Vec<&str> = row.exports.iter().map(|x| x.path.as_str()).collect();
+        assert_eq!(paths, ["C:\\out\\b.png", "c:\\OUT\\A.csv"]);
+        assert_eq!(
+            row.label.as_deref(),
+            Some("Hall"),
+            "the label kept beside the exports"
+        );
+        assert!(
+            row.exports.iter().all(|x| x.at.len() >= 23),
+            "{:?}",
+            row.exports
+        );
+        assert_eq!(
+            record_export(&root, &project, None, "notes", "C:\\x.csv", "csv")
+                .unwrap_err()
+                .code,
+            "RUN_NOT_FOUND"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn r3_delete_refuses_what_is_not_a_listed_run_and_the_active_run() {
+        let (dir, project, root) = bed("delete");
+        let code = |r: CmdResult<RunsView>| r.unwrap_err().code;
+        for bad in ["notes", "..", "20260101-000009-000-spps"] {
+            assert_eq!(
+                code(delete(&root, &project, None, bad)),
+                "RUN_NOT_FOUND",
+                "{bad}"
+            );
+        }
+        let run = "20260101-000001-000-spps";
+        assert_eq!(code(delete(&root, &project, Some(run), run)), "RUN_ACTIVE");
+        assert!(
+            root.join(run).is_dir() && root.join("notes").is_dir(),
+            "nothing moved"
         );
         std::fs::remove_dir_all(&dir).unwrap();
     }

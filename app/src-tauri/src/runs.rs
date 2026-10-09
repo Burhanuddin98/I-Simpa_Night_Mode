@@ -262,6 +262,9 @@ pub struct RunRow {
     pub label: Option<String>,
     /// `notes.json` is there but does not read (`run_files`): said, never taken as no notes.
     pub notes_error: Option<String>,
+    /// Parity R3: the files exported from this run (`export_write` with the run named), from
+    /// `notes.json`: the reports that cite it, which a delete's confirm names.
+    pub exports: Vec<crate::run_files::RunExport>,
 }
 
 /// A run's solver build, verified or not, with the reason's core and UI codes (backlog 38).
@@ -592,6 +595,7 @@ pub fn row_from_manifest(run: &str, number: u32, m: &RunManifest) -> RunRow {
         manifest_error: None,
         label: None,
         notes_error: None,
+        exports: Vec::new(),
     }
 }
 
@@ -628,6 +632,7 @@ fn bare_row(
         manifest_error: error,
         label: None,
         notes_error: None,
+        exports: Vec::new(),
     }
 }
 

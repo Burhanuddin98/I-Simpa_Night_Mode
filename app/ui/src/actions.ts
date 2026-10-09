@@ -784,11 +784,36 @@ export async function exportPath(kind: 'csv' | 'json' | 'png' | 'wav', defaultNa
   return typeof target === 'string' ? target : null;
 }
 
-/** W9: writes an export the core checks (absolute path, the kind's extension, the kind's bytes). */
-export async function exportWrite(kind: 'csv' | 'json' | 'png' | 'wav', path: string, bytes: Uint8Array, what: string): Promise<number> {
-  const n = await run(`Could not export ${what} to ${path}`, () => backend.exportWrite(kind, path, bytes));
-  log('OK', `Exported ${what} to ${path}`);
-  return n;
+/** W9: writes an export the core checks (absolute path, the kind's extension, the kind's bytes).
+ * R3: `fromRun`, the run it is made from, has the core note the file beside that run, so a delete
+ * of the run says this export cites it; the Runs tab is re-read to show it. */
+export async function exportWrite(kind: 'csv' | 'json' | 'png' | 'wav', path: string, bytes: Uint8Array, what: string, fromRun: string | null = null): Promise<number> {
+  try {
+    const n = await run(`Could not export ${what} to ${path}`, () => backend.exportWrite(kind, path, bytes, fromRun));
+    log('OK', `Exported ${what} to ${path}`);
+    return n;
+  } finally {
+    if (fromRun !== null) fire(refreshRuns());
+  }
+}
+
+/**
+ * R3: moves run `run` to the Recycle Bin, after the Runs tab's confirm (which names the exports
+ * that cite it). A run the Results step shows is let go first, so no number of it stays on screen.
+ * A refusal (the active run, a drive with no Recycle Bin) is a FAIL line, and nothing moves.
+ */
+export async function deleteRun(runName: string): Promise<RunsView> {
+  const row = runsStore.get()?.rows.find((r) => r.run === runName);
+  const view = await run(`Could not delete the run`, () => backend.runDelete(runName));
+  if (selectedRunStore.get() === runName) selectedRunStore.set(null);
+  const results = new Map(resultsStore.get());
+  const reports = new Map(reportStore.get());
+  if (results.delete(runName)) resultsStore.set(results);
+  if (reports.delete(runName)) reportStore.set(reports);
+  runsStore.set(view);
+  if (selectedRunStore.get() === null && view.rows.length > 0) selectedRunStore.set(view.rows[view.rows.length - 1].run);
+  log('OK', `Run ${row?.number ?? ''}${row?.label ? ` "${row.label}"` : ''} (${runName}) moved to the Recycle Bin`);
+  return view;
 }
 
 /** The Results step's viewport reads (M12 P3, `features/viewport/resultsView.ts`), passed through

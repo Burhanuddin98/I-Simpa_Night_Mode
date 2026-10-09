@@ -274,6 +274,7 @@ fn run(args: GuiArgs) -> ExitCode {
             commands::runs_list,
             commands::run_label,
             commands::run_open_folder,
+            commands::run_delete,
             commands::run_results,
             commands::run_report,
             commands::run_data,

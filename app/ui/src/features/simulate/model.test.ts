@@ -51,6 +51,7 @@ const row = (number: number, status: RunRow['status'], over: Partial<RunRow> = {
   status,
   reasons: [],
   warnings: [],
+  exports: [],
   ...over,
 });
 

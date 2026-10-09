@@ -60,6 +60,7 @@ function row(run: string, over: Partial<RunRow> = {}): RunRow {
     status: 'OK',
     reasons: [],
     warnings: [],
+    exports: [],
     solver: 'spps',
     lines: { progress: 3, info: 2, ok: 1, warn: 0, fail: 0, unclassified: 0 },
     ...over,

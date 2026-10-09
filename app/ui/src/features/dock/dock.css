@@ -315,6 +315,45 @@
   color: var(--text);
   font-weight: 500;
 }
+.dock .flag.warn {
+  color: var(--warn);
+}
+/* R3: the delete's confirm, in place under the run's actions. */
+.run-actions .small-button {
+  height: 24px;
+}
+.run-delete-confirm {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--red);
+  border-radius: 5px;
+  background: var(--red-wash);
+  color: var(--text-2);
+}
+.run-delete-confirm .q {
+  color: var(--text);
+}
+.run-delete-confirm .cites {
+  margin: 2px 0 0;
+  padding-left: 18px;
+}
+.run-delete-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+.run-delete-actions .danger {
+  border-color: var(--red);
+  color: var(--text);
+}
+.run-delete-actions .danger:hover {
+  background: var(--red-deep);
+  color: #fff;
+}
 .run-label-input {
   width: 320px;
   max-width: 100%;

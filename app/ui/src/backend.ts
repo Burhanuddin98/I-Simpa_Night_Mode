@@ -202,6 +202,11 @@ export const backend = {
   runAuralize: (run: string, receiver: string, source: string | null, dry: { clip?: string; path?: string }) =>
     invoke<ArrayBuffer>('run_auralize', { run, receiver, source, clip: dry.clip ?? null, path: dry.path ?? null }),
   /** W9: writes `bytes` to `path` (the save dialog's) as a `kind` file; the core checks both. */
-  exportWrite: (kind: 'csv' | 'json' | 'png' | 'wav', path: string, bytes: Uint8Array) =>
-    invokeWith<number>('export_write', bytes, { headers: { 'x-export-path': encodeURIComponent(path), 'x-export-kind': kind } }),
+  /** R3: `run` names the run the export is made from; the core notes the file beside it. */
+  exportWrite: (kind: 'csv' | 'json' | 'png' | 'wav', path: string, bytes: Uint8Array, run: string | null = null) =>
+    invokeWith<number>('export_write', bytes, {
+      headers: { 'x-export-path': encodeURIComponent(path), 'x-export-kind': kind, ...(run === null ? {} : { 'x-export-run': encodeURIComponent(run) }) },
+    }),
+  /** R3: a listed run, not the active one, moved to the Recycle Bin; answers the runs listed after it. */
+  runDelete: (run: string) => invoke<RunsView>('run_delete', { run }),
 };

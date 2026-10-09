@@ -10,6 +10,9 @@
 //   leaving the field keeps it, Esc puts it back, empty clears it).
 // - R4: "Open folder" in the detail (`[data-action=run-open-folder]`): Explorer on the run's folder,
 //   started by the core, so the page holds no shell permission.
+// - R3: "Delete…" (`[data-action=run-delete]`), then a confirm in place (`[data-part=delete-confirm]`)
+//   naming the exports noted as citing the run (`[data-part=delete-cites]`) and the later runs it
+//   renumbers; "Move to Recycle Bin" (`[data-choice=delete]`) sends the folder there.
 // - A click selects the run (the Results step shows it). The selected row opens to show the
 //   per-band loss, the exe's sha256 and the solver build's verdict (the core's, `buildMark`,
 //   backlog 38), the mesh's sha256, the line counts, the exit code and the folder.
@@ -177,7 +180,7 @@ function LabelField({ row }: { row: RunRow }) {
 }
 
 /** The selected row's detail: what a run's record holds beyond its verdict. */
-function Detail({ row, root }: { row: RunRow; root: string | null }) {
+function Detail({ row, root, total }: { row: RunRow; root: string | null; total: number }) {
   const mark = buildMark(row);
   const counts = row.lines;
   return (
@@ -305,6 +308,86 @@ function Detail({ row, root }: { row: RunRow; root: string | null }) {
         >
           Open folder
         </button>
+        <DeleteRun row={row} total={total} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * R3: "Delete…", then a confirm in place that names what the delete takes and what cites the run
+ * (the exports noted beside it), and how the later runs' numbers move; "Move to Recycle Bin" sends
+ * the folder there, where it can be restored. Not offered for a run still running.
+ */
+function DeleteRun({ row, total }: { row: RunRow; total: number }) {
+  const [asking, setAsking] = useState(false);
+  const running = row.status === 'RUNNING';
+  const later = Math.max(0, total - row.number);
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+  if (!asking) {
+    return (
+      <button
+        type="button"
+        className="small-button"
+        data-action="run-delete"
+        disabled={running}
+        title={running ? 'A run is deleted once it has ended' : 'Move this run to the Recycle Bin (asks first)'}
+        onClick={(e) => {
+          e.stopPropagation();
+          setAsking(true);
+        }}
+      >
+        Delete…
+      </button>
+    );
+  }
+  return (
+    <div className="run-delete-confirm" role="alertdialog" aria-label={`Delete run ${row.number}`} data-part="delete-confirm" onClick={stop} onKeyDown={stop}>
+      <div className="q" data-part="delete-question">
+        {`Move run ${row.number}${row.label ? ` "${row.label}"` : ''} to the Recycle Bin? Its folder ${row.run} goes with everything in it; it can be restored from the Recycle Bin.`}
+      </div>
+      <div data-part="delete-shown">It is the run the Results step and the Acoustics tab show now; they let it go.</div>
+      {row.exports.length > 0 ? (
+        <div data-part="delete-cites" data-cites={row.exports.length}>
+          <span className="flag warn">CITED</span>
+          {` ${row.exports.length} exported file${row.exports.length === 1 ? '' : 's'} cite this run. They stay where they are, naming a run that is gone:`}
+          <ul className="cites">
+            {row.exports.map((x) => (
+              <li key={x.path} className="mono" data-cite={x.path} title={`${x.kind.toUpperCase()}, written ${x.at}`}>
+                {x.path}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : row.notes_error ? (
+        <div data-part="delete-cites" data-cites="unknown">
+          <span className="flag">FAIL</span> notes.json does not read, so which exports cite this run is not known.
+        </div>
+      ) : (
+        <div data-part="delete-cites" data-cites={0}>
+          No export from this app is noted as citing this run.
+        </div>
+      )}
+      {later > 0 && (
+        <div data-part="delete-renumber">
+          {`The ${later} later run${later === 1 ? '' : 's'} move${later === 1 ? 's' : ''} down one number (run ${row.number + 1} becomes run ${row.number}), so a file named by its run number may then name another run.`}
+        </div>
+      )}
+      <div className="run-delete-actions">
+        <button type="button" className="small-button" data-choice="cancel" autoFocus onClick={() => setAsking(false)}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="small-button danger"
+          data-choice="delete"
+          onClick={() => {
+            setAsking(false);
+            actions.fire(actions.deleteRun(row.run));
+          }}
+        >
+          Move to Recycle Bin
+        </button>
       </div>
     </div>
   );
@@ -316,12 +399,15 @@ function Row({
   active,
   variants,
   root,
+  total,
 }: {
   row: RunRow;
   selected: boolean;
   active: ActiveRun | null;
   variants: readonly { id: string; name: string }[] | null;
   root: string | null;
+  /** How many runs the tab lists (R3: the later runs a delete renumbers). */
+  total: number;
 }) {
   const select = () => actions.selectRun(row.run);
   return (
@@ -356,7 +442,7 @@ function Row({
         </span>
         <Check row={row} active={active} />
       </div>
-      {selected && <Detail row={row} root={root} />}
+      {selected && <Detail row={row} root={root} total={total} />}
     </div>
   );
 }
@@ -395,6 +481,7 @@ export function RunsPane() {
           active={active}
           variants={scene?.view.variants ?? null}
           root={root}
+          total={rows.length}
         />
       ))}
       {/* A project never saved has no runs folder yet (runs_list answers an empty root). */}

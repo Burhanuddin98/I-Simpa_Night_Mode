@@ -65,7 +65,7 @@ export async function exportParams(kind: 'csv' | 'json', path?: string): Promise
   if (target === null) return null;
   const rows = paramRows(report, order);
   const text = kind === 'csv' ? paramsCsv(rows) : paramsJson(report, { run, project, sourceOrder: order });
-  const bytes = await actions.exportWrite(kind, target, new TextEncoder().encode(text), `the parameters of ${run}`);
+  const bytes = await actions.exportWrite(kind, target, new TextEncoder().encode(text), `the parameters of ${run}`, run);
   const done: ExportDone = { kind, path: target, bytes, rows: rows.length };
   lastExportStore.set(done);
   return done;
@@ -106,7 +106,9 @@ export async function exportView(path?: string): Promise<ExportDone | null> {
     v.map?.legend.gradient ?? null,
     { bg: bgText, text: cssVar('--text', '#ececee'), dim: cssVar('--text-2', '#a1a1aa'), font: cssVar('--sans', 'Inter Variable') },
   );
-  const bytes = await actions.exportWrite('png', target, png, 'the 3D view');
+  // R3: on the Results step the image shows the selected run, so it is noted beside that run.
+  const fromRun = stepStore.get() === 'results' ? selectedRunStore.get() : null;
+  const bytes = await actions.exportWrite('png', target, png, 'the 3D view', fromRun);
   const done: ExportDone = { kind: 'png', path: target, bytes, width: frame.width, height: frame.height, strip };
   lastExportStore.set(done);
   return done;

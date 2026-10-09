@@ -32,6 +32,7 @@ function row(number: number, extra: Partial<RunRow> = {}): RunRow {
     solver: 'spps',
     reasons: [],
     warnings: [],
+    exports: [],
     elapsed_s: '168.0',
     work: WORK,
     ...extra,
