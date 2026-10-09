@@ -12,6 +12,7 @@
 use serde_json::{Map, Value, json};
 use simpa_core::schema::{Op, json_schema};
 
+use crate::about::AboutInfo;
 use crate::bench::Prepared;
 use crate::bridge::{FloatProbe, ProjectInfo};
 use crate::commands::{EventsProbeReport, StartupInfo};
@@ -134,6 +135,8 @@ fn dumps() -> Vec<Dump> {
                 ("app_event", "AppEvent", schema_for!(AppEvent).to_value()),
                 // A5 (decision 70): SPPS on the GPU.
                 ("gpu_status", "GpuStatus", schema_for!(GpuStatus).to_value()),
+                // Parity A23: Help › About.
+                ("about_info", "AboutInfo", schema_for!(AboutInfo).to_value()),
                 // M12 (docs/investigations/2026-10-03-m12/PLAN.md, P1 item 3).
                 (
                     "report_view",

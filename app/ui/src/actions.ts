@@ -26,7 +26,7 @@ import {
   type Unit,
   type Up,
 } from './backend';
-import type { Setting, UiIssue } from './bindings/ipc';
+import type { AboutInfo, Setting, UiIssue } from './bindings/ipc';
 import type { BandKind, Op, ReflectionLaw } from './bindings/schema';
 import { blockerText, regroupFaces } from './chrome/sceneModel';
 import { withBandLaw } from './features/materials/law';
@@ -743,6 +743,11 @@ export async function openHelp(topic: string, what: string): Promise<string> {
   const opened = await run(`Could not open ${what}`, () => backend.helpOpen(topic));
   log('INFO', `Opened ${what} in your browser`);
   return opened;
+}
+
+/** A23: what Help › About shows of this build (about.rs). */
+export async function loadAbout(): Promise<AboutInfo> {
+  return run('Could not read the build for About', () => backend.appAbout());
 }
 
 /**

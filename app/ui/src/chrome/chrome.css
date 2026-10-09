@@ -1704,3 +1704,57 @@ input.marker-colour:focus-visible {
 .spectrum-table-label {
   margin-bottom: 4px;
 }
+
+/* Parity A23: Help › About, in the import dialog's frame, wider for the licences. */
+.dialog.about {
+  width: 600px;
+  max-width: 600px;
+}
+.about-lead {
+  margin: 6px 0 12px;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.about-build {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.about-head {
+  margin: 14px 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.about-licences {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.about-licences th,
+.about-licences td {
+  padding: 6px 8px 6px 0;
+  border-top: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+.about-licences th {
+  width: 38%;
+  color: var(--text);
+  font-weight: 600;
+}
+.about-licences td {
+  color: var(--text-2);
+  line-height: 1.45;
+}
+.about-licence {
+  display: block;
+  margin-top: 2px;
+  font-weight: 400;
+  color: var(--red-hi);
+}

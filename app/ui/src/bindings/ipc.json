@@ -1,5 +1,69 @@
 {
   "$defs": {
+    "AboutInfo": {
+      "properties": {
+        "app_version": {
+          "type": "string"
+        },
+        "commit": {
+          "description": "The commit this build was made from (12 hex digits), `… with uncommitted changes` when the\ntree differed from it as the build script last ran, or `unknown` with no git.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "`release` or `debug`.",
+          "type": "string"
+        },
+        "solvers": {
+          "$ref": "#/$defs/AboutSolvers"
+        },
+        "tauri_version": {
+          "type": "string"
+        },
+        "webview": {
+          "$ref": "#/$defs/WebviewInfo"
+        }
+      },
+      "required": [
+        "app_version",
+        "commit",
+        "profile",
+        "tauri_version",
+        "webview",
+        "solvers"
+      ],
+      "type": "object"
+    },
+    "AboutSolvers": {
+      "description": "The solvers this build was compiled to run, as the manifest records them.",
+      "properties": {
+        "patches": {
+          "description": "This repository's patches applied to it, by file name, in order.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "spps_gpu_commit": {
+          "description": "spps-gpu's source commit in this repository.",
+          "type": "string"
+        },
+        "tetgen_version": {
+          "description": "TetGen's version.",
+          "type": "string"
+        },
+        "upstream_commit": {
+          "description": "Upstream I-Simpa's commit the solvers are built from.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "upstream_commit",
+        "patches",
+        "tetgen_version",
+        "spps_gpu_commit"
+      ],
+      "type": "object"
+    },
     "Advice": {
       "description": "One advice item: a cause and its fix, with the values it explains.",
       "properties": {
@@ -7732,6 +7796,9 @@
   "additionalProperties": false,
   "description": "The app's command results and events, dumped by app.exe --dump-schema. Do not edit.",
   "properties": {
+    "about_info": {
+      "$ref": "#/$defs/AboutInfo"
+    },
     "app_event": {
       "$ref": "#/$defs/AppEvent"
     },
@@ -7809,6 +7876,7 @@
     }
   },
   "required": [
+    "about_info",
     "app_event",
     "autosave_status",
     "cmd_error",

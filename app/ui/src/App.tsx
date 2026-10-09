@@ -12,6 +12,7 @@ import { fittingZonesOf } from './chrome/sceneModel';
 import { useEffect } from 'react';
 import * as actions from './actions';
 import { asCmdError, backend } from './backend';
+import { AboutDialog } from './chrome/AboutDialog';
 import { BoxRoomDialog } from './chrome/BoxRoomDialog';
 import { ImportDialog } from './chrome/ImportDialog';
 import { Landing } from './chrome/Landing';
@@ -201,6 +202,7 @@ export function App() {
       <StatusBar />
       <ImportDialog />
       <BoxRoomDialog />
+      <AboutDialog />
       <SavePrompt />
     </div>
   );

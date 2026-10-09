@@ -51,6 +51,7 @@
     "allow-run-label",
     "allow-run-open-folder",
     "allow-help-open",
+    "allow-app-about",
     "allow-run-delete",
     "allow-run-results",
     "allow-run-report",

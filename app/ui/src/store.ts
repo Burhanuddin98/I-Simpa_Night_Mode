@@ -115,6 +115,9 @@ export const busyStore = new Store<number>(0);
 /** G11: the New box room dialog is open (File › New box room…, the landing page). */
 export const boxRoomRequestStore = new Store<boolean>(false);
 
+/** A23: Help › About Night Mode is open. */
+export const aboutOpenStore = new Store<boolean>(false);
+
 /** A mesh file waiting for the import dialog's unit and up axis (File › Open… on a mesh). */
 export const importRequestStore = new Store<{ path: string; keepGroups?: boolean } | null>(null);
 

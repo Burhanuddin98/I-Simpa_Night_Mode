@@ -2728,6 +2728,7 @@ export type Variable1 = 'crossings_per_particle' | 'crossings_times_lifetime_spr
  * The app's command results and events, dumped by app.exe --dump-schema. Do not edit.
  */
 export interface IpcBindings {
+  about_info: AboutInfo;
   app_event: AppEvent;
   autosave_status: AutosaveStatus;
   cmd_error: CmdError;
@@ -2753,6 +2754,62 @@ export interface IpcBindings {
   scene_state: SceneState;
   solvers_status: SolversStatus;
   startup_info: StartupInfo;
+}
+/**
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "AboutInfo".
+ */
+export interface AboutInfo {
+  app_version: string;
+  /**
+   * The commit this build was made from (12 hex digits), `… with uncommitted changes` when the
+   * tree differed from it as the build script last ran, or `unknown` with no git.
+   */
+  commit: string;
+  /**
+   * `release` or `debug`.
+   */
+  profile: string;
+  solvers: AboutSolvers;
+  tauri_version: string;
+  webview: WebviewInfo;
+}
+/**
+ * The solvers this build was compiled to run, as the manifest records them.
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "AboutSolvers".
+ */
+export interface AboutSolvers {
+  /**
+   * This repository's patches applied to it, by file name, in order.
+   */
+  patches: string[];
+  /**
+   * spps-gpu's source commit in this repository.
+   */
+  spps_gpu_commit: string;
+  /**
+   * TetGen's version.
+   */
+  tetgen_version: string;
+  /**
+   * Upstream I-Simpa's commit the solvers are built from.
+   */
+  upstream_commit: string;
+}
+/**
+ * The webview engine and its runtime version, for the self-test and the Console.
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "WebviewInfo".
+ */
+export interface WebviewInfo {
+  engine: string;
+  /**
+   * `None` when the runtime cannot be queried (it is then missing or broken).
+   */
+  version?: string | null;
 }
 /**
  * An error for the UI: a stable reason code and a message for people.
@@ -5761,19 +5818,6 @@ export interface StartupInfo {
   selftest: boolean;
   tauri_version: string;
   webview: WebviewInfo;
-}
-/**
- * The webview engine and its runtime version, for the self-test and the Console.
- *
- * This interface was referenced by `IpcBindings`'s JSON-Schema
- * via the `definition` "WebviewInfo".
- */
-export interface WebviewInfo {
-  engine: string;
-  /**
-   * `None` when the runtime cannot be queried (it is then missing or broken).
-   */
-  version?: string | null;
 }
 /**
  * What the report carries: the summary's sha256 and its statuses.

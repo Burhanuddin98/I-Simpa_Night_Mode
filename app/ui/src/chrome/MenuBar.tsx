@@ -22,10 +22,10 @@ import * as actions from '../actions';
 import { exportParams, exportView, paramsRefusal, viewRefusal } from '../features/export/exportActions';
 import { focusSelection, frameModel, hideStore, isolateWhyNot, setRoofOff, setView, toggleIsolate, viewFrom } from '../features/viewport/engine';
 import { joinBlockers } from '../flow';
-import { boxRoomRequestStore, groupRenameStore, reportStore, runStore, sceneStore, selectedRunStore, selectionStore, solversStatusStore, solverStore, stepStore, useStore, viewportStore } from '../store';
+import { aboutOpenStore, boxRoomRequestStore, groupRenameStore, reportStore, runStore, sceneStore, selectedRunStore, selectionStore, solversStatusStore, solverStore, stepStore, useStore, viewportStore } from '../store';
 import { ADD_GROUP_LABEL, DELETE_GROUP_LABEL, MERGE_LABEL, mergePlan, RENAME_GROUP_LABEL, renameTarget } from './groupsModel';
 import { clipboardStore, copySelected, deleteGroup, pasteCopied } from './sceneUi';
-import { HELP_LINKS, HELP_MANUAL } from './helpModel';
+import { ABOUT_LABEL, HELP_LINKS, HELP_MANUAL } from './helpModel';
 import { Search } from './icons';
 import { recentStore, reopenLastStore, setReopenLast } from './recent';
 import { recentMenuLabel } from './recentModel';
@@ -252,12 +252,16 @@ export function MenuBar() {
     ],
     // A20: the Help menu, its pages opened by the core in the default browser (help.rs); A22: the
     // user manual first, shipped inside app.exe.
-    Help: [HELP_MANUAL, ...HELP_LINKS].map((l) => ({
-      id: l.id,
-      label: l.label,
-      title: l.title,
-      run: () => actions.fire(actions.openHelp(l.topic, l.what)),
-    })),
+    Help: [
+      ...[HELP_MANUAL, ...HELP_LINKS].map((l) => ({
+        id: l.id,
+        label: l.label,
+        title: l.title,
+        run: () => actions.fire(actions.openHelp(l.topic, l.what)),
+      })),
+      // A23: this build, the solvers' build and the licences.
+      { id: 'help-about', label: ABOUT_LABEL, title: 'This build’s version and commit, the solvers it runs, and the licences', run: () => aboutOpenStore.set(true) },
+    ],
     Simulate: [
       {
         id: 'run',

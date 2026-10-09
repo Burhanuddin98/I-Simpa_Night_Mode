@@ -30,6 +30,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod about;
 mod aural;
 mod bench;
 mod bindings;
@@ -294,6 +295,7 @@ fn run(args: GuiArgs) -> ExitCode {
             commands::run_label,
             commands::run_open_folder,
             commands::help_open,
+            commands::app_about,
             commands::run_delete,
             commands::run_results,
             commands::run_report,

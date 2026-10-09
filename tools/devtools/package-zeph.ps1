@@ -32,12 +32,19 @@ $manualSrc = "$Repo\app\src-tauri\manual"
 $pages = @(Get-ChildItem $manualSrc -Filter *.html)
 if (-not ($pages | Where-Object Name -eq 'manual.html')) { throw "$manualSrc has no manual.html" }
 $pages | ForEach-Object { Copy-Item $_.FullName "$dest\manual\$($_.Name)" }
+# Parity A23: the app's licence and the third-party notices beside it (About opens the same texts).
+& python "$Repo\tools\devtools\third_party_notices.py" --check
+if ($LASTEXITCODE -ne 0) { throw 'THIRD-PARTY-NOTICES.txt is stale: run tools\devtools\third_party_notices.py' }
+Copy-Item "$Repo\LICENSE" "$dest\LICENSE.txt"
+Copy-Item "$Repo\app\src-tauri\about\THIRD-PARTY-NOTICES.txt" "$dest\THIRD-PARTY-NOTICES.txt"
 
 @"
 I-Simpa Night Mode, portable build $stamp ($Branch branch $Sha)
 
 Run:   app.exe            (double-click, or app.exe --project <file.simpa>)
 Read:  manual\manual.html (the user manual; Help > User manual opens the copy app.exe carries)
+       LICENSE.txt (GPL-3.0, this app's licence) and THIRD-PARTY-NOTICES.txt (the solvers,
+       TetGen under the AGPL-3.0, fonts, data and libraries); Help > About Night Mode says the same
 The solvers (spps, spps-gpu, classicalTheory, preprocess, tetgen) are in solvers\ beside app.exe and
 are found there; no environment variable is needed. They are the verified build of
 solvers\manifest.json (upstream 929a5c8 + patches 0001 time bin, 0002 sparse maps; spps-gpu from

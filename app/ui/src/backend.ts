@@ -7,6 +7,7 @@
 // `idle()` hook; `run_start` answers at once, so a run in progress never holds `idle()`.
 import { Channel, invoke as tauriInvoke, type InvokeArgs } from '@tauri-apps/api/core';
 import type {
+  AboutInfo,
   AppEvent,
   CmdError,
   EchogramView,
@@ -188,6 +189,8 @@ export const backend = {
   runOpenFolder: (run: string) => invoke<string>('run_open_folder', { run }),
   /** A20: a Help topic (help.rs) opened by the core in the default browser; answers what it opened. */
   helpOpen: (topic: string) => invoke<string>('help_open', { topic }),
+  /** A23: this build's version, commit, profile and solvers, for Help › About. */
+  appAbout: () => invoke<AboutInfo>('app_about'),
   runResults: (run: string) => invoke<ResultsState>('run_results', { run }),
   projImport: (path: string) => invoke<SceneState>('proj_import', { path }),
   materialLibrary: () => invoke<LibraryMaterial[]>('material_library'),

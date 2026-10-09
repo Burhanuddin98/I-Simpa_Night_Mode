@@ -16,6 +16,7 @@ use serde::Serialize;
 use tauri::ipc::{Channel, Response};
 use tauri::{AppHandle, Manager, State};
 
+use crate::about;
 use crate::bench::{BenchStore, Prepared};
 use crate::bridge::{self, FloatProbe, ProjectInfo, Session};
 use crate::events::{
@@ -706,6 +707,13 @@ pub async fn run_open_folder(state: State<'_, AppState>, run: String) -> CmdResu
 #[tauri::command(rename_all = "snake_case")]
 pub async fn help_open(topic: String) -> CmdResult<String> {
     guard::blocking("help_open", move || help::open(&topic)).await
+}
+
+/// Parity A23: what Help › About shows of this build: its version, commit and profile, Tauri,
+/// the webview, and the solvers' build as the compiled manifest records it.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn app_about() -> CmdResult<about::AboutInfo> {
+    guard::blocking("app_about", about::info).await
 }
 
 /// Parity R3: moves `run`, one of the open project's runs and not the active one, to the Recycle

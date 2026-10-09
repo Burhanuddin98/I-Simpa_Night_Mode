@@ -54,11 +54,26 @@ pub struct Page {
 /// The pages shipped with the app, embedded as the examples are (`examples.rs`): the app ships
 /// as one executable plus `solvers/`, with no resource folder to find. Opening any of them
 /// writes them all, so a link from one page to another resolves beside it.
-pub const PAGES: &[Page] = &[Page {
-    topic: "manual",
-    file: "manual.html",
-    text: include_str!("../manual/manual.html"),
-}];
+pub const PAGES: &[Page] = &[
+    Page {
+        topic: "manual",
+        file: "manual.html",
+        text: include_str!("../manual/manual.html"),
+    },
+    // Parity A23: About's two texts. The GPL-3.0, this app's licence (the repository's LICENSE).
+    Page {
+        topic: "licence",
+        file: "LICENSE.txt",
+        text: include_str!("../../../LICENSE"),
+    },
+    // The work of others that app.exe and the solvers carry, written by
+    // tools/devtools/third_party_notices.py.
+    Page {
+        topic: "notices",
+        file: "THIRD-PARTY-NOTICES.txt",
+        text: include_str!("../about/THIRD-PARTY-NOTICES.txt"),
+    },
+];
 
 /// The pages could not be written where the browser is to read them.
 pub const HELP_WRITE: &str = "HELP_WRITE";
@@ -215,6 +230,30 @@ mod tests {
         assert_eq!(resolve("manual").unwrap(), Target::Page("manual.html"));
     }
 
+    /// A23: the licence is the GPL-3.0, and the notices name TetGen's AGPL-3.0 with its text and the
+    /// solvers' GPL, as the repository's rules require of a release (CLAUDE.md, TetGen).
+    #[test]
+    fn about_texts_carry_the_licences_a_release_needs() {
+        let page = |t: &str| PAGES.iter().find(|p| p.topic == t).unwrap().text;
+        assert!(page("licence").starts_with("GNU GENERAL PUBLIC LICENSE"));
+        assert!(page("licence").contains("Version 3, 29 June 2007"));
+        let n = page("notices");
+        for must in [
+            "TetGen 1.5.0",
+            "AGPL-3.0",
+            "GNU AFFERO GENERAL PUBLIC LICENSE",
+            "I-Simpa solvers",
+            "GPL-3.0-or-later",
+            "CC-BY-SA-4.0",
+            "SIL Open Font License",
+            "TinyXML-2",
+            "2. Rust crates compiled into app.exe",
+            "3. JavaScript packages in the interface",
+        ] {
+            assert!(n.contains(must), "THIRD-PARTY-NOTICES.txt lacks {must}");
+        }
+    }
+
     /// Every page is written whole, and a second write replaces the first in place.
     #[test]
     fn the_pages_are_written_and_rewritten_whole() {
@@ -222,6 +261,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         write_pages(&dir).unwrap();
         std::fs::write(dir.join("manual.html"), "stale").unwrap();
+        // Written as shipped: the same bytes as the embedded text.
         write_pages(&dir).unwrap();
         for p in PAGES {
             assert_eq!(std::fs::read_to_string(dir.join(p.file)).unwrap(), p.text);

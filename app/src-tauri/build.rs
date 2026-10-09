@@ -1,5 +1,10 @@
 // Generates the ACL for the app's own commands: with an app manifest, each command is denied
 // unless a capability grants its `allow-<command>` permission (capabilities/default.json).
+// Parity A23: the build's commit and profile for About, in its own file: m11's inventory reads
+// every quoted word followed by a comma in this file as a command name.
+#[path = "build_identity.rs"]
+mod build_identity;
+
 fn main() {
     let commands = &[
         "ping",
@@ -46,6 +51,7 @@ fn main() {
         "run_label",
         "run_open_folder",
         "help_open",
+        "app_about",
         "run_delete",
         "run_results",
         "run_report",
@@ -70,4 +76,5 @@ fn main() {
     let attributes = tauri_build::Attributes::new()
         .app_manifest(tauri_build::AppManifest::new().commands(commands));
     tauri_build::try_build(attributes).expect("tauri-build failed");
+    build_identity::emit();
 }

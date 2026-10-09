@@ -5,7 +5,7 @@
 // Pure: MenuBar.tsx draws it; helpModel.test.ts holds every topic to help.rs's list.
 
 /** A topic `help_open` takes (help.rs): a web page (`LINKS`) or a page shipped in the app (`PAGES`). */
-export type HelpTopic = 'manual' | 'upstream-guide' | 'upstream-site' | 'source';
+export type HelpTopic = 'manual' | 'licence' | 'notices' | 'upstream-guide' | 'upstream-site' | 'source';
 
 export interface HelpLink {
   topic: HelpTopic;
@@ -27,8 +27,29 @@ export const HELP_MANUAL: HelpLink = {
   what: 'the user manual',
 };
 
+/** A23: the Help menu's last item, Help › About (AboutDialog.tsx). */
+export const ABOUT_LABEL = 'About Night Mode';
+
+/** A23: the GPL-3.0's text, opened from About. */
+export const HELP_LICENCE: HelpLink = {
+  topic: 'licence',
+  id: 'about-licence-text',
+  label: 'GPL-3.0 licence',
+  title: 'The GNU General Public License, version 3, in full',
+  what: 'the GPL-3.0 licence',
+};
+
+/** A23: THIRD-PARTY-NOTICES.txt, opened from About. */
+export const HELP_NOTICES: HelpLink = {
+  topic: 'notices',
+  id: 'about-notices',
+  label: 'Third-party notices',
+  title: 'Every library, solver, font and data set the app carries, with its licence text',
+  what: 'the third-party notices',
+};
+
 /** The pages shipped in the app, in help.rs `PAGES`'s order. */
-export const HELP_PAGES: readonly HelpLink[] = [HELP_MANUAL];
+export const HELP_PAGES: readonly HelpLink[] = [HELP_MANUAL, HELP_LICENCE, HELP_NOTICES];
 
 /** The web destinations, in the menu's order. */
 export const HELP_LINKS: readonly HelpLink[] = [
