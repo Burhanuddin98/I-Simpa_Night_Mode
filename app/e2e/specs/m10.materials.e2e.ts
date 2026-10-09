@@ -14,7 +14,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { clickSelector } from '../lib/dom.ts';
 import { compareFiles } from '../lib/files.ts';
-import { hook, m10, waitForHooks } from '../lib/hooks.ts';
+import { hook, m10, openMaterialsTable, waitForHooks } from '../lib/hooks.ts';
 import { env } from '../lib/types.ts';
 
 const repo = (rel: string) => path.join(env('M10_REPO'), rel);
@@ -45,11 +45,12 @@ async function project(): Promise<{ materials: SavedMaterial[] }> {
   return JSON.parse(await m10.projectJson());
 }
 
-/** Opens `file` and shows the Materials step, with the grid mounted. */
+/** Opens `file`, shows the Materials step and opens the library's table (its own window since the
+ * 2026-10-09 GUI audit), with the grid mounted. */
 async function onMaterials(file: string): Promise<void> {
   await m10.openProject(file);
   await m10.setStep('materials');
-  await waitForHooks(['materialsGrid', 'materialsCopy']);
+  await openMaterialsTable();
 }
 
 /** The fixture's text, byte for byte as committed (CRLF kept). */
@@ -90,10 +91,10 @@ async function clipboard(type: 'copy' | 'paste', text = ''): Promise<string> {
   return out.data;
 }
 
-/** The inline messages of the Materials step, as `{code, text}`. */
+/** The inline messages of the Materials step and of its table's window, as `{code, text}`. */
 async function issueLines(): Promise<{ code: string; text: string }[]> {
   return browser.execute(() =>
-    [...document.querySelectorAll('[data-part="materials"] [data-issue-code]')].map((e) => ({
+    [...document.querySelectorAll('[data-part="materials"] [data-issue-code], [data-materials-sheet] [data-issue-code]')].map((e) => ({
       code: e.getAttribute('data-issue-code') ?? '',
       text: e.textContent ?? '',
     })),

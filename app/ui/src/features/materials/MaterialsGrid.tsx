@@ -399,6 +399,8 @@ export function MaterialsGrid() {
         beginEdit(cur, '', false);
         return;
       case 'Escape':
+        // A single cell has no selection to drop: the Esc goes on to the sheet, which closes.
+        if (ext.row === cur.row && ext.col === cur.col) return;
         handled();
         moveTo(cur);
         return;

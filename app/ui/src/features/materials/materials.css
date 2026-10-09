@@ -442,3 +442,83 @@
   color: var(--warn);
   font-size: 11px;
 }
+
+/* ---- The library's own window (MaterialsSheet.tsx; GUI audit 2026-10-09 A1) ---------------------------------------
+   The panel names the library and opens it; the sheet is as wide as its bands need (the width is set inline from the
+   band count), with cells a value can be read and typed in. Column widths match MaterialsSheet.tsx's NAME_W, BAND_W,
+   LAW_W. */
+.mat-edit {
+  width: auto;
+  height: 30px;
+  padding: 0 14px;
+}
+.rw.msheet {
+  height: auto;
+  min-height: 240px;
+  max-height: calc(100vh - 48px);
+}
+.msheet .mat-lib {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0 0;
+  border-bottom: none;
+}
+.msheet .mg-wrap {
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.msheet .mg-scroll {
+  max-height: none;
+  min-height: 0;
+}
+.msheet .mg {
+  font-size: 12.5px;
+}
+.msheet .mg th,
+.msheet .mg td {
+  height: 34px;
+}
+.msheet .mg thead th {
+  height: 30px;
+  font-size: 12px;
+}
+.msheet .mg .mg-name {
+  width: 180px;
+  min-width: 180px;
+  max-width: 180px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+.msheet .mg-band,
+.msheet .mg-cell {
+  min-width: 48px;
+  width: 48px;
+}
+.msheet .mg td.mg-law-cell {
+  min-width: 130px;
+  padding: 0 6px;
+}
+.msheet .mg-law-select {
+  width: 100%;
+}
+.msheet .mg-used {
+  font-size: 11.5px;
+}
+.msheet .mg-editor {
+  font-size: 12.5px;
+}
+.msheet .mg-tools button {
+  height: 30px;
+  padding: 0 12px;
+}
+/* The sheet clips what leaves it (resize needs overflow: hidden): the reference list opens upward, over the table. */
+.msheet .mg-tools .mg-lib-list {
+  top: auto;
+  bottom: 34px;
+  max-height: 300px;
+  overflow-y: auto;
+}

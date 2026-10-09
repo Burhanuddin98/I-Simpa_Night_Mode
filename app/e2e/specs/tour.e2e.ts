@@ -23,7 +23,7 @@ import { strict as assert } from 'node:assert';
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { clickSelector } from '../lib/dom.ts';
-import { hook, m10, waitForHooks } from '../lib/hooks.ts';
+import { closeMaterialsTable, hook, m10, openMaterialsTable, waitForHooks } from '../lib/hooks.ts';
 import { need, showTab } from '../lib/m11.ts';
 
 /** A beat between the parts of one step. */
@@ -447,7 +447,9 @@ if (WINDOW_SHOTS) {
     it('2: materials, sources and the Simulate settings, then Run', async () => {
       const p = await project();
       await m10.setStep('materials');
+      await openMaterialsTable();
       await $('[data-materials-grid]').waitForDisplayed({ timeout: 30_000 });
+      await closeMaterialsTable();
       for (const name of ['mat_CR4_seating', 'mat_CR4_whitePanels']) {
         const g = p.surface_groups.find((x) => x.name === name) ?? p.surface_groups[0];
         await reveal(`.scene [data-entity="surface_group:${g.id}"]`, 200);

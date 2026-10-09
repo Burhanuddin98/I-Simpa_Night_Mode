@@ -130,7 +130,7 @@ function SpanWord({ span }: { span: number }) {
 
 /** The window's frame: moved by its title bar, resized by its corner (CSS `resize`), kept on
  * screen. Centred until first moved. */
-function useFrame() {
+export function useFrame() {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const drag = useRef<{ dx: number; dy: number } | null>(null);

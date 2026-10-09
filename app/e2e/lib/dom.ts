@@ -50,6 +50,8 @@ export const EXEMPT_REGIONS: Record<'data-input' | 'data-geometry', Record<strin
     'scene-list': '[data-part="scene-list"]',
     'sources-panel': '[data-props-step="sources"]',
     'materials-panel': '[data-props-step="materials"]',
+    // The materials table's own window (MaterialsSheet.tsx, GUI audit 2026-10-09): the grid that sat in the panel.
+    'materials-sheet': '[data-materials-sheet]',
     'simulate-settings': '[data-props-step="simulate"] [data-part="settings"]',
   },
 };

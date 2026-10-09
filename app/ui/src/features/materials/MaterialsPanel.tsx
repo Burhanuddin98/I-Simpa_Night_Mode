@@ -1,5 +1,5 @@
 // The Materials step's properties (design:312-350): the selected surface group, its material as
-// a radio list with α mini-bars, and the library grid (TSV paste and copy, row fill, natural
+// a radio list with α mini-bars, and the library grid in its own window (TSV paste and copy, row fill, natural
 // sort, inline validator messages). PLAN.md 2.3 and 6.2. It reads the stores and writes only
 // through `actions.apply` with `ops`.
 import { useState } from 'react';
@@ -10,7 +10,7 @@ import { assignMaterial, batch } from '../../ops';
 import { STEPS } from '../../steps';
 import { refusalStore, sceneStore, selectionStore, useStore } from '../../store';
 import { dismiss, errorOf, IssueLines, lineOf, visibleRefusals, type Line } from './inline';
-import { MaterialsGrid } from './MaterialsGrid';
+import { MaterialsSheet } from './MaterialsSheet';
 import { activeVariant, alphaBars, effectiveMaterial, formatArea, selectedGroupIds, transmissionText } from './model';
 import './materials.css';
 
@@ -31,9 +31,32 @@ export function MaterialsPanel() {
   return (
     <div className="mat-panel" data-part="materials">
       <GroupSection />
-      <MaterialsGrid />
+      <LibrarySection />
       <div className="mat-hint empty">Double-click a face to take its whole flat surface.</div>
     </div>
+  );
+}
+
+/** The library's table opens in its own wide window (MaterialsSheet.tsx); the panel names what is in it. */
+function LibrarySection() {
+  const view = useStore(sceneStore)?.view;
+  const [open, setOpen] = useState(false);
+  if (!view) return null;
+  const n = view.materials.length;
+  const bands = view.bands.frequencies_hz.length;
+  return (
+    <section className="mat-sec mat-lib-sum" aria-label="Material library">
+      <div className="mat-sec-head">
+        <span className="label">Library</span>
+        <button type="button" className="wide-button mat-edit" data-action="edit-materials" aria-pressed={open} onClick={() => setOpen(!open)}>
+          Edit table…
+        </button>
+      </div>
+      <div className="mat-sub">
+        {n} {n === 1 ? 'material' : 'materials'} · absorption, scattering and transmission in {bands} bands
+      </div>
+      {open && <MaterialsSheet onClose={() => setOpen(false)} />}
+    </section>
   );
 }
 

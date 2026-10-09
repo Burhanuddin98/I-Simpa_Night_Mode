@@ -37,7 +37,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from
 import path from 'node:path';
 import { clickSelector } from '../lib/dom.ts';
 import { compareFiles } from '../lib/files.ts';
-import { hook, m10, waitForHooks } from '../lib/hooks.ts';
+import { hook, m10, openMaterialsTable, waitForHooks } from '../lib/hooks.ts';
 import { env, type Op, type Vec3 } from '../lib/types.ts';
 
 const repo = (rel: string) => path.join(env('M11_REPO'), rel);
@@ -420,7 +420,7 @@ describe('M11 project', () => {
     const depth = await m10.undoDepth();
 
     await m10.setStep('materials');
-    await waitForHooks(['materialsGrid']);
+    await openMaterialsTable();
     const select = await $(`select[data-law="${mid}"]`);
     await select.waitForDisplayed({ timeout: 30_000 });
     assert.equal(await select.getValue(), 'specular');
@@ -441,7 +441,7 @@ describe('M11 project', () => {
   it("m11-r22-m1: '30% absorbing' from the library carries the core's exact values, and assigned to the Floor keeps 6 / 6", async () => {
     await m10.openProject(freshRoom('m1'));
     await m10.setStep('materials');
-    await waitForHooks(['materialsGrid', 'materialLibrary']);
+    await openMaterialsTable();
     const lib = await hook<LibraryEntry[]>('materialLibrary');
     assert.equal(lib.length, 11, JSON.stringify(lib.map((e) => e.name)));
     assert.ok(!lib.some((e) => e.name === 'Default'), 'the placeholder is not in the library');

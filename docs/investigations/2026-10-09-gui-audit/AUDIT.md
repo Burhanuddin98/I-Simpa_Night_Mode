@@ -43,9 +43,10 @@ size, so the table's window is 318 px wide whether the screen is 1280 or 1920 wi
 ("target, shaded" runs off, a horizontal scrollbar under it). Meanwhile the right panel in Results holds four lines.
 Screen: `oct2-1536x864-results-run.png`.
 
-**A3. Results: two panels sit on the room.** The map options and the playback card stack in the middle of the view,
-overlapping each other's edge and covering most of the model. The playback card (speed, trails, scrubber) is shown in
-full when the run saved no particles and can play nothing. Same screen.
+**A3. Results: the cards sit on the room.** The map options (top left), the "No particles saved" note and the playback
+card (bottom centre, above the dock) cover most of the model at 1536×864. They do not overlap one another (m12.export
+holds them apart; an earlier line here said they did, corrected 02:54). The playback card stays useful with no particles
+saved: its scrubber plays the sound map over time; only Trails cannot be used, and says why. Same screen.
 
 ## B. Layout that does not adapt
 

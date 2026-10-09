@@ -33,7 +33,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { clickSelector } from '../lib/dom.ts';
-import { hook, m10, waitForHooks } from '../lib/hooks.ts';
+import { closeMaterialsTable, hook, m10, openMaterialsTable, waitForHooks } from '../lib/hooks.ts';
 import { env } from '../lib/types.ts';
 
 const WORK = () => path.join(env('M11_WORK'), 'blank');
@@ -245,6 +245,7 @@ async function giveMaterial(groupId: string, materialId: string): Promise<void> 
 async function libraryMaterial(name: string): Promise<string> {
   const have = (await project()).materials.find((m) => m.name === name);
   if (have) return have.id;
+  await openMaterialsTable();
   const lib = await hook<{ name: string; reference_id: number }[]>('materialLibrary');
   const entry = lib.find((e) => e.name === name);
   assert.ok(entry, `the library has ${name}`);
@@ -253,6 +254,7 @@ async function libraryMaterial(name: string): Promise<string> {
   await m10.idle();
   const m = (await project()).materials.find((x) => x.name === name);
   assert.ok(m);
+  await closeMaterialsTable();
   return m.id;
 }
 
@@ -435,6 +437,7 @@ describe('C1: a blank geometry to results', () => {
 
     // A new material, its absorption typed per band as one pasted row.
     await m10.setStep('materials');
+    await openMaterialsTable();
     const before = new Set((await project()).materials.map((m) => m.id));
     await clickSelector('[data-action="add-material"]');
     await m10.idle();
@@ -478,6 +481,7 @@ describe('C1: a blank geometry to results', () => {
     await m10.idle();
     assert.equal((await project()).materials.find((m) => m.id === mat.id)!.transmission_loss_db, null, 'switched off, no transmission at all');
     await clickSelector('[data-quantity-tab="absorption"]');
+    await closeMaterialsTable();
 
     await giveMaterial(ids['wall east'], mat.id);
     assert.ok(!(await m10.runBlockers()).includes('MATERIALS_UNASSIGNED'), 'every group has a material');

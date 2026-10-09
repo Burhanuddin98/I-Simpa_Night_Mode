@@ -61,3 +61,18 @@ export const m10 = {
   dirty: () => hook<boolean>('dirty'),
   setStep: (key: string) => settled(hook('setStep', key)),
 };
+
+/**
+ * Opens the materials table, which has its own window since the 2026-10-09 GUI audit (MaterialsSheet.tsx), from the
+ * Materials step, and waits for the grid's and the library's hooks. The window sits over the middle of the app:
+ * `closeMaterialsTable` closes it before the scene list or the view under it is clicked.
+ */
+export async function openMaterialsTable(): Promise<void> {
+  if (!(await $('[data-materials-sheet]').isExisting())) await (await $('[data-action="edit-materials"]')).click();
+  await waitForHooks(['materialsGrid', 'materialsCopy', 'materialLibrary']);
+}
+
+export async function closeMaterialsTable(): Promise<void> {
+  const close = await $('[data-action="close-materials"]');
+  if (await close.isExisting()) await close.click();
+}
