@@ -27,7 +27,7 @@ import { ADD_GROUP_LABEL, DELETE_GROUP_LABEL, MERGE_LABEL, mergePlan, RENAME_GRO
 import { clipboardStore, copySelected, deleteGroup, pasteCopied } from './sceneUi';
 import { Search } from './icons';
 import { recentStore, reopenLastStore, setReopenLast } from './recent';
-import { recentLabel } from './recentModel';
+import { recentMenuLabel } from './recentModel';
 import { RunButton } from './RunButton';
 import { closingProps, usePresence } from './usePresence';
 import { REGROUP_LABEL, regroupFaces, runTooltip } from './sceneModel';
@@ -114,7 +114,7 @@ export function MenuBar() {
       // A7: upstream's Recent projects, five, newest first, numbered as upstream's file history.
       ...recent.map((p, i) => ({
         id: `recent-${i}`,
-        label: `${i + 1}  ${recentLabel(p).name}`,
+        label: `${i + 1}  ${recentMenuLabel(p, recent)}`,
         run: () => actions.fire(actions.openPath(p)),
         disabled: running,
         title: running ? RUN_ACTIVE_TITLE : p,

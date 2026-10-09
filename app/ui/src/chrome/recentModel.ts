@@ -49,6 +49,18 @@ export function keptAt(rfc3339: string): string {
   return m ? `${m[1]} ${m[2]}` : rfc3339;
 }
 
+/**
+ * A recent entry's line in the File menu: its file name, and, when another entry has the same name
+ * (two copies of one room, say), its folder's name too, so the lines differ.
+ */
+export function recentMenuLabel(path: string, list: readonly string[]): string {
+  const { name, folder } = recentLabel(path);
+  const twin = list.some((p) => p !== path && recentLabel(p).name.toLowerCase() === name.toLowerCase());
+  if (!twin) return name;
+  const parent = folder.replace(/^.*[\\/]/, '');
+  return parent ? `${name} (${parent})` : name;
+}
+
 /** A recent entry as a menu shows it: the file's name without `.simpa`, and its folder. */
 export function recentLabel(path: string): { name: string; folder: string } {
   const cut = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'));

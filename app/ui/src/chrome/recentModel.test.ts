@@ -1,7 +1,7 @@
 // A7: the recent projects list's rules (recentModel.ts).
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { keptAt, projectAtStart, RECENT_MAX, readRecent, recentLabel, withoutRecent, withRecent } from './recentModel.ts';
+import { keptAt, projectAtStart, RECENT_MAX, readRecent, recentLabel, recentMenuLabel, withoutRecent, withRecent } from './recentModel.ts';
 
 test('projectAtStart (A33): the newest recent project, only when chosen, nothing else opened, not the self-test', () => {
   const recent = ['C:\\a.simpa', 'C:\\b.simpa'];
@@ -36,6 +36,13 @@ test('readRecent: a stored list back as it was; anything else is no list', () =>
   assert.deepEqual(readRecent(['C:\\x.simpa', 3, '', 'c:\\X.simpa', 'C:\\y.simpa']), ['C:\\x.simpa', 'C:\\y.simpa']);
   assert.deepEqual(readRecent(['1', '2', '3', '4', '5', '6', '7']), ['1', '2', '3', '4', '5']);
   for (const v of [null, 'C:\\x.simpa', { a: 1 }, 7]) assert.deepEqual(readRecent(v), []);
+});
+
+test('recentMenuLabel: the name, and the folder when another entry has the same name', () => {
+  const list = ['B:\\out\\a6\\box_room.simpa', 'B:\\out\\a39\\box_room.simpa', 'B:\\out\\cr4\\CR4.simpa'];
+  assert.equal(recentMenuLabel(list[0], list), 'box_room (a6)');
+  assert.equal(recentMenuLabel(list[1], list), 'box_room (a39)');
+  assert.equal(recentMenuLabel(list[2], list), 'CR4');
 });
 
 test('recentLabel: the file name without .simpa, and its folder', () => {
