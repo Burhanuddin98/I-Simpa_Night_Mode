@@ -14,7 +14,7 @@
 - **Build:** `cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release` inside the Visual Studio 2022 x64 environment, located the same way Attuner's `plugin/build.ps1` does it. Solver executables are expected in `solvers/` beside the GUI executable, per `FindSolverExe` in `project/solver.cpp`.
 - **A physics claim about a solver carries a bed:** two arms differing in exactly the patch, measured against an analytical reference. The README's prose is not a receipt.
 - **TetGen is dual-licensed, AGPL-3 or a paid WIAS licence.** A free GPL release is fine. A closed one is not, without that licence.
-- **Do not claim** the four solver fixes are correct, or that upstream is wrong, in the README, the UI or any marketing copy until item 4 of the arc plan has run.
+- **v1 ships upstream's solver physics unchanged** (decision 87): the pinned tag plus `patches/0001` and `0002`, which change storage only and are bedded as identical to upstream's build (BED-0001, BED-0002, BED-TCR). The four April solver fixes are not in the build (v1.1-backlog 114). Do not claim, in the README, the UI or any copy, that a patch corrects upstream or that upstream is wrong, until that patch has its physics bed.
 - Commit conventions follow `~/.claude/CLAUDE.md`: no Claude attribution, messages focused on the why, and a session summary in `session-logs/` before the final push.
 
 ## Picking this up
