@@ -15,7 +15,7 @@
 #   5. The app: npm ci, then the Tauri release build (UI bundled into app.exe), CARGO_TARGET_DIR honoured.
 #   6. The installer: tools\installer\build-installer.ps1, into -Out\<version>-<commit>-<stamp>\.
 #
-# Needs on PATH: git, cmake (3.21+), python 3 (with its headers, as python.org's installer gives),
+# Needs on PATH: git, cmake (the verified build used 4.3.2), python 3 (with its headers, as python.org's installer gives),
 # node 24 with npm, rustup/cargo (rust-toolchain.toml picks the toolchain), CUDA 13.2's nvcc (or
 # -FetchCuda); and Visual Studio 2022 with the "Desktop development with C++" workload. Network: GitHub
 # (upstream, Boost through upstream's CPM), npm, crates.io, SourceForge (NSIS, SWIG), go.microsoft.com
@@ -85,7 +85,7 @@ function Need([string]$exe, [string]$hint) {
 # --- 0. prerequisites, named before anything is built
 Step 'prerequisites'
 Need git 'install Git for Windows' | Out-Null
-Need cmake 'install CMake 3.21 or newer' | Out-Null
+Need cmake 'install CMake (the verified build used 4.3.2)' | Out-Null
 Need python 'install Python 3 from python.org (its headers are needed by upstream''s configure)' | Out-Null
 Need node 'install Node.js 24' | Out-Null
 Need npm 'install Node.js 24' | Out-Null
