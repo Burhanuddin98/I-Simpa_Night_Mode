@@ -671,6 +671,16 @@
 .vp-warm-legend .vp-legend-bar {
   height: 6px;
 }
+/* A legend's Expand (ChartWindow.tsx): small, at the legend's end, not stretched across the card. */
+.vp-legend > [data-action='expand-chart'],
+.vp-warm-legend > [data-action='expand-chart'] {
+  align-self: flex-end;
+  margin-top: 2px;
+}
+.vp-warm-legend > [data-action='expand-chart'] {
+  display: block;
+  margin-left: auto;
+}
 
 /* Round 2: the presentation view (H). The canvas alone: every panel, label and tool hidden. */
 html.present .menubar,

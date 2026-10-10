@@ -100,11 +100,14 @@
 .ac-spectrum .ac-chart {
   flex: 1 1 auto;
 }
+/* A head with more buttons than its card is wide (RT: Copy, Axes, Image..., Expand) wraps them to a second line
+   rather than cutting the last one off at the card's edge. */
 .ac-card-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 4px 10px;
 }
 /* R58: a table's Copy, small, at the end of its card's head. */
 .small-button.ac-copy {
@@ -683,6 +686,104 @@
   background: rgba(224, 32, 46, 0.18);
 }
 
+/* A chart opened large (ChartWindow.tsx): the response window's glass, head and frame, at 80 % of the app's
+   window, each further one cascaded down and right; the chart takes the room the controls and keys leave and
+   is redrawn at that size (Chart's ResizeObserver). The words scale up with the chart's own (LARGE). */
+.cw.rw {
+  width: 80vw;
+  height: 80vh;
+  min-width: 480px;
+  min-height: 320px;
+  transform: translate(calc(-50% + var(--cw-shift, 0) * 28px), calc(-50% + var(--cw-shift, 0) * 28px));
+}
+.cw.rw-moved {
+  transform: none;
+}
+.cw .rw-title {
+  font-size: 15px;
+}
+.cw .rw-sub {
+  font-size: 13px;
+}
+.cw-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 6px 4px;
+  border-radius: 5px;
+  background: rgba(12, 10, 10, 0.88);
+  container-type: inline-size;
+}
+.cw-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+}
+.cw .ac-control,
+.cw .ac-legend,
+.cw .ac-axes {
+  font-size: 14px;
+}
+.cw .ac-control select {
+  font-size: 13px;
+  padding: 2px 6px;
+}
+.cw .small-button.ac-copy {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+.cw .ac-swatch {
+  width: 18px;
+  height: 4px;
+}
+.cw .ac-chart {
+  flex: 1 1 0;
+  min-height: 200px;
+  overflow: hidden;
+}
+.cw .ac-decay-table {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+}
+.cw .ac-table {
+  font-size: 14px;
+}
+/* The 3D view's colour legends opened large: no chart under them, so the window is lower and the bar takes
+   its height; the words grow with the window's width. */
+.cw.cw-legend {
+  height: 40vh;
+  min-height: 240px;
+}
+.cw-legend .cw-body {
+  justify-content: center;
+  padding: 16px 24px;
+}
+.cw-legend .vp-legend-title {
+  font-size: clamp(15px, 2.2cqw, 26px);
+  color: var(--text);
+}
+.cw-legend .vp-legend-note {
+  max-width: none;
+  font-size: clamp(13px, 1.6cqw, 18px);
+}
+.cw-legend .vp-legend-bar {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 32px;
+  max-height: 160px;
+  border-radius: 3px;
+}
+.cw-legend .vp-legend-labels {
+  width: 100%;
+  font-size: clamp(15px, 2.4cqw, 30px);
+  color: var(--text);
+}
+
 /* "Why values are missing" (backlog 80). */
 .ac-advice-card {
   grid-column: 1 / -1;
@@ -766,9 +867,15 @@
   width: min(560px, calc(100vw - 48px));
   height: auto;
   min-width: 420px;
-  min-height: 0;
-  resize: none;
+  min-height: 200px;
+  /* Resized by its corner and moved by its title bar, as the response window (Burhan 2026-10-10 04:11);
+     made smaller than its content, it scrolls. */
+  resize: both;
+  overflow: auto;
   gap: 8px;
+}
+.aw.rw-moved {
+  right: auto;
 }
 .aw-sec {
   display: flex;

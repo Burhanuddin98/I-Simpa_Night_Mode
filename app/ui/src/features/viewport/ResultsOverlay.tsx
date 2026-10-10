@@ -21,6 +21,9 @@
 // The time window (window.ts): chips in the map panel (Off, 5, 10, 20, 50 ms; 10 by default), each
 // one that is a single step of this run, or any on a cumulative map, disabled with the reason; the
 // legend's title says "averaged over 10 ms", and the probe shows the window mean and says so.
+//
+// The two colour legends (the map's, the particles' light) open large on Expand (ChartWindow.tsx, Burhan
+// 2026-10-10 04:11): the same words and ends, read from the same view, in a window that moves and resizes.
 import { useEffect, useState } from 'react';
 import { planesNotInRun, rerunText } from '../../chrome/planes';
 import { sceneStore, stepStore, useStore } from '../../store';
@@ -34,6 +37,7 @@ import { CONTOUR_STEPS_DB, contourText, parseRange, probeOf, probeOfParam, type 
 import { TRAIL_HINT, TRAIL_LENGTHS, TRAIL_NOTE } from './particles';
 import { PARTICLE_LOOKS, type ParticleLook } from './rays';
 import { warmGradient, warmLabels } from './warmRamp';
+import { ChartWindow, ExpandButton } from '../acoustics/ChartWindow';
 
 /** Decision 69: the particle looks, as the card names them. */
 const LOOK_LABELS: Record<ParticleLook, string> = { dots: 'Dots', glow: 'Glow', rays: 'Rays' };
@@ -343,6 +347,59 @@ function CardFold({ folded, onToggle, what }: { folded: boolean; onToggle: () =>
   );
 }
 
+type View = ReturnType<typeof resultsViewStore.get>;
+
+/** The map's legend (R50): its title, the parameter's note, the bar and its ends, the notes under it; on the
+ * view's card and, the same, in its large window. */
+function MapLegendBody({ v }: { v: View }) {
+  if (!v.map) return null;
+  return (
+    <>
+      <div className="vp-legend-title">{v.map.legend.title}</div>
+      {v.map.kind === 'param' && v.param ? (
+        <div className="vp-legend-note" data-part="param-note">
+          {v.param.note}
+          {Object.keys(v.param.refused).length ? `; not drawn: ${Object.entries(v.param.refused).map(([k, n]) => `${n} ${k.replace(/_/g, ' ')}`).join(', ')}` : ''}
+          {v.param.lostWarning !== null ? `; ${(v.param.lostWarning * 100).toFixed(2)} % of particles lost: the late decay may hold too little energy` : ''}
+        </div>
+      ) : null}
+      <div className="vp-legend-bar" style={{ background: v.map.legend.gradient }} />
+      <div className="vp-legend-labels">
+        <span data-legend="lo">{v.map.legend.lo}</span>
+        <span data-legend="mid">{v.map.legend.mid}</span>
+        <span data-legend="hi">{v.map.legend.hi}</span>
+      </div>
+      {v.map.cumulative && (
+        <div className="vp-legend-note" data-part="cumulative-note">
+          {CUMULATIVE_NOTE}
+        </div>
+      )}
+      {v.smooth && !v.smoothRefusal && (
+        <div className="vp-legend-note" data-part="legend-note">
+          Smoothed between faces; the probe reads each face's own value.{v.isoDb > 0 ? ` ${contourText(v.isoDb)}.` : ''}
+        </div>
+      )}
+    </>
+  );
+}
+
+const WARM_HINT = "Each particle's level against the loudest particle of the band, drawn as light: louder is hotter and brighter. The span fits this band's particles.";
+
+/** The particles' light (decision 69): the warm ramp and its ends, dB re the loudest particle. */
+function WarmLegendBody({ span }: { span: number }) {
+  const l = warmLabels(span);
+  return (
+    <>
+      <div className="vp-legend-bar" style={{ background: warmGradient() }} />
+      <div className="vp-legend-labels">
+        <span>{l.lo}</span>
+        <span>{l.mid}</span>
+        <span>{l.hi} re loudest</span>
+      </div>
+    </>
+  );
+}
+
 export function ResultsOverlay() {
   const [mapFolded, toggleMap] = useCardFold('nm-fold-map-options');
   const [playFolded, togglePlay] = useCardFold('nm-fold-playback');
@@ -353,6 +410,15 @@ export function ResultsOverlay() {
   // The legend's span: the band's fitted span, or in Rays the span fitted to the step shown.
   const warmSpan = v.look === 'rays' ? resultsLayer().gpu.raySpanAt(anim.step) : v.warmDepth;
   const scene = useStore(sceneStore);
+  // The legends opened large; each closes with its legend (another step, no map, the particles as dots).
+  const [largeMap, setLargeMap] = useState(false);
+  const [largeWarm, setLargeWarm] = useState(false);
+  const mapShown = step === 'results' && v.status === 'ready' && !!v.map;
+  const warmShown = step === 'results' && v.status === 'ready' && v.particles.state === 'shown' && v.look !== 'dots';
+  useEffect(() => {
+    if (!mapShown) setLargeMap(false);
+    if (!warmShown) setLargeWarm(false);
+  }, [mapShown, warmShown]);
 
   useEffect(() => {
     startResultsView();
@@ -584,32 +650,15 @@ export function ResultsOverlay() {
         <div className="vp-dock-row">
           {v.map && (
             <div className="vp-legend float-panel" data-part="map-legend" data-results-region data-map-kind-shown={v.map.kind}>
-              <div className="vp-legend-title">{v.map.legend.title}</div>
-              {v.map.kind === 'param' && v.param ? (
-                <div className="vp-legend-note" data-part="param-note">
-                  {v.param.note}
-                  {Object.keys(v.param.refused).length ? `; not drawn: ${Object.entries(v.param.refused).map(([k, n]) => `${n} ${k.replace(/_/g, ' ')}`).join(', ')}` : ''}
-                  {v.param.lostWarning !== null ? `; ${(v.param.lostWarning * 100).toFixed(2)} % of particles lost: the late decay may hold too little energy` : ''}
-                </div>
-              ) : null}
-              <div className="vp-legend-bar" style={{ background: v.map.legend.gradient }} />
-              <div className="vp-legend-labels">
-                <span data-legend="lo">{v.map.legend.lo}</span>
-                <span data-legend="mid">{v.map.legend.mid}</span>
-                <span data-legend="hi">{v.map.legend.hi}</span>
-              </div>
-              {v.map.cumulative && (
-                <div className="vp-legend-note" data-part="cumulative-note">
-                  {CUMULATIVE_NOTE}
-                </div>
-              )}
-              {v.smooth && !v.smoothRefusal && (
-                <div className="vp-legend-note" data-part="legend-note">
-                  Smoothed between faces; the probe reads each face's own value.{v.isoDb > 0 ? ` ${contourText(v.isoDb)}.` : ''}
-                </div>
-              )}
+              <MapLegendBody v={v} />
+              <ExpandButton open={largeMap} chart="map-legend" onClick={() => setLargeMap((o) => !o)} />
             </div>
           )}
+          {largeMap && v.map ? (
+            <ChartWindow chart="map-legend" title="Map colours" sub={bandLabel(v.bandHz)} className="cw-legend" onClose={() => setLargeMap(false)}>
+              <MapLegendBody v={v} />
+            </ChartWindow>
+          ) : null}
           <div className="vp-transport float-panel" data-part="animator" data-results-region data-folded={playFolded}>
             {p.state === 'error' && <div className="vp-particles-none">{p.message}</div>}
             <div className="vp-row vp-transport-main">
@@ -740,14 +789,16 @@ export function ResultsOverlay() {
                     Full
                   </button>
                 </div>
-                <div className="vp-warm-legend" data-part="warm-legend" data-results-region title="Each particle's level against the loudest particle of the band, drawn as light: louder is hotter and brighter. The span fits this band's particles.">
-                  <div className="vp-legend-bar" style={{ background: warmGradient() }} />
-                  <div className="vp-legend-labels">
-                    <span>{warmLabels(warmSpan).lo}</span>
-                    <span>{warmLabels(warmSpan).mid}</span>
-                    <span>{warmLabels(warmSpan).hi} re loudest</span>
-                  </div>
+                <div className="vp-warm-legend" data-part="warm-legend" data-results-region title={WARM_HINT}>
+                  <WarmLegendBody span={warmSpan} />
+                  <ExpandButton open={largeWarm} chart="warm-legend" onClick={() => setLargeWarm((o) => !o)} />
                 </div>
+                {largeWarm ? (
+                  <ChartWindow chart="warm-legend" title="Particle light" sub={bandLabel(v.bandHz)} className="cw-legend" onClose={() => setLargeWarm(false)}>
+                    <div className="vp-legend-note">{WARM_HINT}</div>
+                    <WarmLegendBody span={warmSpan} />
+                  </ChartWindow>
+                ) : null}
                 {replicas && (
                   <div className="vp-diff-note vp-replica-note" data-part="replica-note" role="status">
                     {replicas.saved.toLocaleString('en-GB')} saved paths, each shown {replicas.copies.toLocaleString('en-GB')}×, offset: a visual density, not more particles.

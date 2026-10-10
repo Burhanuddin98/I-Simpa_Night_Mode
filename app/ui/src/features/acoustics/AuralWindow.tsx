@@ -10,12 +10,14 @@
 // the switch changes buffers at the same moment of the clip, so what changes is the room. The
 // impulse response itself is below, as the detail. The meter reads the output as it plays and shows
 // a clip if one ever reaches full scale, never hides it. The words say what this is (`AURAL_NOTE`),
-// as the response window's do for its map.
+// as the response window's do for its map. It is moved by its title bar and resized by its corner, on
+// the response window's frame (`useFrame`; Burhan 2026-10-10 04:11).
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import * as actions from '../../actions';
 import { AURAL_NOTE, AURAL_TITLE, CLIPS, CLIPS_NOTE, clipText, dbText, energy, type Hear, LEVEL_NOTE, meter, peakDbfs, readWav, type WavData, wavName } from './aural';
 import type { SourceSel } from './model';
+import { useFrame } from './ResponseWindow';
 
 type What = 'ir' | Hear;
 
@@ -291,10 +293,20 @@ export function AuralWindow({
   const ownName = dry.startsWith('file:') ? dry.slice(5).split(/[\\/]/).pop() : null;
   const describe = (l: Loaded | null, none: string) => (l ? `${(l.wav.samples.length / l.wav.rate).toFixed(2)} s at ${l.wav.rate / 1000} kHz, peak ${dbText(peakDbfs(l.wav.samples))}` : none);
   const clipPlaying = playing === 'dry' || playing === 'room';
+  const frame = useFrame();
 
   return createPortal(
-    <div className="aw rw glass" role="dialog" aria-label={AURAL_TITLE} data-aural-window data-receiver={receiver} data-source={source ?? ''}>
-      <div className="rw-head">
+    <div
+      ref={frame.ref}
+      className={`aw rw glass${frame.pos ? ' rw-moved' : ''}`}
+      style={frame.pos ? { left: frame.pos.x, top: frame.pos.y } : undefined}
+      role="dialog"
+      aria-label={AURAL_TITLE}
+      data-aural-window
+      data-receiver={receiver}
+      data-source={source ?? ''}
+    >
+      <div className="rw-head" onPointerDown={frame.onHeadDown} onPointerMove={frame.onHeadMove} onPointerUp={frame.onHeadUp} onPointerCancel={frame.onHeadUp}>
         <span className="rw-title" data-part="aural-title">
           {AURAL_TITLE}
         </span>

@@ -83,6 +83,7 @@ import type { ChartHeading } from '../viewport/snapshot';
 import { N, S } from './Marked';
 import { auralHookOpen, auralHookSave, auralHookView, AuralWindow } from './AuralWindow';
 import { responseHookView, ResponseWindow } from './ResponseWindow';
+import { ChartWindow, ExpandButton } from './ChartWindow';
 
 function Band({ report, index }: { report: NonNullable<ReportView['report']>; index: number }) {
   const b = bandNum(report, index);
@@ -534,8 +535,10 @@ const IMAGE_MIN = { width: 960, height: 440 } as const;
  * series), then given its size back. */
 async function saveChart(part: string, path?: string) {
   const u = plots.get(part);
-  const heading = chartHeadings.get(part);
-  if (!u || !heading) throw { code: 'EXPORT_NOTHING', message: `no ${CHART_NAMES[part] ?? part} chart is shown` };
+  // A chart's large window draws the same chart under `<part>-large`: the same heading and name.
+  const base = part.replace(/-large$/, '');
+  const heading = chartHeadings.get(base);
+  if (!u || !heading) throw { code: 'EXPORT_NOTHING', message: `no ${CHART_NAMES[base] ?? part} chart is shown` };
   const was = { width: u.width, height: u.height };
   const big = { width: Math.max(was.width, IMAGE_MIN.width), height: Math.max(was.height, IMAGE_MIN.height) };
   const frame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
@@ -545,10 +548,31 @@ async function saveChart(part: string, path?: string) {
       await frame();
       await frame();
     }
-    return await exportChart(u.ctx.canvas, heading(), CHART_NAMES[part] ?? part, path);
+    return await exportChart(u.ctx.canvas, heading(), CHART_NAMES[base] ?? base, path);
   } finally {
     if (u.width !== was.width || u.height !== was.height) u.setSize(was);
   }
+}
+
+/** The charts on the page, for the `chartView` test hook: each one's size, its scales' ranges as drawn (a zoom,
+ * the axes by hand), which series are drawn, its tick font's size, and the arrays it draws (a large window's chart
+ * draws its card's arrays). */
+function chartHookView() {
+  return Object.fromEntries(
+    [...plots].map(([part, u]) => [
+      part,
+      {
+        width: u.width,
+        height: u.height,
+        x: [u.scales.x.min ?? null, u.scales.x.max ?? null],
+        y: [u.scales.y.min ?? null, u.scales.y.max ?? null],
+        shown: u.series.slice(1).map((x) => x.show !== false),
+        // uPlot keeps an axis's font as [font, px] at the screen's pixel ratio.
+        fontPx: ((u.axes[0].font as unknown as [string, number] | undefined) ?? [])[1] ?? null,
+        data: u.data.map((a) => [...a]),
+      },
+    ]),
+  );
 }
 
 /** R63: "Image…" on a chart's card: the chart as a PNG, saved where the person picks. */
@@ -589,12 +613,31 @@ const css = (name: string, fallback: string) => {
  * lightness band, chroma, CVD and normal-vision separation, contrast all pass). */
 const SERIES_COLOURS: Record<string, string> = { t30_s: '#e0202e', t20_s: '#3d8fd1', t15_s: '#7cc47f', edt_s: '#d6a033' };
 
-function axes(xLabel: string, yLabel: string, xValues?: (u: uPlot, splits: number[]) => string[]): uPlot.Axis[] {
+/** How much larger a chart's text, ticks and strokes are in its large window (ChartWindow.tsx): the window
+ * is several times the card, and uPlot's 12 px would read as small there as on the card. */
+const LARGE = 1.5;
+
+/** The axes at scale `k` (1 on the card: uPlot's own fonts and sizes; `LARGE` in the large window, every
+ * font, tick, gap and axis size scaled with it, the ticks spaced wider so the larger labels do not crowd). */
+function axes(xLabel: string, yLabel: string, xValues?: (u: uPlot, splits: number[]) => string[], k = 1): uPlot.Axis[] {
   const ink = css('--text-3', '#85858e');
   const grid = { stroke: css('--line', '#1d1d21'), width: 1 };
+  const big = (space: number): Partial<uPlot.Axis> => {
+    if (k === 1) return {};
+    const family = css('--sans', 'system-ui, sans-serif');
+    return {
+      font: `${Math.round(12 * k)}px ${family}`,
+      labelFont: `600 ${Math.round(12 * k)}px ${family}`,
+      size: Math.round(50 * k),
+      labelSize: Math.round(30 * k),
+      gap: Math.round(5 * k),
+      space: Math.round(space * k),
+      ticks: { ...grid, size: Math.round(10 * k) },
+    };
+  };
   return [
-    { label: xLabel, stroke: ink, grid, ticks: grid, ...(xValues ? { values: xValues } : {}) },
-    { label: yLabel, stroke: ink, grid, ticks: grid },
+    { label: xLabel, stroke: ink, grid, ticks: grid, ...(xValues ? { values: xValues } : {}), ...big(50) },
+    { label: yLabel, stroke: ink, grid, ticks: grid, ...big(30) },
   ];
 }
 
@@ -603,16 +646,16 @@ const SPECTRUM_COLOUR = '#e0202e';
 
 /** A draw hook: each drawn value's range (lo to hi) as a whisker with caps, as the tables print it
  * beside the value; nothing where the value is a gap. */
-function rangeWhiskers(series: readonly Series[], colour: (param: string) => string): (u: uPlot) => void {
+function rangeWhiskers(series: readonly Series[], colour: (param: string) => string, scale = 1): (u: uPlot) => void {
   return (u: uPlot) => {
     const ctx = u.ctx;
-    const cap = 4 * devicePixelRatio;
+    const cap = 4 * scale * devicePixelRatio;
     series.forEach((s, k) => {
       // R62: a series switched off in the legend takes its whiskers with it.
       if (u.series[k + 1]?.show === false) return;
       ctx.save();
       ctx.strokeStyle = colour(s.param);
-      ctx.lineWidth = 1.5 * devicePixelRatio;
+      ctx.lineWidth = 1.5 * scale * devicePixelRatio;
       s.lo.forEach((lo, i) => {
         const hi = s.hi[i];
         if (lo === null || hi === null || s.values[i] === null) return;
@@ -636,7 +679,24 @@ function rangeWhiskers(series: readonly Series[], colour: (param: string) => str
 /** RT per band against the DIN target: the shown reverberation times, each with its range as a
  * whisker (`rtSeries`: the tables' filter, so a value the tables do not show is a gap), the target
  * line, and a shaded fifth either side of it. */
-function RtChart({ report, series, target, off, hand }: { report: NonNullable<ReportView['report']>; series: Series[]; target: number | null; off: ReadonlySet<string>; hand: HandAxes }) {
+function RtChart({
+  report,
+  series,
+  target,
+  off,
+  hand,
+  part = 'rt-chart',
+  k = 1,
+}: {
+  report: NonNullable<ReportView['report']>;
+  series: Series[];
+  target: number | null;
+  off: ReadonlySet<string>;
+  hand: HandAxes;
+  /** `rt-chart` on the card, `rt-chart-large` in its large window, drawn at scale `k`. */
+  part?: string;
+  k?: number;
+}) {
   const { opts, data } = useMemo(() => {
     const x = report.bands_hz.map((_, i) => i);
     const t = target ?? null;
@@ -644,15 +704,15 @@ function RtChart({ report, series, target, off, hand }: { report: NonNullable<Re
     const data: uPlot.AlignedData = [x, ...series.map((s) => s.values), flat(1), flat(0.8), flat(1.2)];
     const n = series.length;
     const top = Math.max(0, ...series.flatMap((s) => s.hi.filter((v): v is number => v !== null)));
-    const whiskers = rangeWhiskers(series, (p) => SERIES_COLOURS[p] ?? '#a1a1aa');
+    const whiskers = rangeWhiskers(series, (p) => SERIES_COLOURS[p] ?? '#a1a1aa', k);
     const opts: Omit<uPlot.Options, 'width' | 'height'> = {
       legend: { show: false },
       scales: { x: { time: false, range: [-0.5, x.length - 0.5] }, y: { range: (_u, _lo, hi) => [0, Math.max(hi ?? 1, top, (t ?? 0) * 1.3) * 1.1 || 1] } },
-      axes: axes('Band', 'Time (s)', (_u, splits) => splits.map((v) => (Number.isInteger(v) && report.bands_hz[v] !== undefined ? bandText(report.bands_hz[v]) : ''))),
+      axes: axes('Band', 'Time (s)', (_u, splits) => splits.map((v) => (Number.isInteger(v) && report.bands_hz[v] !== undefined ? bandText(report.bands_hz[v]) : '')), k),
       series: [
         {},
-        ...series.map((s) => ({ label: s.label, stroke: SERIES_COLOURS[s.param] ?? '#a1a1aa', width: 2, points: { size: 8, fill: SERIES_COLOURS[s.param] ?? '#a1a1aa' }, spanGaps: false })),
-        { label: 'DIN target', stroke: css('--text-2', '#a1a1aa'), width: 1, dash: [4, 4], points: { show: false } },
+        ...series.map((s) => ({ label: s.label, stroke: SERIES_COLOURS[s.param] ?? '#a1a1aa', width: 2 * k, points: { size: 8 * k, fill: SERIES_COLOURS[s.param] ?? '#a1a1aa' }, spanGaps: false })),
+        { label: 'DIN target', stroke: css('--text-2', '#a1a1aa'), width: k, dash: [4 * k, 4 * k], points: { show: false } },
         { label: 'lower', stroke: 'transparent', points: { show: false } },
         { label: 'upper', stroke: 'transparent', points: { show: false } },
       ],
@@ -660,14 +720,14 @@ function RtChart({ report, series, target, off, hand }: { report: NonNullable<Re
       hooks: { draw: [whiskers] },
     };
     return { opts, data };
-  }, [report, series, target]);
+  }, [report, series, target, k]);
   // R62: the legend's switched-off keys as uPlot series: a parameter's own, the target's three.
   const n = series.length;
   const hidden = useMemo(
     () => [...series.flatMap((s, i) => (off.has(s.param) ? [i + 1] : [])), ...(off.has(TARGET_KEY) ? [n + 1, n + 2, n + 3] : [])],
     [series, off, n],
   );
-  return <Chart opts={opts} data={data} part="rt-chart" hidden={hidden} hand={hand} />;
+  return <Chart opts={opts} data={data} part={part} hidden={hidden} hand={hand} />;
 }
 
 /** R62: the RT legend's key for the DIN target and its shading. */
@@ -675,7 +735,7 @@ const TARGET_KEY = 'din-target';
 
 /** R9: a receiver's spectrum, SPL per band as bars (`spectrumSeries`: the receivers table's cells,
  * so a level the table does not show is a gap), each with its range as a whisker. */
-function SpectrumChart({ report, series, hand }: { report: NonNullable<ReportView['report']>; series: Series[]; hand: HandAxes }) {
+function SpectrumChart({ report, series, hand, part = 'spectrum-chart', k = 1 }: { report: NonNullable<ReportView['report']>; series: Series[]; hand: HandAxes; part?: string; k?: number }) {
   const { opts, data } = useMemo(() => {
     const x = report.bands_hz.map((_, i) => i);
     const data: uPlot.AlignedData = [x, ...series.map((s) => s.values)];
@@ -684,41 +744,42 @@ function SpectrumChart({ report, series, hand }: { report: NonNullable<ReportVie
     const hi = vals.length ? Math.max(...vals) : 1;
     // Bars stand on a floor 10 dB under the lowest level shown, so the differences between bands read.
     const floor = Math.floor((lo - 10) / 5) * 5;
-    const whiskers = rangeWhiskers(series, () => css('--text', '#ececee'));
+    const whiskers = rangeWhiskers(series, () => css('--text', '#ececee'), k);
     const opts: Omit<uPlot.Options, 'width' | 'height'> = {
       legend: { show: false },
       scales: { x: { time: false, range: [-0.5, x.length - 0.5] }, y: { range: [floor, Math.ceil((hi + 3) / 5) * 5] } },
-      axes: axes('Band', 'Level (dB)', (_u, splits) => splits.map((v) => (Number.isInteger(v) && report.bands_hz[v] !== undefined ? bandText(report.bands_hz[v]) : ''))),
+      axes: axes('Band', 'Level (dB)', (_u, splits) => splits.map((v) => (Number.isInteger(v) && report.bands_hz[v] !== undefined ? bandText(report.bands_hz[v]) : '')), k),
       series: [
         {},
         ...series.map((s) => ({
           label: s.label,
           stroke: SPECTRUM_COLOUR,
           fill: 'rgba(224,32,46,0.35)',
-          width: 1.5,
+          width: 1.5 * k,
           points: { show: false },
-          paths: uPlot.paths.bars!({ size: [0.6, 48] }),
+          // The bars' widest, CSS px: wider in the large window, where a band has several times the room.
+          paths: uPlot.paths.bars!({ size: [0.6, 48 * k * k] }),
         })),
       ],
       hooks: { draw: [whiskers] },
     };
     return { opts, data };
-  }, [report, series]);
-  return <Chart opts={opts} data={data} part="spectrum-chart" hand={hand} />;
+  }, [report, series, k]);
+  return <Chart opts={opts} data={data} part={part} hand={hand} />;
 }
 
-function DecayChart({ curve, hand }: { curve: { t: number[]; db: number[] }; hand: HandAxes }) {
+function DecayChart({ curve, hand, part = 'decay-chart', k = 1 }: { curve: { t: number[]; db: number[] }; hand: HandAxes; part?: string; k?: number }) {
   const { opts, data } = useMemo(() => {
     const data: uPlot.AlignedData = [curve.t, curve.db];
     const opts: Omit<uPlot.Options, 'width' | 'height'> = {
       legend: { show: false },
       scales: { x: { time: false } },
-      axes: axes('Time (s)', 'Level (dB)'),
-      series: [{}, { label: 'Decay', stroke: '#e0202e', width: 2, points: { show: false } }],
+      axes: axes('Time (s)', 'Level (dB)', undefined, k),
+      series: [{}, { label: 'Decay', stroke: '#e0202e', width: 2 * k, points: { show: false } }],
     };
     return { opts, data };
-  }, [curve]);
-  return <Chart opts={opts} data={data} part="decay-chart" hand={hand} />;
+  }, [curve, k]);
+  return <Chart opts={opts} data={data} part={part} hand={hand} />;
 }
 
 /** What the tab shows, for the `acousticsView` test hook; null while the tab is not mounted. */
@@ -745,6 +806,7 @@ let paneView: HookView | null = null;
 export function useAcousticsDock(): void {
   useEffect(() => registerHook('acousticsView', () => paneView), []);
   useEffect(() => registerHook('chartImage', ((part: string, path: string) => saveChart(part, path)) as never), []);
+  useEffect(() => registerHook('chartView', () => chartHookView()), []);
   useEffect(() => registerHook('responseView', () => responseHookView()), []);
   useEffect(() => registerHook('auralView', () => auralHookView()), []);
   useEffect(() => registerHook('auralSave', ((what: 'ir' | 'dry' | 'room', path: string) => auralHookSave(what, path)) as never), []);
@@ -768,6 +830,13 @@ function useVariantRunFollow(): void {
   }, [active]);
 }
 
+/** `set` with `k` switched: added if it was not there, taken out if it was. */
+function toggled<T>(set: ReadonlySet<T>, k: T): ReadonlySet<T> {
+  const next = new Set(set);
+  if (!next.delete(k)) next.add(k);
+  return next;
+}
+
 export function AcousticsPane() {
   const step = useStore(stepStore);
   const selected = useStore(selectedRunStore);
@@ -787,9 +856,31 @@ export function AcousticsPane() {
   // R72: each chart's axes set by hand, and which chart's editor is open.
   const [hand, setHand] = useState<Record<ChartKey, HandAxes>>({ rt: {}, spectrum: {}, decay: {} });
   const [axesOpen, setAxesOpen] = useState<ChartKey | null>(null);
-  const axesButton = (k: ChartKey) => <AxesButton open={axesOpen === k} set={!!(hand[k].x || hand[k].y || hand[k].yStep !== undefined)} onClick={() => setAxesOpen((o) => (o === k ? null : k))} />;
-  const axesEditor = (k: ChartKey, yName: string, xName?: string) =>
-    axesOpen === k ? <AxesEditor key={k} x={!!xName} xName={xName ?? ''} yName={yName} value={hand[k]} onChange={(a) => setHand((h) => ({ ...h, [k]: a }))} /> : null;
+  // The charts open large (ChartWindow.tsx), and which of their axes editors are open: a large window's
+  // editor is its own, the axes it sets the chart's (the card's chart and its large one are one chart).
+  const [large, setLarge] = useState<ReadonlySet<ChartKey>>(new Set());
+  const [largeAxes, setLargeAxes] = useState<ReadonlySet<ChartKey>>(new Set());
+  const toggleLarge = (k: ChartKey) => setLarge((o) => toggled(o, k));
+  const closeLarge = (k: ChartKey) =>
+    setLarge((o) => {
+      const next = new Set(o);
+      next.delete(k);
+      return next;
+    });
+  // The large decay window shows the Schroeder table on its own switch, as the card does.
+  const [largeDecayTable, setLargeDecayTable] = useState(false);
+  const axesButton = (k: ChartKey, big = false) => (
+    <AxesButton
+      open={big ? largeAxes.has(k) : axesOpen === k}
+      set={!!(hand[k].x || hand[k].y || hand[k].yStep !== undefined)}
+      onClick={() => (big ? setLargeAxes((o) => toggled(o, k)) : setAxesOpen((o) => (o === k ? null : k)))}
+    />
+  );
+  const axesEditor = (k: ChartKey, yName: string, xName?: string, big = false) =>
+    (big ? largeAxes.has(k) : axesOpen === k) ? (
+      <AxesEditor key={big ? `${k}-large` : k} x={!!xName} xName={xName ?? ''} yName={yName} value={hand[k]} onChange={(a) => setHand((h) => ({ ...h, [k]: a }))} />
+    ) : null;
+  const expandButton = (k: ChartKey, part: string) => <ExpandButton open={large.has(k)} chart={part} onClick={() => toggleLarge(k)} />;
   // R62: the RT legend's keys switched off (parameters, and the DIN target).
   const [rtOff, setRtOff] = useState<ReadonlySet<string>>(new Set());
   const toggleRt = (key: string) =>
@@ -855,10 +946,12 @@ export function AcousticsPane() {
     [],
   );
 
-  // The response window holds numbers: it closes with the run it shows, and off the Results step.
+  // The response window holds numbers: it closes with the run it shows, and off the Results step; so do
+  // the charts' large windows.
   useEffect(() => {
     if (state !== 'ready') setResponseOpen(false);
     if (state !== 'ready') setAuralOpen(false);
+    if (state !== 'ready') setLarge(new Set());
   }, [state, selected]);
 
   if (state === 'off-step') {
@@ -916,6 +1009,66 @@ export function AcousticsPane() {
     keys: [{ label: 'Decay', colour: '#e0202e' }],
   }));
 
+  // The charts' keys, the same on the card and in the chart's large window (one set of switches).
+  const rtLegend = (
+    <div className="ac-legend">
+      {series.map((s) => (
+        <SeriesKey key={s.param} param={s.param} on={!rtOff.has(s.param)} onToggle={() => toggleRt(s.param)}>
+          <span className="ac-swatch" style={{ background: SERIES_COLOURS[s.param] }} />
+          <span data-label="param" data-param={s.param}>
+            {s.label}
+          </span>
+        </SeriesKey>
+      ))}
+      <SeriesKey on={!rtOff.has(TARGET_KEY)} onToggle={() => toggleRt(TARGET_KEY)}>
+        <span className="ac-swatch dash" />
+        target, shaded a fifth either side
+      </SeriesKey>
+      <span className="ac-key">whiskers: each value's range</span>
+    </div>
+  );
+  const spectrumLegend = (
+    <div className="ac-legend">
+      {spectrum.map((s) => (
+        <span key={s.param} className="ac-key" data-param={s.param}>
+          <span className="ac-swatch" style={{ background: SPECTRUM_COLOUR }} />
+          <span data-label="param" data-param={s.param}>
+            {s.label}
+          </span>
+        </span>
+      ))}
+      <span className="ac-key">per band, as the Receivers table shows it; whiskers: each value's range</span>
+    </div>
+  );
+  // A large window's receiver and band, as the card's pickers set them (one receiver, one band for the tab).
+  const receiverPick = (control: string) => (
+    <label className="ac-control">
+      Receiver
+      <select data-control={control} value={String(r)} onChange={(e) => setReceiver(Number(e.target.value))}>
+        {names.map((n, i) => (
+          <option key={i} value={String(i)}>
+            {n}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+  const bandPick = (control: string) => (
+    <label className="ac-control">
+      Band
+      <select data-control={control} value={String(b)} onChange={(e) => setBand(e.target.value === 'sum' ? 'sum' : Number(e.target.value))}>
+        {report.bands_hz.map((hz, i) => (
+          <option key={hz} value={String(i)}>
+            {bandText(hz)}
+          </option>
+        ))}
+        <option value="sum">bands summed</option>
+      </select>
+    </label>
+  );
+  const rtTable = () => document.querySelector<HTMLTableElement>('[data-acoustics] table[data-part="rt-table"]');
+  const decaySub = subOf(names[r], b === 'sum' ? 'bands summed' : bandText(report.bands_hz[b]), srcWords);
+
   return (
     <div data-acoustics data-acoustics-state="ready" data-run={selected} className="ac">
       <div className="ac-head">
@@ -966,22 +1119,9 @@ export function AcousticsPane() {
             {series.length ? <CopyTable part="rt-table" what="reverberation time" /> : null}
             {series.length ? axesButton('rt') : null}
             {series.length ? <ChartImage part="rt-chart" /> : null}
+            {series.length ? expandButton('rt', 'rt-chart') : null}
           </div>
-          <div className="ac-legend">
-            {series.map((s) => (
-              <SeriesKey key={s.param} param={s.param} on={!rtOff.has(s.param)} onToggle={() => toggleRt(s.param)}>
-                <span className="ac-swatch" style={{ background: SERIES_COLOURS[s.param] }} />
-                <span data-label="param" data-param={s.param}>
-                  {s.label}
-                </span>
-              </SeriesKey>
-            ))}
-            <SeriesKey on={!rtOff.has(TARGET_KEY)} onToggle={() => toggleRt(TARGET_KEY)}>
-              <span className="ac-swatch dash" />
-              target, shaded a fifth either side
-            </SeriesKey>
-            <span className="ac-key">whiskers: each value's range</span>
-          </div>
+          {rtLegend}
           {series.length ? axesEditor('rt', 'Time, s') : null}
           <div className="ac-din" data-part="din-target">
             <label className="ac-control">
@@ -1108,21 +1248,12 @@ export function AcousticsPane() {
             </label>
             {spectrumShown ? axesButton('spectrum') : null}
             {spectrumShown ? <ChartImage part="spectrum-chart" /> : null}
+            {spectrumShown ? expandButton('spectrum', 'spectrum-chart') : null}
           </div>
           {spectrumShown ? (
             <>
               {/* Only a shown parameter is named (gate (b)): the key exists only with the chart. */}
-              <div className="ac-legend">
-                {spectrum.map((s) => (
-                  <span key={s.param} className="ac-key" data-param={s.param}>
-                    <span className="ac-swatch" style={{ background: SPECTRUM_COLOUR }} />
-                    <span data-label="param" data-param={s.param}>
-                      {s.label}
-                    </span>
-                  </span>
-                ))}
-                <span className="ac-key">per band, as the Receivers table shows it; whiskers: each value's range</span>
-              </div>
+              {spectrumLegend}
               {axesEditor('spectrum', 'Level, dB')}
               <SpectrumChart report={report} series={spectrum} hand={hand.spectrum} />
             </>
@@ -1200,6 +1331,7 @@ export function AcousticsPane() {
             {curve && decayAsTable ? <CopyTable part="decay-table" what="Schroeder decay" /> : null}
             {curve && !decayAsTable ? axesButton('decay') : null}
             {curve && !decayAsTable ? <ChartImage part="decay-chart" /> : null}
+            {curve && !decayAsTable ? expandButton('decay', 'decay-chart') : null}
             <span className="ac-sub">
               {names[r] !== undefined ? <S s={{ path: `${report.solver === 'tcr' ? 'tcr' : 'spps'}.point_receivers.${r}.label`, text: names[r] }} /> : null}
               {' · '}
@@ -1323,6 +1455,82 @@ export function AcousticsPane() {
         </section>
         <AdviceCardView cards={adviceCards(report)} solver={report.solver === 'tcr' ? 'tcr' : 'spps'} conflicts={scene?.advice_conflicts ?? []} />
       </div>
+      {large.has('rt') ? (
+        <ChartWindow chart="rt-chart" title={top('Reverberation time against DIN 18041')} sub={subOf(names[r], srcWords, `DIN 18041 ${group}`)} onClose={() => closeLarge('rt')}>
+          <div className="cw-controls">
+            {receiverPick('large-receiver')}
+            <label className="ac-control">
+              <span data-label="standard">DIN 18041</span>
+              <select data-control="large-din-group" value={group} onChange={(e) => setGroup(e.target.value)}>
+                {dinGroups(report).map((g) => (
+                  <option key={g} value={g}>
+                    {g}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {series.length ? <CopyTable part="rt-table" what="reverberation time" table={rtTable} /> : null}
+            {series.length ? axesButton('rt', true) : null}
+            {series.length ? <ChartImage part="rt-chart-large" /> : null}
+          </div>
+          {rtLegend}
+          {series.length ? axesEditor('rt', 'Time, s', undefined, true) : null}
+          {series.length ? (
+            <RtChart report={report} series={series} target={target} off={rtOff} hand={hand.rt} part="rt-chart-large" k={LARGE} />
+          ) : (
+            <div className="ac-none">No reverberation time is shown for this run.</div>
+          )}
+        </ChartWindow>
+      ) : null}
+      {large.has('spectrum') ? (
+        <ChartWindow chart="spectrum-chart" title={top('Spectrum')} sub={subOf(names[r], srcWords)} onClose={() => closeLarge('spectrum')}>
+          <div className="cw-controls">
+            {receiverPick('large-spectrum-receiver')}
+            {spectrumShown ? axesButton('spectrum', true) : null}
+            {spectrumShown ? <ChartImage part="spectrum-chart-large" /> : null}
+          </div>
+          {spectrumShown ? (
+            <>
+              {spectrumLegend}
+              {axesEditor('spectrum', 'Level, dB', undefined, true)}
+              <SpectrumChart report={report} series={spectrum} hand={hand.spectrum} part="spectrum-chart-large" k={LARGE} />
+            </>
+          ) : (
+            <div className="ac-none">No sound level is shown for this run, so no spectrum is drawn.</div>
+          )}
+        </ChartWindow>
+      ) : null}
+      {large.has('decay') ? (
+        <ChartWindow chart="decay-chart" title={top('Decay')} sub={decaySub} onClose={() => closeLarge('decay')}>
+          <div className="cw-controls">
+            {receiverPick('large-decay-receiver')}
+            {bandPick('large-decay-band')}
+            {curve ? (
+              <button
+                type="button"
+                className="small-button ac-copy"
+                data-action="decay-table"
+                aria-pressed={largeDecayTable}
+                title="The Schroeder (backward-integrated) decay as a table: the points of the curve EDT, T20 and T30 are fitted to"
+                onClick={() => setLargeDecayTable((t) => !t)}
+              >
+                Table
+              </button>
+            ) : null}
+            {curve && largeDecayTable ? <CopyTable part="decay-table" what="Schroeder decay" /> : null}
+            {curve && !largeDecayTable ? axesButton('decay', true) : null}
+            {curve && !largeDecayTable ? <ChartImage part="decay-chart-large" /> : null}
+          </div>
+          {curve && !largeDecayTable ? axesEditor('decay', 'Level, dB', 'Time, s', true) : null}
+          {curve && largeDecayTable ? (
+            <DecayTableView t={decayTable(report, r, b, src)} />
+          ) : curve ? (
+            <DecayChart curve={curve} hand={hand.decay} part="decay-chart-large" k={LARGE} />
+          ) : (
+            <div className="ac-none">No decay curve for this receiver and band.</div>
+          )}
+        </ChartWindow>
+      ) : null}
     </div>
   );
 }
