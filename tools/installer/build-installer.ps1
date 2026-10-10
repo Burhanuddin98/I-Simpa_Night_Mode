@@ -21,7 +21,7 @@ param(
   [string]$WebView2 = '',
   # Ship solvers that are not the verified build (code sha256 other than solvers/manifest.json's, as a
   # build from source with another compiler gives). The installer's name then ends in -unverified and
-  # installer.json names each solver's verdict; the app says Results unverified on such a build.
+  # installer.json names each solver's verdict; the app refuses to run a solver that is not the verified build.
   [switch]$AllowUnverifiedSolvers
 )
 $ErrorActionPreference = 'Stop'

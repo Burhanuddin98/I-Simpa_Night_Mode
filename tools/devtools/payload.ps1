@@ -94,7 +94,7 @@ function Copy-NightModePayload {
     if (-not $code.verified) {
       $msg = "$exe code sha256 $($code.code_sha256) does not match solvers/manifest.json ($($code.want)): not the verified build"
       if (-not $AllowUnverifiedSolvers) { throw $msg }
-      Write-Warning "$msg; staged anyway (-AllowUnverifiedSolvers), and the app will say Results unverified"
+      Write-Warning "$msg; staged anyway (-AllowUnverifiedSolvers); the app refuses to run it (Before running: the verified build, Blocked)"
     }
     Copy-Item "$Solvers\$exe" "$Dest\solvers\$exe"
   }

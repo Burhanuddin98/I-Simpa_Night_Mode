@@ -102,16 +102,33 @@ $names = [string[]]@($tgFiles.Keys); [Array]::Sort($names, [StringComparer]::Ord
 $tgSorted = [ordered]@{}; foreach ($k in $names) { $tgSorted[$k] = $tgFiles[$k] }
 $tgFiles = $tgSorted
 
-if (-not (Test-Path (Join-Path $src 'CMakeLists.txt'))) {
-    New-Item -ItemType Directory -Force $src | Out-Null
-    $tar = Join-Path $root 'upstream.tar'
-    Run 'git' @('-C', $Upstream, 'archive', '--format=tar', '-o', $tar, $Commit)
-    Run 'tar' @('-xf', $tar, '-C', $src)
-    # The patches, in name order, onto the fresh extract only (the folder's name says they are in).
-    foreach ($p in $patchFiles) {
-        Run 'git' @('-C', $src, 'apply', '--whitespace=nowarn', '-p1', $p.FullName)
+# git apply run inside another repository's work tree (the default root, <repo>\target\solvers, is
+# one) takes the patch paths as relative to that repository and silently skips every file outside
+# the current folder: it exits 0 having applied nothing (2026-10-10, a build in a clone at
+# C:\tmp\nm-ci-clone shipped spps.exe without patch 0001; the code sha256 check caught it). The
+# extract is not a repository, so git must not look above it.
+$ceiling = $env:GIT_CEILING_DIRECTORIES
+$env:GIT_CEILING_DIRECTORIES = Split-Path -Parent $src
+try {
+    if (-not (Test-Path (Join-Path $src 'CMakeLists.txt'))) {
+        New-Item -ItemType Directory -Force $src | Out-Null
+        $tar = Join-Path $root 'upstream.tar'
+        Run 'git' @('-C', $Upstream, 'archive', '--format=tar', '-o', $tar, $Commit)
+        Run 'tar' @('-xf', $tar, '-C', $src)
+        # The patches, in name order, onto the fresh extract only (the folder's name says they are in).
+        # Each must then reverse cleanly, which it does only if every hunk of it is there, before
+        # the next goes on; the record of that is written last, so a folder without it is a
+        # half-made extract.
+        foreach ($p in $patchFiles) {
+            Run 'git' @('-C', $src, 'apply', '--whitespace=nowarn', '-p1', $p.FullName)
+            try { Run 'git' @('-C', $src, 'apply', '--check', '-R', '--whitespace=nowarn', '-p1', $p.FullName) }
+            catch { throw "git apply exited 0 but $($p.Name) is not in $src" }
+        }
+        Set-Content -Path (Join-Path $src '.patches-applied') -Value @($patchFiles | ForEach-Object { "$($patchList[$_.Name])  $($_.Name)" }) -Encoding ascii
     }
-}
+} finally { $env:GIT_CEILING_DIRECTORIES = $ceiling }
+$applied = Join-Path $src '.patches-applied'
+if ($patchFiles.Count -and -not (Test-Path $applied)) { throw "$src has no record that its patches were applied and checked: delete it for a fresh extract" }
 
 Run 'cmake' @('-S', $src, '-B', $bld, '-G', 'Visual Studio 17 2022', '-A', 'x64',
     '-DSKIPISIMPA=ON', '-DCMAKE_BUILD_TYPE=Release', "-DCPM_SOURCE_CACHE=$CpmCache",

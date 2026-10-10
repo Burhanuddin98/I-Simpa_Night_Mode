@@ -5,9 +5,10 @@
 # VS 2022's C runtime (solvers/build.ps1, tools/devtools/payload.ps1), and windows-2022 is the hosted image
 # that is guaranteed to carry Visual Studio 2022.
 #
-# The runner's MSVC is not necessarily the one solvers/manifest.json records, so its solvers may compile
-# to other code than the verified build: the job passes -AllowUnverifiedSolvers, the installer's name then
-# ends in -unverified, and the job summary lists each solver against the manifest.
+# The runner's MSVC is not necessarily the one solvers/manifest.json records, and spps-gpu's code holds
+# the paths it was compiled from (nvcc -lineinfo), so a solver built here can differ from the verified
+# build: the job passes -AllowUnverifiedSolvers, the installer's name then ends in -unverified (the app
+# refuses to run a solver that is not the verified build), and the job summary lists each solver.
 name: build
 
 on:

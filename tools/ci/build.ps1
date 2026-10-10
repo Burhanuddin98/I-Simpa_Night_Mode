@@ -9,7 +9,9 @@
 #   4. Each solver's code sha256 against solvers/manifest.json (the sha256 with the link time zeroed;
 #      solvers\pe-fingerprint.ps1). Equal means the verified build, the one the gates ran; a different
 #      compiler gives other code, which stops the build unless -AllowUnverifiedSolvers is given (the app
-#      then labels every result "Results unverified", as it does for any solver not in the manifest).
+#      then refuses to run that solver: its run checklist shows "the verified build of the solvers"
+#      Blocked). spps-gpu's code also holds the paths it was compiled from (nvcc -lineinfo): built
+#      anywhere but the checkout and CUDA folder the manifest's build used, it is not the verified one.
 #   5. The app: npm ci, then the Tauri release build (UI bundled into app.exe), CARGO_TARGET_DIR honoured.
 #   6. The installer: tools\installer\build-installer.ps1, into -Out\<version>-<commit>-<stamp>\.
 #
@@ -169,7 +171,7 @@ $check = @($script:SolverExes | ForEach-Object { Test-SolverVerified -Manifest $
 $check | ForEach-Object { Write-Host ('  {0,-20} code sha256 {1}  {2}' -f $_.name, $_.code_sha256.Substring(0, 16), $(if ($_.verified) { 'verified (= solvers/manifest.json)' } else { "NOT the verified build (manifest $($_.want.Substring(0, 16)))" })) }
 $unverified = @($check | Where-Object { -not $_.verified })
 if ($unverified.Count -and -not $AllowUnverifiedSolvers) {
-  throw "$($unverified.Count) solver(s) are not the verified build: $(($unverified | ForEach-Object name) -join ', '). The usual cause is another MSVC or CUDA version than solvers/manifest.json records ($($manifest.compiler), nvcc $($manifest.spps_gpu.nvcc)). Rerun with -AllowUnverifiedSolvers to build anyway; the app will then say Results unverified."
+  throw "$($unverified.Count) solver(s) are not the verified build: $(($unverified | ForEach-Object name) -join ', '). The usual causes: another MSVC or CUDA version than solvers/manifest.json records ($($manifest.compiler), nvcc $($manifest.spps_gpu.nvcc)), or, for spps-gpu, another source or CUDA folder (nvcc -lineinfo puts paths in its code). Rerun with -AllowUnverifiedSolvers to build anyway; the app will then refuse to run those solvers."
 }
 
 # --- 5. the app
