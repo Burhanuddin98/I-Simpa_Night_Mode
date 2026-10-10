@@ -3,7 +3,7 @@
 # their files with it, so the two cannot ship different sets.
 #
 #   app.exe
-#   solvers\   the five solvers at solvers/manifest.json's hashes (FindSolverExe's layout, ExeSearch
+#   solvers\   the five solvers at solvers/manifest.json's code sha256 (FindSolverExe's layout, ExeSearch
 #              candidate 3: <exe dir>\solvers\<name>), the manifest, and the C runtime they link
 #              (decision 85: Microsoft.VC143.CRT and .OpenMP from Visual Studio's Redist, app-local)
 #   manual\    the user manual and the tutorials' pages (parity A21, A43)
@@ -16,7 +16,9 @@
 # redistributable has none), so a solver rebuilt against a new runtime DLL fails here, not on a
 # user's machine.
 
-$script:SolverExes = 'spps.exe', 'classicalTheory.exe', 'preprocess.exe', 'tetgen.exe', 'spps-gpu.exe'
+. "$PSScriptRoot\..\..\solvers\pe-fingerprint.ps1"
+
+$script:SolverExes ='spps.exe', 'classicalTheory.exe', 'preprocess.exe', 'tetgen.exe', 'spps-gpu.exe'
 # Decision 85: the runtime DLLs the solvers import (dumpbin /dependents, 2026-10-09), from the
 # Redist folder of the Visual Studio that builds them.
 $script:CrtDlls = @{ 'Microsoft.VC143.CRT' = @('msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll'); 'Microsoft.VC143.OpenMP' = @('vcomp140.dll') }
@@ -62,21 +64,38 @@ function Test-PayloadImports([string]$Root) {
   if ($bad) { throw ("the payload would not start on a clean machine:`n  " + ($bad -join "`n  ")) }
 }
 
+# Whether a solver is the verified build: its code sha256 (solvers/pe-fingerprint.ps1, the sha256 with
+# the link-time fields zeroed) equals solvers/manifest.json's, as the gates and the app itself hold
+# it. A rebuild from the same source with the same compiler passes; its raw sha256 differs only by the
+# link time. Returns { name; sha256; code_sha256; want; verified }.
+function Test-SolverVerified($Manifest, [string]$Exe) {
+  $name = Split-Path -Leaf $Exe
+  $want = $Manifest.code_sha256.$name
+  if (-not $want) { throw "solvers/manifest.json has no code_sha256 row for $name" }
+  $code = Get-CodeSha256 $Exe
+  [ordered]@{ name = $name; sha256 = (Get-FileHash -Algorithm SHA256 $Exe).Hash.ToLower(); code_sha256 = $code; want = $want; verified = ($code -eq $want) }
+}
+
 function Copy-NightModePayload {
   param(
     [Parameter(Mandatory)][string]$Dest,
     [Parameter(Mandatory)][string]$Repo,
     [Parameter(Mandatory)][string]$Solvers,
-    [Parameter(Mandatory)][string]$App
+    [Parameter(Mandatory)][string]$App,
+    # Stage solvers whose code sha256 is not the manifest's (a build from source with another compiler);
+    # without it such a solver stops the staging.
+    [switch]$AllowUnverifiedSolvers
   )
   $manifest = Get-Content "$Repo\solvers\manifest.json" -Raw | ConvertFrom-Json
   New-Item -ItemType Directory -Force -Path "$Dest\solvers" | Out-Null
   Copy-Item $App "$Dest\app.exe"
   foreach ($exe in $script:SolverExes) {
-    $h = (Get-FileHash -Algorithm SHA256 "$Solvers\$exe").Hash.ToLower()
-    $want = $manifest.sha256.$exe
-    if (-not $want) { throw "solvers/manifest.json has no row for $exe" }
-    if ($h -ne $want) { throw "$exe sha256 $h does not match solvers/manifest.json ($want)" }
+    $code = Test-SolverVerified -Manifest $manifest -Exe "$Solvers\$exe"
+    if (-not $code.verified) {
+      $msg = "$exe code sha256 $($code.code_sha256) does not match solvers/manifest.json ($($code.want)): not the verified build"
+      if (-not $AllowUnverifiedSolvers) { throw $msg }
+      Write-Warning "$msg; staged anyway (-AllowUnverifiedSolvers), and the app will say Results unverified"
+    }
     Copy-Item "$Solvers\$exe" "$Dest\solvers\$exe"
   }
   Copy-Item "$Repo\solvers\manifest.json" "$Dest\solvers\manifest.json"

@@ -1,0 +1,71 @@
+# Builds I-Simpa Night Mode from source into its Windows installer, by the same script README.md's
+# "Build from source" uses (tools/ci/build.ps1), and uploads the installer as an artifact.
+#
+# windows-2022, not windows-latest: the solvers are built with the "Visual Studio 17 2022" generator and
+# VS 2022's C runtime (solvers/build.ps1, tools/devtools/payload.ps1), and windows-2022 is the hosted image
+# that is guaranteed to carry Visual Studio 2022.
+#
+# The runner's MSVC is not necessarily the one solvers/manifest.json records, so its solvers may compile
+# to other code than the verified build: the job passes -AllowUnverifiedSolvers, the installer's name then
+# ends in -unverified, and the job summary lists each solver against the manifest.
+name: build
+
+on:
+  push:
+    branches: [main, rebuild, v1q]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  installer:
+    runs-on: windows-2022
+    timeout-minutes: 180
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}\target\cargo
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      # The toolchain rust-toolchain.toml names, installed before the cache key is computed from it.
+      - name: Rust toolchain
+        shell: powershell
+        run: rustup toolchain install; rustup show active-toolchain
+
+      # Registry, git deps and the compiled dependencies (not this workspace's own crates), keyed on
+      # Cargo.lock and the toolchain.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: '. -> target/cargo'
+
+      - name: Cache fetched build tools (NSIS, SWIG, CUDA compiler)
+        uses: actions/cache@v4
+        with:
+          path: target/ci/tools
+          key: tools-${{ runner.os }}-${{ hashFiles('tools/ci/build.ps1') }}
+
+      - name: Build from source
+        id: build
+        shell: powershell
+        run: powershell -ExecutionPolicy Bypass -File tools\ci\build.ps1 -Work target\ci -FetchCuda -AllowUnverifiedSolvers
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: night-mode-installer
+          path: |
+            ${{ steps.build.outputs.dir }}\*setup*.exe
+            ${{ steps.build.outputs.dir }}\*.sha256
+            ${{ steps.build.outputs.dir }}\installer.json
+          if-no-files-found: error

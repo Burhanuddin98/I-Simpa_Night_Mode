@@ -18,7 +18,11 @@ param(
   [string]$App = 'C:\tmp\nm-target\release\app.exe',
   [string]$Out = 'B:\repos\I-Simpa_Night_Mode\.out\m13',
   [string]$Makensis = '',
-  [string]$WebView2 = ''
+  [string]$WebView2 = '',
+  # Ship solvers that are not the verified build (code sha256 other than solvers/manifest.json's, as a
+  # build from source with another compiler gives). The installer's name then ends in -unverified and
+  # installer.json names each solver's verdict; the app says Results unverified on such a build.
+  [switch]$AllowUnverifiedSolvers
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -51,7 +55,10 @@ if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch '^CN=Mi
 $build = "$Out\$version-$short-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
 if (Test-Path $build) { throw "$build exists" }
 $payload = "$build\payload"
-Copy-NightModePayload -Dest $payload -Repo $repo -Solvers $Solvers -App $App
+Copy-NightModePayload -Dest $payload -Repo $repo -Solvers $Solvers -App $App -AllowUnverifiedSolvers:$AllowUnverifiedSolvers
+$manifest = Get-Content "$repo\solvers\manifest.json" -Raw | ConvertFrom-Json
+$solverCheck = @($script:SolverExes | ForEach-Object { Test-SolverVerified -Manifest $manifest -Exe "$payload\solvers\$_" })
+$allVerified = @($solverCheck | Where-Object { -not $_.verified }).Count -eq 0
 $files = @(Get-ChildItem $payload -Recurse -File | Sort-Object FullName)
 $sizeKb = [int][Math]::Ceiling((($files | Measure-Object Length -Sum).Sum) / 1KB)
 
@@ -80,7 +87,7 @@ $nsh = "$build\payload-files.nsh"
 Set-Content -Encoding utf8 $nsh (@('; Written by build-installer.ps1 from the staged payload; do not edit.') + $inst + '' + $uninst)
 
 # --- compile
-$name = "I-Simpa-Night-Mode-$version-$short-win64-setup.exe"
+$name = "I-Simpa-Night-Mode-$version-$short-win64-setup$(if (-not $allVerified) { '-unverified' }).exe"
 $exe = "$build\$name"
 $log = "$build\build-installer.log"
 $defs = @(
@@ -99,6 +106,8 @@ $receipt = [ordered]@{
   built = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'); makensis = (& $Makensis /VERSION)
   webview2_bootstrapper = [ordered]@{ path = $WebView2; sha256 = (Get-FileHash $WebView2).Hash.ToLower(); version = (Get-Item $WebView2).VersionInfo.FileVersion }
   crt_redist = (Get-CrtRedistDir)
+  solvers_verified = $allVerified
+  solvers = $solverCheck
   payload = @($files | ForEach-Object { [ordered]@{ path = $_.FullName.Substring($payload.Length + 1); bytes = $_.Length; sha256 = (Get-FileHash $_.FullName).Hash.ToLower(); version = $_.VersionInfo.FileVersion } })
 }
 $receipt | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 "$build\installer.json"
