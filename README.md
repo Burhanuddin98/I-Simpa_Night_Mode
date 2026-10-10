@@ -131,11 +131,15 @@ receipts as the `night-mode-installer` artifact; the job summary lists each solv
   these figures are the only comparison they allow. Tutorial 1 has nothing to compare against.
 - **The results are simulations** with I-Simpa's solvers. They are not compared with measurements of real
   rooms here.
-- **The solver patches have no physics bed yet.** `patches/0001-surface-receiver-time-bin.patch` and
-  `patches/0002-sparse-surface-receiver-series.patch` change how SPPS and TCR store sound-map data in memory
-  (a coarser time bin for surface receivers; sparse storage of the map records), so that dense maps fit in
-  memory. They have not been tested against an analytical reference, and no claim is made here that they are
-  correct or that upstream's solvers are wrong without them.
+- **The two solver patches change storage, not physics, and each has a bed against upstream's own build.**
+  `patches/0001-surface-receiver-time-bin.patch` and `patches/0002-sparse-surface-receiver-series.patch`
+  change how SPPS stores sound-map data (an optional coarser time bin for surface receivers; sparse storage of
+  the map records), so that dense maps fit in memory. On a seeded BRAS CR4 run (3 bands, 20,000 particles),
+  the patched solver's output is byte-identical to the unpatched build's, 39 of 39 files, for both patches
+  with the bin unset; with a 10 ms bin, every non-map file stays byte-identical and each map's total energy
+  agrees within 5.3e-6 relative (float32 summation order). Receipts:
+  `docs/investigations/2026-10-06-third-octave-bug/BED-0001.md` and `BED-0002.md`. They fix no defect in
+  upstream's solvers and make no claim about them.
 - **Listen is mono**, and its impulse response is synthesised from the energy echogram.
 
 **Not in this version** (from the manual): the Model and Results menus, the command palette, the section
