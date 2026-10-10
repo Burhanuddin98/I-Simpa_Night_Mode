@@ -89,7 +89,7 @@ function report(fail: string[] = ['t30_s', 'edt_s', 'g_db', 'dba']): Report {
       din18041: [
         { group: 'A1', use: 'music', target_s: { value: 1.0846, mc_sd: null } },
         { group: 'A3', use: 'teaching, communication', target_s: { value: 0.5517, mc_sd: null } },
-        { group: 'A5', use: 'sport', target_s: { not_evaluable: { code: 'params_din_out_of_range', message: '', error: {} } } },
+        { group: 'A5', use: 'sport', target_s: { not_evaluable: { code: 'params_din_out_of_range', message: '', error: { kind: 'din_out_of_range', group: 'A5', volume_m3: 180, detail: 'A5 gives targets from 200 to 30000 m³' } } } },
       ],
       din18041_note: 'DIN 18041:2016-03 ... 80 % occupied',
       surfaces: [
@@ -300,6 +300,9 @@ test('Acoustics: the DIN target is the report own, by group, with the volume', (
   const a5 = din(report(), 'A5')!;
   assert.equal(a5.target, null);
   assert.equal(a5.refusal?.code.text, 'params_din_out_of_range');
+  // The refusal's own words, for the RT chart's key in place of the target (rtPlot.ts `rtKey`).
+  assert.deepEqual(a5.range, { path: 'room.din18041.2.target_s.not_evaluable.error.detail', text: 'A5 gives targets from 200 to 30000 m³' });
+  assert.equal(din(report(), 'A3')?.range, null);
   assert.equal(din(report(), 'A9'), null);
 });
 

@@ -460,6 +460,8 @@ export interface DinView {
   use: Str;
   target: Num | null;
   refusal: Refusal | null;
+  /** A refused target's reason as the report words it (`A3 gives targets from 30 to 5000 m³`), or null. */
+  range: Str | null;
   volume: Num | null;
   note: Str | null;
 }
@@ -477,6 +479,7 @@ export function din(report: Report, group: string): DinView | null {
     use: str(report, `${p}.use`) as Str,
     target: num(report, `${p}.target_s.value`, 2),
     refusal: refused ? { code: str(report, `${p}.target_s.not_evaluable.code`) as Str, why: null } : null,
+    range: refused ? str(report, `${p}.target_s.not_evaluable.error.detail`) : null,
     volume: num(report, 'room.volume_m3', 0),
     note: str(report, 'room.din18041_note'),
   };

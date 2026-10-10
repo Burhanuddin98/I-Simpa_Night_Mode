@@ -179,6 +179,11 @@
   align-items: center;
   gap: 5px;
 }
+/* The RT key with no target to draw: one sentence, its marked numbers inside it, read as text, not as items. */
+.ac-key.ac-no-target {
+  display: inline;
+  color: var(--text-3);
+}
 /* R72: a chart's axes set by hand, in a row under its legend. */
 .ac-axes {
   display: flex;

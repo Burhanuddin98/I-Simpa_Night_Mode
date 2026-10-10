@@ -84,6 +84,7 @@ import { N, S } from './Marked';
 import { auralHookOpen, auralHookSave, auralHookView, AuralWindow } from './AuralWindow';
 import { responseHookView, ResponseWindow } from './ResponseWindow';
 import { ChartWindow, ExpandButton } from './ChartWindow';
+import { drawableTarget, rtKey, rtPlot, TARGET_WORDS } from './rtPlot';
 
 function Band({ report, index }: { report: NonNullable<ReportView['report']>; index: number }) {
   const b = bandNum(report, index);
@@ -697,35 +698,26 @@ function RtChart({
   part?: string;
   k?: number;
 }) {
-  const { opts, data } = useMemo(() => {
-    const x = report.bands_hz.map((_, i) => i);
-    const t = target ?? null;
-    const flat = (k: number) => x.map(() => (t === null ? null : t * k));
-    const data: uPlot.AlignedData = [x, ...series.map((s) => s.values), flat(1), flat(0.8), flat(1.2)];
-    const n = series.length;
-    const top = Math.max(0, ...series.flatMap((s) => s.hi.filter((v): v is number => v !== null)));
-    const whiskers = rangeWhiskers(series, (p) => SERIES_COLOURS[p] ?? '#a1a1aa', k);
+  const { opts, data, targetSeries } = useMemo(() => {
+    const colour = (p: string) => SERIES_COLOURS[p] ?? '#a1a1aa';
+    // The target's three series only when there is a target (rtPlot.ts): with none, nothing is promised.
+    const plot = rtPlot(report.bands_hz.length, series, target, k, colour, css('--text-2', '#a1a1aa'));
+    const t = drawableTarget(target) ?? 0;
+    const whiskers = rangeWhiskers(series, colour, k);
     const opts: Omit<uPlot.Options, 'width' | 'height'> = {
       legend: { show: false },
-      scales: { x: { time: false, range: [-0.5, x.length - 0.5] }, y: { range: (_u, _lo, hi) => [0, Math.max(hi ?? 1, top, (t ?? 0) * 1.3) * 1.1 || 1] } },
+      scales: { x: { time: false, range: [-0.5, report.bands_hz.length - 0.5] }, y: { range: (_u, _lo, hi) => [0, Math.max(hi ?? 1, plot.top, t * 1.3) * 1.1 || 1] } },
       axes: axes('Band', 'Time (s)', (_u, splits) => splits.map((v) => (Number.isInteger(v) && report.bands_hz[v] !== undefined ? bandText(report.bands_hz[v]) : '')), k),
-      series: [
-        {},
-        ...series.map((s) => ({ label: s.label, stroke: SERIES_COLOURS[s.param] ?? '#a1a1aa', width: 2 * k, points: { size: 8 * k, fill: SERIES_COLOURS[s.param] ?? '#a1a1aa' }, spanGaps: false })),
-        { label: 'DIN target', stroke: css('--text-2', '#a1a1aa'), width: k, dash: [4 * k, 4 * k], points: { show: false } },
-        { label: 'lower', stroke: 'transparent', points: { show: false } },
-        { label: 'upper', stroke: 'transparent', points: { show: false } },
-      ],
-      bands: [{ series: [n + 3, n + 2], fill: 'rgba(161,161,170,0.12)' }],
+      series: plot.series,
+      bands: plot.bands,
       hooks: { draw: [whiskers] },
     };
-    return { opts, data };
+    return { opts, data: plot.data, targetSeries: plot.targetSeries };
   }, [report, series, target, k]);
   // R62: the legend's switched-off keys as uPlot series: a parameter's own, the target's three.
-  const n = series.length;
   const hidden = useMemo(
-    () => [...series.flatMap((s, i) => (off.has(s.param) ? [i + 1] : [])), ...(off.has(TARGET_KEY) ? [n + 1, n + 2, n + 3] : [])],
-    [series, off, n],
+    () => [...series.flatMap((s, i) => (off.has(s.param) ? [i + 1] : [])), ...(off.has(TARGET_KEY) ? targetSeries : [])],
+    [series, off, targetSeries],
   );
   return <Chart opts={opts} data={data} part={part} hidden={hidden} hand={hand} />;
 }
@@ -999,7 +991,11 @@ export function AcousticsPane() {
     sub: subOf(names[r], srcWords, `DIN 18041 ${group}`),
     keys: [
       ...series.filter((x) => !rtOff.has(x.param)).map((x) => ({ label: x.label, colour: SERIES_COLOURS[x.param] ?? '#a1a1aa' })),
-      ...(rtOff.has(TARGET_KEY) ? [] : [{ label: 'target, shaded a fifth either side', colour: css('--text-2', '#a1a1aa'), dash: true }]),
+      ...(drawableTarget(target) === null
+        ? [{ label: rtKey(target, group, d), colour: css('--text-3', '#85858e') }]
+        : rtOff.has(TARGET_KEY)
+          ? []
+          : [{ label: rtKey(target, group, d), colour: css('--text-2', '#a1a1aa'), dash: true }]),
     ],
   }));
   chartHeadings.set('spectrum-chart', () => ({ title: top('Spectrum'), sub: subOf(names[r], srcWords), keys: spectrum.map((x) => ({ label: x.label, colour: SPECTRUM_COLOUR })) }));
@@ -1020,10 +1016,28 @@ export function AcousticsPane() {
           </span>
         </SeriesKey>
       ))}
-      <SeriesKey on={!rtOff.has(TARGET_KEY)} onToggle={() => toggleRt(TARGET_KEY)}>
-        <span className="ac-swatch dash" />
-        target, shaded a fifth either side
-      </SeriesKey>
+      {drawableTarget(target) !== null ? (
+        <SeriesKey on={!rtOff.has(TARGET_KEY)} onToggle={() => toggleRt(TARGET_KEY)}>
+          <span className="ac-swatch dash" />
+          {TARGET_WORDS}
+        </SeriesKey>
+      ) : (
+        // No target to draw: the key says why rather than promising a line (the report's own words and volume).
+        <span className="ac-key ac-no-target" data-part="no-target">
+          {d ? (
+            <>
+              no <span data-label="standard">DIN 18041</span> <S s={d.group} /> target, so none is drawn
+              {d.range ? (
+                <>
+                  : <S s={d.range} />, this room is <N n={d.volume} unit="m³" />
+                </>
+              ) : null}
+            </>
+          ) : (
+            'no target, so none is drawn: the room was not read'
+          )}
+        </span>
+      )}
       <span className="ac-key">whiskers: each value's range</span>
     </div>
   );
