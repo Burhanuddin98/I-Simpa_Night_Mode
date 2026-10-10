@@ -108,12 +108,12 @@ work folder, the output, the Boost download cache and the upstream checkout.
 
 **Which solvers come out verified.** The app runs a solver only when its code sha256 is the one in
 `solvers/manifest.json`; otherwise the run checklist shows "the verified build of the solvers" as Blocked.
-With the compiler named above, `spps`, `classicalTheory`, `preprocess` and `tetgen` rebuild to the verified
-code. `spps-gpu.exe` does not: `nvcc -lineinfo` writes the source and CUDA folders into its code, so a build
-from any other folder differs. Without `-AllowUnverifiedSolvers` the script stops at that point; with it, the
-installer is named `...-setup-unverified.exe`, `installer.json` lists each solver's verdict, and the app
-then runs SPPS and TCR but refuses SPPS on the GPU. A different MSVC version can also change the code of the
-CPU solvers, with the same consequence for them.
+With the compiler named above and CUDA 13.2, all five solvers, `spps-gpu.exe` included, rebuild to the
+verified code from any folder: `spps-gpu` is built without `nvcc -lineinfo`, so no source or CUDA path is
+written into it. A different MSVC or CUDA version can change a solver's code. Without
+`-AllowUnverifiedSolvers` the script then stops; with it, the installer is named `...-setup-unverified.exe`,
+`installer.json` lists each solver's verdict, and the app refuses to run each solver that is not the
+verified build (SPPS on the GPU, for a `spps-gpu.exe` built with another CUDA).
 
 CI runs on `windows-2022` with `-FetchCuda -AllowUnverifiedSolvers` and uploads the installer and its
 receipts as the `night-mode-installer` artifact; the job summary lists each solver against the manifest.
