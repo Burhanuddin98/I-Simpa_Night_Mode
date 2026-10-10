@@ -6,3 +6,7 @@ ui/src/checksum-kat.json text eol=lf
 # The shipped examples are embedded byte for byte (include_bytes!) and tested equal to what is
 # written for the user: never convert their line endings.
 src-tauri/examples/*.simpa -text
+# tauri build rewrites this file with LF on every build. Checked out with CRLF, the rewrite left the
+# tree dirty, and the app.exe built from it named its commit "with uncommitted changes" (a fresh
+# clone built by tools/ci/build.ps1, 2026-10-10). With LF in the checkout the rewrite is a no-op.
+src-tauri/Cargo.toml text eol=lf
